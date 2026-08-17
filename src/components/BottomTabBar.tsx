@@ -189,6 +189,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
+    marginBottom: 50,
   },
   tabItem: {
     flex: 1,                      // repeat(5, 1fr)

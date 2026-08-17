@@ -758,8 +758,6 @@ export default function CheckScheduleScreen() {
         content={successInfo?.content}
         onClose={() => setSuccessInfo(null)}
       />
-
-      <BottomTabBar activeTab="requests" />
     </View>
   );
 }
