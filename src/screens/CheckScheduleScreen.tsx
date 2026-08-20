@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,13 @@ import {
   Image,
   TextInput,
   ScrollView,
+  useWindowDimensions,
+  Animated,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { api } from '../services/api';
 import { statusProperties } from '../constants/cardStatus';
@@ -21,6 +28,25 @@ import SuccessModal from '../components/modals/SuccessModal';
 import ConcludeAppointmentModal from '../components/modals/ConcludeAppointmentModal';
 import RegisterAbsenceModal from '../components/modals/RegisterAbsenceModal';
 import BottomTabBar from '../components/BottomTabBar';
+import {
+  CircleCheckIcon,
+  CircleXIcon,
+  CalendarClockIcon,
+  UserCheckIcon,
+  UserXIcon,
+  CalendarXIcon,
+  RefreshIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  SlidersIcon,
+  SearchIcon,
+  MapPinIcon,
+  CloseIcon,
+} from '../components/icons/ScheduleIcons';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,20 +99,32 @@ async function fetchKpis(): Promise<{
   return res.data;
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
+// ─── KPI Card (CheckScheduleKpis) ─────────────────────────────────────────────
 
-function KpiCard({ title, value, color }: { title: string; value: number; color: string }) {
+function KpiCard({
+  title,
+  value,
+  color,
+  style,
+}: {
+  title: string;
+  value: number;
+  color: string;
+  style?: object;
+}) {
   return (
-    <View style={[styles.kpiCard, { borderLeftColor: color }]}>
-      <Text style={styles.kpiValue}>{value}</Text>
-      <Text style={styles.kpiTitle}>{title}</Text>
+    <View style={[styles.kpiCard, style]}>
+      <Text style={styles.kpiTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
     </View>
   );
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, isNarrow }: { status: string; isNarrow: boolean }) {
   const prop = statusProperties.find((s) => s.cardStatus === status);
   if (!prop) return null;
   return (
@@ -96,6 +134,7 @@ function StatusBadge({ status }: { status: string }) {
         {
           backgroundColor: prop.backgroundColor,
           borderColor: prop.borderColor,
+          width: isNarrow ? '100%' : '60%',
         },
       ]}
     >
@@ -104,10 +143,12 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Appointment Card ─────────────────────────────────────────────────────────
+// ─── Appointment Card (mobileCard) ────────────────────────────────────────────
 
 type CardProps = {
   card: CheckSchedule;
+  isNarrow: boolean;
+  isTablet: boolean;
   onAccept: (id: number) => void;
   onDecline: (id: number) => void;
   onReschedule: (id: number, date: string) => void;
@@ -118,6 +159,8 @@ type CardProps = {
 
 function AppointmentCard({
   card,
+  isNarrow,
+  isTablet,
   onAccept,
   onDecline,
   onReschedule,
@@ -138,114 +181,138 @@ function AppointmentCard({
   }
 
   return (
-    <TouchableOpacity style={styles.card} onPress={() => onPress(card.agendamentoId)} activeOpacity={0.85}>
-      {/* Header */}
-      <View style={styles.cardHeader}>
-        <StatusBadge status={card.status} />
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{card.tipoAula}</Text>
+    <View style={[styles.cardWrapper, isTablet && styles.cardWrapperTablet]}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => onPress(card.agendamentoId)}
+        activeOpacity={0.85}
+      >
+        {/* Header: StatusBadge + TypeBadge */}
+        <View style={[styles.cardHeader, isNarrow && styles.cardHeaderNarrow]}>
+          <StatusBadge status={card.status} isNarrow={isNarrow} />
+          <View style={[styles.typeBadge, isNarrow && styles.typeBadgeNarrow]}>
+            <Text style={styles.typeText}>{card.tipoAula}</Text>
+          </View>
         </View>
-      </View>
 
-      {/* User section */}
-      <View style={styles.userSection}>
-        <View style={styles.avatarWrapper}>
-          {card.foto ? (
-            <Image source={{ uri: card.foto }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitial}>{card.nome?.charAt(0) ?? '?'}</Text>
-            </View>
+        {/* User section: Avatar + Info */}
+        <View style={styles.userSection}>
+          <View style={styles.avatarWrapper}>
+            {card.foto ? (
+              <Image source={{ uri: card.foto }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarInitial}>{card.nome?.charAt(0) ?? '?'}</Text>
+              </View>
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName}>{card.nome}</Text>
+            <Text style={styles.dateText}>
+              {formatDate(card.dataInicio)} – {formatTime(card.dataFim)}
+            </Text>
+            <TouchableOpacity
+              style={styles.addressWrapper}
+              onPress={openMap}
+              activeOpacity={0.7}
+            >
+              <MapPinIcon size={13} color="#4e5053" />
+              <Text style={styles.addressText} numberOfLines={2}>
+                {address}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Actions Row (.mobileActions) */}
+        <View style={styles.actionsRow}>
+          {isPendingApproval && (
+            <>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onAccept(card.agendamentoId)}
+                activeOpacity={0.7}
+              >
+                <CircleCheckIcon size={22} color="#22c55e" />
+                <Text style={[styles.actionLabel, { color: '#22c55e' }]}>Aceitar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onDecline(card.agendamentoId)}
+                activeOpacity={0.7}
+              >
+                <CircleXIcon size={22} color="#ef4444" />
+                <Text style={[styles.actionLabel, { color: '#ef4444' }]}>Recusar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '')}
+                activeOpacity={0.7}
+              >
+                <CalendarClockIcon size={22} color="#3b82f6" />
+                <Text style={[styles.actionLabel, { color: '#3b82f6' }]}>Reagendar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {isApproved && (
+            <>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onDecline(card.agendamentoId)}
+                activeOpacity={0.7}
+              >
+                <CircleXIcon size={22} color="#ef4444" />
+                <Text style={[styles.actionLabel, { color: '#ef4444' }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '')}
+                activeOpacity={0.7}
+              >
+                <CalendarClockIcon size={22} color="#3b82f6" />
+                <Text style={[styles.actionLabel, { color: '#3b82f6' }]}>Reagendar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {isPendingConclusion && (
+            <>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onConclude(card.agendamentoId)}
+                activeOpacity={0.7}
+              >
+                <UserCheckIcon size={22} color="#16a34a" />
+                <Text style={[styles.actionLabel, { color: '#16a34a' }]}>Concluir</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onAbsence(card.agendamentoId)}
+                activeOpacity={0.7}
+              >
+                <UserXIcon size={22} color="#ef4444" />
+                <Text style={[styles.actionLabel, { color: '#ef4444' }]}>Ausência</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.userName}>{card.nome}</Text>
-          <Text style={styles.dateText}>
-            {formatDate(card.dataInicio)} – {formatTime(card.dataFim)}
-          </Text>
-          <TouchableOpacity onPress={openMap}>
-            <Text style={styles.addressText}>📍 {address}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Actions — igual ao .mobileActions da web */}
-      <View style={styles.actionsRow}>
-        {isPendingApproval && (
-          <>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onAccept(card.agendamentoId)}
-            >
-              <Text style={[styles.actionBtnText, styles.iconAccept]}>✔</Text>
-              <Text style={[styles.actionLabel, styles.iconAccept]}>Aceitar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onDecline(card.agendamentoId)}
-            >
-              <Text style={[styles.actionBtnText, styles.iconDecline]}>✕</Text>
-              <Text style={[styles.actionLabel, styles.iconDecline]}>Recusar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '')}
-            >
-              <Text style={[styles.actionBtnText, styles.iconReschedule]}>🗓</Text>
-              <Text style={[styles.actionLabel, styles.iconReschedule]}>Reagendar</Text>
-            </TouchableOpacity>
-          </>
-        )}
-        {isApproved && (
-          <>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onDecline(card.agendamentoId)}
-            >
-              <Text style={[styles.actionBtnText, styles.iconDecline]}>✕</Text>
-              <Text style={[styles.actionLabel, styles.iconDecline]}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '')}
-            >
-              <Text style={[styles.actionBtnText, styles.iconReschedule]}>🗓</Text>
-              <Text style={[styles.actionLabel, styles.iconReschedule]}>Reagendar</Text>
-            </TouchableOpacity>
-          </>
-        )}
-        {isPendingConclusion && (
-          <>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onConclude(card.agendamentoId)}
-            >
-              <Text style={[styles.actionBtnText, styles.iconConclude]}>👤</Text>
-              <Text style={[styles.actionLabel, styles.iconConclude]}>Concluir</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => onAbsence(card.agendamentoId)}
-            >
-              <Text style={[styles.actionBtnText, styles.iconAbsence]}>👤✕</Text>
-              <Text style={[styles.actionLabel, styles.iconAbsence]}>Ausência</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
-// ─── Filter Bar ───────────────────────────────────────────────────────────────
+// ─── Filter Bar (CardFilterCheckSchedule) ─────────────────────────────────────
 
 const STATUS_OPTIONS = [
   { label: 'Todos', value: '' },
-  { label: 'Pendente aprovação', value: 'PENDENTE_PERSONAL_APROVACAO' },
+  { label: 'Pendente resposta do personal', value: 'PENDENTE_PERSONAL_APROVACAO' },
+  { label: 'Pendente resposta do aluno', value: 'PENDENTE_CLIENTE_APROVACAO' },
   { label: 'Aprovado', value: 'APROVADO' },
   { label: 'Pendente conclusão', value: 'PENDENTE_PERSONAL_CONCLUIR' },
   { label: 'Concluído', value: 'CONCLUIDO' },
-  { label: 'Cancelado', value: 'CANCELADO_PERSONAL' },
+  { label: 'Cancelado pelo personal', value: 'CANCELADO_PERSONAL' },
+  { label: 'Cancelado pelo aluno', value: 'CANCELADO_CLIENTE' },
+  { label: 'Ausência (aluno)', value: 'AUSENCIA_CLIENTE' },
+  { label: 'Ausência (personal)', value: 'AUSENCIA_PERSONAL' },
 ];
 
 type FilterBarProps = {
@@ -257,22 +324,46 @@ type FilterBarProps = {
   onClear: () => void;
 };
 
-function FilterBar({ name, onNameChange, filterStatus, onStatusChange, hasFilters, onClear }: FilterBarProps) {
+function FilterBar({
+  name,
+  onNameChange,
+  filterStatus,
+  onStatusChange,
+  hasFilters,
+  onClear,
+}: FilterBarProps) {
   return (
     <View style={styles.filterContainer}>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Buscar aluno..."
-        placeholderTextColor="#9ca3af"
-        value={name}
-        onChangeText={onNameChange}
-      />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statusScroll}>
+      {/* Input de busca com ícone e botão de limpar */}
+      <View style={styles.searchWrapper}>
+        <SearchIcon size={18} color="#9ca3af" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar aluno..."
+          placeholderTextColor="#9ca3af"
+          value={name}
+          onChangeText={onNameChange}
+        />
+        {name.length > 0 && (
+          <TouchableOpacity onPress={() => onNameChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <CloseIcon size={16} color="#9ca3af" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Chips horizontais de status */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.statusScrollContent}
+        style={styles.statusScroll}
+      >
         {STATUS_OPTIONS.map((opt) => (
           <TouchableOpacity
             key={opt.value}
             style={[styles.filterChip, filterStatus === opt.value && styles.filterChipActive]}
             onPress={() => onStatusChange(opt.value)}
+            activeOpacity={0.75}
           >
             <Text style={[styles.filterChipText, filterStatus === opt.value && styles.filterChipTextActive]}>
               {opt.label}
@@ -280,9 +371,12 @@ function FilterBar({ name, onNameChange, filterStatus, onStatusChange, hasFilter
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {/* Botão de limpar filtros (.mobileButton) */}
       {hasFilters && (
-        <TouchableOpacity style={styles.clearBtn} onPress={onClear}>
-          <Text style={styles.clearBtnText}>🔄 Limpar filtros</Text>
+        <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.8}>
+          <RefreshIcon size={14} color="#ffffff" />
+          <Text style={styles.clearBtnText}>Limpar filtros</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -292,22 +386,70 @@ function FilterBar({ name, onNameChange, filterStatus, onStatusChange, hasFilter
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CheckScheduleScreen() {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+  const isNarrow = width < 360;
+
   const [appointments, setAppointments] = useState<CheckSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [kpis, setKpis] = useState({ totalPendente: 0, totalRespondido: 0, totalCanceladoPorMesAtual: 0, totalAgendamentosHoje: 0 });
+  const [kpis, setKpis] = useState({
+    totalPendente: 0,
+    totalRespondido: 0,
+    totalCanceladoPorMesAtual: 0,
+    totalAgendamentosHoje: 0,
+  });
 
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Painel colapsável de Filtros e KPIs com Animação Fluida
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const panelAnim = useRef(new Animated.Value(0)).current;
+
+  const flatListRef = useRef<FlatList>(null);
+  const fadeScrollTop = useRef(new Animated.Value(0)).current;
 
   // Modal state
   type ModalType = 'accept' | 'decline' | 'conclude' | 'absence' | null;
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedId, setSelectedId] = useState<number>(0);
   const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
+
+  function togglePanel() {
+    const nextState = !isPanelOpen;
+    setIsPanelOpen(nextState);
+    Animated.spring(panelAnim, {
+      toValue: nextState ? 1 : 0,
+      friction: 9,
+      tension: 50,
+      useNativeDriver: false,
+    }).start();
+  }
+
+  const panelMaxHeight = panelAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 750],
+  });
+
+  const panelOpacity = panelAnim.interpolate({
+    inputRange: [0, 0.2, 1],
+    outputRange: [0, 0, 1],
+  });
+
+  const panelTranslateY = panelAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-14, 0],
+  });
+
+  const rotateChevron = panelAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
 
   function openModal(type: ModalType, id: number) {
     setSelectedId(id);
@@ -318,26 +460,29 @@ export default function CheckScheduleScreen() {
     setActiveModal(null);
   }
 
-  function showSuccess(title: string, content: string) {
-    setSuccessInfo({ title, content });
-    setActiveModal(null);
-    setTimeout(() => setSuccessInfo({ title, content }), 50);
-  }
-
   // Load data
-  const loadData = useCallback(async (pageNum: number, replace: boolean) => {
-    try {
-      const data = await fetchPersonalRequests(pageNum, '10', statusFilter || undefined, undefined, nameFilter || undefined);
-      if (replace) {
-        setAppointments(data.content);
-      } else {
-        setAppointments((prev) => [...prev, ...data.content]);
+  const loadData = useCallback(
+    async (pageNum: number, replace: boolean) => {
+      try {
+        const data = await fetchPersonalRequests(
+          pageNum,
+          '10',
+          statusFilter || undefined,
+          undefined,
+          nameFilter || undefined,
+        );
+        if (replace) {
+          setAppointments(data.content);
+        } else {
+          setAppointments((prev) => [...prev, ...data.content]);
+        }
+        setHasMore(data.page.number < data.page.totalPages - 1);
+      } catch {
+        // silenciosamente define lista vazia ou falha sem popup
       }
-      setHasMore(data.page.number < data.page.totalPages - 1);
-    } catch {
-      Alert.alert('Erro', 'Não foi possível carregar os agendamentos.');
-    }
-  }, [statusFilter, nameFilter]);
+    },
+    [statusFilter, nameFilter],
+  );
 
   const loadKpis = useCallback(async () => {
     try {
@@ -405,72 +550,205 @@ export default function CheckScheduleScreen() {
   }
 
   function handleCardPress(_id: number) {
-    // TODO: navigate to ScheduleDetails screen
+    // Navigate or details
   }
 
-  const hasFilters = !!(nameFilter || statusFilter);
+  const activeFiltersCount = (nameFilter ? 1 : 0) + (statusFilter ? 1 : 0);
+  const hasFilters = activeFiltersCount > 0;
 
   function clearFilters() {
     setNameFilter('');
     setStatusFilter('');
   }
 
+  const activeStatusLabel = STATUS_OPTIONS.find((s) => s.value === statusFilter)?.label;
+
+  // Scroll to top listener
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const shouldShow = offsetY > 200;
+    if (shouldShow !== showScrollTop) {
+      setShowScrollTop(shouldShow);
+      Animated.timing(fadeScrollTop, {
+        toValue: shouldShow ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }
+
+  function scrollToTop() {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }
+
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
+    <View style={[styles.emptyContainer, isTablet && styles.emptyContainerTablet]}>
       <View style={styles.emptyIconWrapper}>
-        <Text style={styles.emptyIconText}>📅</Text>
+        <CalendarXIcon size={48} color="#9ca3af" />
       </View>
       <Text style={styles.emptyTitle}>Nenhum agendamento encontrado</Text>
       <Text style={styles.emptyText}>
         Não encontramos solicitações com os filtros selecionados ou ainda não há agendamentos.
       </Text>
       {hasFilters && (
-        <TouchableOpacity style={styles.clearBtn} onPress={clearFilters}>
-          <Text style={styles.clearBtnText}>🔄 Limpar filtros</Text>
+        <TouchableOpacity style={styles.clearBtn} onPress={clearFilters} activeOpacity={0.8}>
+          <RefreshIcon size={14} color="#ffffff" />
+          <Text style={styles.clearBtnText}>Limpar filtros</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 
   const renderFooter = () => {
-    if (!loadingMore) return null;
-    return <ActivityIndicator style={{ marginVertical: 16 }} color="#192633" />;
+    if (!loadingMore) return <View style={{ height: 80 }} />;
+    return (
+      <View style={{ paddingVertical: 20, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="small" color="#192633" />
+      </View>
+    );
   };
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
+      {/* Header Compacto com Botão de Toggle */}
       <View style={styles.header}>
-        <Text style={styles.title}>Solicitações de Agendamentos</Text>
+        <View style={[styles.headerInner, isTablet && styles.headerInnerTablet]}>
+          
+          {/* Barra Superior: Título e Botão em Coluna */}
+          <View style={styles.headerTopBar}>
+            <View style={styles.titleWrapper}>
+              <Text style={styles.title}>Solicitações de Agendamentos</Text>
+            </View>
 
-        {/* KPIs */}
-        <View style={styles.kpiRow}>
-          <KpiCard title="Total pendente" value={kpis.totalPendente} color="#f59e0b" />
-          <KpiCard title="Respondidos" value={kpis.totalRespondido} color="#009664" />
-          <KpiCard title="Cancelados no mês" value={kpis.totalCanceladoPorMesAtual} color="#960000" />
+            <TouchableOpacity
+              style={[styles.togglePanelBtn, isPanelOpen && styles.togglePanelBtnActive]}
+              onPress={togglePanel}
+              activeOpacity={0.8}
+            >
+              <SlidersIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
+              <Text style={[styles.togglePanelBtnText, isPanelOpen && styles.togglePanelBtnTextActive]}>
+                {isPanelOpen ? 'Ocultar Filtros e KPIs' : 'Exibir Filtros e KPIs'}
+              </Text>
+              {hasFilters && !isPanelOpen && (
+                <View style={styles.activeFilterBadge}>
+                  <Text style={styles.activeFilterBadgeText}>{activeFiltersCount}</Text>
+                </View>
+              )}
+              <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
+                <ChevronDownIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Se o painel estiver fechado e houver filtros ativos, mostra resumo compacto */}
+          {!isPanelOpen && hasFilters && (
+            <View style={styles.compactFilterSummary}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactFilterChips}>
+                {nameFilter ? (
+                  <View style={styles.compactChip}>
+                    <Text style={styles.compactChipText}>Aluno: "{nameFilter}"</Text>
+                  </View>
+                ) : null}
+                {statusFilter ? (
+                  <View style={styles.compactChip}>
+                    <Text style={styles.compactChipText}>{activeStatusLabel}</Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity style={styles.compactClearBtn} onPress={clearFilters} activeOpacity={0.7}>
+                  <Text style={styles.compactClearBtnText}>✕ Limpar</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Painel Expansível de KPIs e Filtros com Animação */}
+          <Animated.View
+            style={[
+              styles.collapsibleContent,
+              {
+                maxHeight: panelMaxHeight,
+                opacity: panelOpacity,
+                transform: [{ translateY: panelTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.collapsibleInner}>
+              {/* Grid de KPIs Responsivo */}
+              {isTablet ? (
+                <View style={styles.kpiRowTablet}>
+                  <KpiCard
+                    title="TOTAL PENDENTE"
+                    value={kpis.totalPendente}
+                    color="#F59E0B"
+                    style={styles.kpiCardTablet}
+                  />
+                  <KpiCard
+                    title="RESPONDIDOS"
+                    value={kpis.totalRespondido}
+                    color="#009664"
+                    style={styles.kpiCardTablet}
+                  />
+                  <KpiCard
+                    title="CANCELADOS NO MÊS ATUAL"
+                    value={kpis.totalCanceladoPorMesAtual}
+                    color="#960000"
+                    style={styles.kpiCardTablet}
+                  />
+                </View>
+              ) : (
+                <View style={styles.kpiGridMobile}>
+                  <View style={styles.kpiMobileRowTop}>
+                    <KpiCard
+                      title="TOTAL PENDENTE"
+                      value={kpis.totalPendente}
+                      color="#F59E0B"
+                      style={styles.kpiCardHalf}
+                    />
+                    <KpiCard
+                      title="RESPONDIDOS"
+                      value={kpis.totalRespondido}
+                      color="#009664"
+                      style={styles.kpiCardHalf}
+                    />
+                  </View>
+                  <KpiCard
+                    title="CANCELADOS NO MÊS ATUAL"
+                    value={kpis.totalCanceladoPorMesAtual}
+                    color="#960000"
+                    style={styles.kpiCardFull}
+                  />
+                </View>
+              )}
+
+              {/* Filtros */}
+              <FilterBar
+                name={nameFilter}
+                onNameChange={setNameFilter}
+                filterStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                hasFilters={hasFilters}
+                onClear={clearFilters}
+              />
+            </View>
+          </Animated.View>
         </View>
-
-        {/* Filter */}
-        <FilterBar
-          name={nameFilter}
-          onNameChange={setNameFilter}
-          filterStatus={statusFilter}
-          onStatusChange={setStatusFilter}
-          hasFilters={hasFilters}
-          onClear={clearFilters}
-        />
       </View>
 
-      {/* List */}
+      {/* Lista de Agendamentos */}
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#192633" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#192633" />
+        </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={appointments}
           keyExtractor={(item) => String(item.agendamentoId)}
           renderItem={({ item }) => (
             <AppointmentCard
               card={item}
+              isNarrow={isNarrow}
+              isTablet={isTablet}
               onAccept={(id) => openModal('accept', id)}
               onDecline={(id) => openModal('decline', id)}
               onReschedule={handleReschedule}
@@ -479,15 +757,27 @@ export default function CheckScheduleScreen() {
               onPress={handleCardPress}
             />
           )}
-          contentContainerStyle={appointments.length === 0 ? { flex: 1 } : styles.listContent}
+          contentContainerStyle={appointments.length === 0 ? styles.emptyListContent : styles.listContent}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#192633']} />}
           onEndReached={onLoadMore}
           onEndReachedThreshold={0.3}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
         />
       )}
 
+      {/* Botão flutuante Voltar ao Topo (.scrollToTopBtn) */}
+      {showScrollTop && (
+        <Animated.View style={[styles.scrollTopBtnContainer, { opacity: fadeScrollTop }]}>
+          <TouchableOpacity style={styles.scrollTopBtn} onPress={scrollToTop} activeOpacity={0.85}>
+            <ChevronUpIcon size={22} color="#ffffff" />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Modais */}
       <ConfirmModal
         visible={activeModal === 'accept'}
         title="Aceitar Agendamento"
@@ -531,84 +821,231 @@ export default function CheckScheduleScreen() {
   );
 }
 
+// ─── Estilos Fielmente Mapeados do react-app ──────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#f1f5f9',
   },
 
-  // Header (cor do .theadRow = #192633)
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
+  },
+
+  // Header (.theadRow = #192633)
   header: {
     backgroundColor: '#192633',
-    paddingTop: 52,
+    paddingTop: 50,
     paddingHorizontal: 16,
     paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#324d67',
   },
-
-  // .titleFilter h1 → font-weight:600; font-size:30px; color:#333
-  // No RN ficamos com branco pois o header é escuro
-  title: {
+  headerInner: {
     width: '100%',
-    textAlign: 'left',
-    fontWeight: '600',
-    fontSize: 30,
-    color: '#ffffff',
-    marginBottom: 16,
+  },
+  headerInnerTablet: {
+    maxWidth: 960,
+    alignSelf: 'center',
   },
 
-  // .gridContainer → gap: 1.25rem (20px)
-  kpiRow: {
-    flexDirection: 'row',
-    gap: 20,
-    marginBottom: 12,
+  headerTopBar: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
+    marginBottom: 4,
   },
-  kpiCard: {
+  titleWrapper: {
+    width: '100%',
+  },
+  title: {
+    fontWeight: '700',
+    fontSize: 22,
+    color: '#ffffff',
+    letterSpacing: -0.3,
+  },
+
+  // Botão de Toggle do Painel de Filtros e KPIs (layout em coluna abaixo do texto)
+  togglePanelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#273c50',
+    borderWidth: 1,
+    borderColor: '#3c5a78',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+    gap: 8,
+    width: '100%',
+  },
+  togglePanelBtnActive: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#d97706',
+  },
+  togglePanelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  togglePanelBtnTextActive: {
+    color: '#1a1a1a',
+    fontWeight: '700',
+  },
+  activeFilterBadge: {
+    backgroundColor: '#f59e0b',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeFilterBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1a1a1a',
+  },
+
+  // Resumo compacto de filtros ativos quando painel está fechado
+  compactFilterSummary: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#273c50',
+  },
+  compactFilterChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  compactChip: {
+    backgroundColor: '#324d67',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  compactChipText: {
+    fontSize: 11,
+    color: '#cbd5e1',
+    fontWeight: '500',
+  },
+  compactClearBtn: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  compactClearBtnText: {
+    fontSize: 11,
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+
+  collapsibleContent: {
+    overflow: 'hidden',
+  },
+  collapsibleInner: {
+    paddingTop: 12,
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#273c50',
+  },
+
+  // ─── KPI Grid Responsivo ──────────────────────────────────────────────────
+  kpiRowTablet: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 14,
+  },
+  kpiCardTablet: {
     flex: 1,
+  },
+
+  kpiGridMobile: {
+    gap: 10,
+    marginBottom: 14,
+  },
+  kpiMobileRowTop: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  kpiCardHalf: {
+    flex: 1,
+  },
+  kpiCardFull: {
+    width: '100%',
+  },
+
+  // .cardContainer (CheckScheduleKpis.module.css)
+  kpiCard: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    padding: 12,
-    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
+  kpiTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   kpiValue: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#192633',
-  },
-  kpiTitle: {
-    fontSize: 10,
-    color: '#6b7280',
-    marginTop: 2,
+    marginTop: 4,
   },
 
-  // Filtros (não existem no CSS da web, mantidos para funcionalidade)
+  // ─── Filtros ──────────────────────────────────────────────────────────────
   filterContainer: {
-    gap: 8,
+    gap: 10,
   },
-  searchInput: {
+  searchWrapper: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#324d67',
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     fontSize: 14,
     color: '#111827',
   },
   statusScroll: {
     flexGrow: 0,
   },
+  statusScrollContent: {
+    paddingRight: 8,
+    gap: 8,
+  },
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#324d67', // cor do .theadRow border #324d67
-    marginRight: 8,
+    backgroundColor: '#324d67',
+    borderWidth: 1,
+    borderColor: '#43617e',
   },
   filterChipActive: {
     backgroundColor: '#f59e0b',
+    borderColor: '#d97706',
   },
   filterChipText: {
     fontSize: 12,
@@ -620,117 +1057,138 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // .mobileButton → background-color: var(--bg-orange) #f59e0b; padding: 0.5rem 1rem; border-radius: 0.375rem (6px)
+  // .mobileButton (var(--bg-orange) = #f59e0b / #F26430)
   clearBtn: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,   // 1rem
-    paddingVertical: 8,      // 0.5rem
-    borderRadius: 6,         // 0.375rem
-    backgroundColor: '#f59e0b', // var(--bg-orange)
-    marginTop: 24,           // 1.5rem (margin-top do .mobileButton)
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#f59e0b',
+    marginTop: 4,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   clearBtnText: {
     color: '#ffffff',
-    fontSize: 14,            // 0.875rem
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
+  // ─── Lista ────────────────────────────────────────────────────────────────
   listContent: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 70,
+    paddingTop: 8,
+    paddingBottom: 80,
+  },
+  emptyListContent: {
+    flexGrow: 1,
+    paddingBottom: 80,
   },
 
-  // .mobileCardWrapper → width: 100%
+  // .mobileCardWrapper
   cardWrapper: {
     width: '100%',
     paddingHorizontal: 16,
     paddingTop: 10,
   },
+  cardWrapperTablet: {
+    maxWidth: 780,
+    alignSelf: 'center',
+  },
 
-  // .mobileCard → border-radius: 0.75rem (12); box-shadow 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #f3f4f6; padding: 1rem (16)
+  // .mobileCard
   card: {
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 12,        // 0.75rem
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,     // 0 1px 2px rgba(0,0,0,0.05)
-    shadowRadius: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 2,
     borderWidth: 1,
     borderColor: '#f3f4f6',
-    padding: 16,             // 1rem
+    padding: 16,
   },
 
-  // .mobileCardHeader → justify-content:space-between; margin-bottom:0.75rem (12); flex-wrap:wrap; gap:8px
+  // .mobileCardHeader
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,        // 0.75rem
-    flexWrap: 'wrap',
+    marginBottom: 12,
     gap: 8,
   },
+  cardHeaderNarrow: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
 
-  // .mobileStatusBadge → padding:0.25rem 0.625rem; border-radius:9999px; font-size:10px; font-weight:700; uppercase; letter-spacing:0.05em; width:60%
-  // NOTA: o CSS original NÃO tem border — a borda vem das classes Tailwind cardColor
+  // .mobileStatusBadge
   badge: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10,   // 0.625rem
-    paddingVertical: 4,      // 0.25rem
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 9999,
-    borderWidth: 1,          // vem do cardColor no web (mantemos para fidelidade visual)
-    width: '60%',
+    borderWidth: 1,
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,      // 0.05em ≈ 0.8 em fontSize 10
+    letterSpacing: 0.8,
     textAlign: 'center',
   },
 
-  // .mobileCardType → font-size:0.75rem (12); color:#fff; padding: 0 8px; text-align:center; bg:#4b5563; border-radius:8px
+  // .mobileCardType
   typeBadge: {
     backgroundColor: '#4b5563',
-    paddingHorizontal: 8,    // padding: 0 8px (só horizontal)
-    paddingVertical: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
   },
+  typeBadgeNarrow: {
+    width: '100%',
+    marginTop: 4,
+  },
   typeText: {
-    fontSize: 12,            // 0.75rem
+    fontSize: 11,
+    fontWeight: '600',
     color: '#ffffff',
     textAlign: 'center',
   },
 
-  // .mobileUserSection → gap:0.75rem (12); margin-bottom:1rem (16)
+  // .mobileUserSection
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,                 // 0.75rem
-    marginBottom: 16,        // 1rem
+    gap: 12,
+    marginBottom: 14,
   },
-
-  // .mobileAvatarWrapper → border:1px solid #9ca3af; border-radius:9999px; width:2.5rem (40); height:2.5rem (40); overflow:hidden
   avatarWrapper: {
     borderWidth: 1,
     borderColor: '#9ca3af',
     borderRadius: 9999,
-    width: 40,               // 2.5rem
-    height: 40,
+    width: 42,
+    height: 42,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatar: { width: 40, height: 40 },
+  avatar: {
+    width: 42,
+    height: 42,
+  },
   avatarPlaceholder: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     backgroundColor: '#192633',
     alignItems: 'center',
     justifyContent: 'center',
@@ -740,109 +1198,111 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-
-  // .mobileUserName → font-size:0.875rem (14); font-weight:700; color:#111827
   userName: {
-    fontSize: 14,            // 0.875rem
+    fontSize: 14,
     fontWeight: '700',
     color: '#111827',
   },
-
-  // .mobileUserDate → font-size:0.75rem (12); color:#4e5053 (sem marginTop no CSS original)
   dateText: {
-    fontSize: 12,            // 0.75rem
+    fontSize: 12,
     color: '#4e5053',
+    marginTop: 2,
   },
-
-  // .mobileAddress → font-size:0.75rem (12); color:#4e5053; margin-top:10px
+  addressWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
   addressText: {
-    fontSize: 12,            // 0.75rem
+    fontSize: 12,
     color: '#4e5053',
-    marginTop: 10,
+    flex: 1,
   },
 
-  // .mobileActions → justify-content:space-around; gap:0.75rem (12); padding-top:0.75rem (12); border-top:1px solid #f3f4f6
-  // NOTA: o CSS original NÃO tem flex-wrap
+  // .mobileActions
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    gap: 12,                 // 0.75rem
-    paddingTop: 12,          // 0.75rem
+    gap: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
   },
-
-  // .button → cursor:pointer; background:none; border:none
   actionBtn: {
     backgroundColor: 'transparent',
-    padding: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Ícone do botão
-  actionBtnText: {
-    fontSize: 22,
-    textAlign: 'center',
-  },
-  // Label abaixo do ícone
   actionLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 3,
     textAlign: 'center',
   },
 
-  // Cores dos ícones — idênticas ao CSS da web
-  iconAccept:     { color: '#22c55e' }, // .iconAccept
-  iconDecline:    { color: '#ef4444' }, // .iconDecline
-  iconReschedule: { color: '#3b82f6' }, // .iconReschedule
-  iconConclude:   { color: '#16a34a' }, // text-green-600
-  iconAbsence:    { color: '#ef4444' }, // text-red-500
-
-  // .mobileEmptyContainer → flex-grow:1; padding:2rem (32); text-align:center; bg:#fff; border-radius:8px; width:100%
+  // .mobileEmptyContainer
   emptyContainer: {
-    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,             // 2rem
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    padding: 32,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  emptyContainerTablet: {
+    maxWidth: 600,
+    alignSelf: 'center',
     width: '100%',
   },
-
-  // .mobileIconWrapper → width:6rem (96); height:6rem (96); margin-bottom:1rem (16); border-radius:9999px; bg:#f3f4f6
   emptyIconWrapper: {
-    width: 96,               // 6rem
+    width: 96,
     height: 96,
-    marginBottom: 16,        // 1rem
-    borderRadius: 9999,
+    marginBottom: 16,
+    borderRadius: 48,
     backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // .mobileIcon → width:3rem (48); height:3rem (48); color:#9ca3af
-  emptyIconText: {
-    fontSize: 48,            // 3rem
-    color: '#9ca3af',
-  },
-
-  // .mobileTitle → margin-top:0.5rem (8); font-size:1.125rem (18); font-weight:500; color:#111827
   emptyTitle: {
-    marginTop: 8,            // 0.5rem
-    fontSize: 18,            // 1.125rem
-    fontWeight: '500',
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: '600',
     color: '#111827',
     textAlign: 'center',
   },
-
-  // .mobileText → margin-top:0.25rem (4); font-size:0.875rem (14); color:#6b7280; max-width:20rem (320)
   emptyText: {
-    marginTop: 4,            // 0.25rem
-    fontSize: 14,            // 0.875rem
+    marginTop: 6,
+    fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
-    maxWidth: 320,           // 20rem
+    maxWidth: 320,
+    lineHeight: 20,
+  },
+
+  // .scrollToTopBtn
+  scrollTopBtnContainer: {
+    position: 'absolute',
+    bottom: 75,
+    right: 18,
+    zIndex: 100,
+  },
+  scrollTopBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#192633',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
   },
 });
-
-
