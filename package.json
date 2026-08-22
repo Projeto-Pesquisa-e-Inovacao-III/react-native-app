@@ -4,6 +4,8 @@
   "main": "index.ts",
   "dependencies": {
     "@react-native-masked-view/masked-view": "^0.3.2",
+    "@react-navigation/native": "^7.3.17",
+    "@tanstack/react-query": "^5.102.0",
     "axios": "^1.19.0",
     "expo": "~54.0.37",
     "expo-status-bar": "~3.0.9",
