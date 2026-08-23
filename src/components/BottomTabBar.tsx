@@ -1,10 +1,11 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Svg, Path, Rect } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ------------------------------------------------------------------
 // Tipos de tab disponíveis para o personal (versão portada da web)
 // ------------------------------------------------------------------
-export type TabName = 'home' | 'schedule' | 'requests' | 'users' | 'more';
+export type TabName = 'home' | 'schedule'| 'requests' | 'plans';
 
 type Props = {
   activeTab?: TabName;
@@ -134,10 +135,12 @@ function TabItem({ icon, label, active, onPress }: TabItemProps) {
 //      grid-template-columns: repeat(5, 1fr)
 // ------------------------------------------------------------------
 export default function BottomTabBar({ activeTab, onTabPress }: Props) {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 0);
   const press = (tab: TabName) => onTabPress?.(tab);
 
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, { height: 60 + bottomInset, paddingBottom: bottomInset }]}>
       <TabItem
         icon={<IconHome active={activeTab === 'home'} />}
         label="Início"
@@ -181,7 +184,6 @@ export default function BottomTabBar({ activeTab, onTabPress }: Props) {
 const styles = StyleSheet.create({
   bar: {
     width: '100%',
-    height: 60,                   // height: 60px
     backgroundColor: '#192633',   // var(--bg-blue)
     flexDirection: 'row',         // grid-template-columns → row
     position: 'absolute',
