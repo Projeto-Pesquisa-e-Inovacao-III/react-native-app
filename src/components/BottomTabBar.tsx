@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // ------------------------------------------------------------------
 // Tipos de tab disponíveis para o personal (versão portada da web)
 // ------------------------------------------------------------------
-export type TabName = 'home' | 'schedule' | 'requests' | 'users' | 'more';
+export type TabName = 'home' | 'requests' | 'plans';
 
 type Props = {
   activeTab?: TabName;
