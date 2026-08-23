@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import BottomTabBar, { type TabName } from './src/components/BottomTabBar';
 import OverviewScreen from './src/screens/OverviewScreen';
 import CheckScheduleScreen from './src/screens/CheckScheduleScreen';
 import PlansScreen from './src/screens/PlansScreen';
 import NotImplementedScreen from 'src/screens/NotImplementedScreen';
+import ScheduleScreen from 'src/screens/ScheduleScreen';
 
 const queryClient = new QueryClient();
 
@@ -56,6 +56,10 @@ export default function App() {
 
     if (activeTab === 'requests') {
       return <CheckScheduleScreen />;
+    }
+
+    if (activeTab === 'schedule') {
+      return <ScheduleScreen />;
     }
 
     if (activeTab === 'plans'){
