@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { type LayoutChangeEvent, StyleSheet, View, useWindowDimensions } from "react-native";
-import { CalendarList } from "react-native-calendars";
+import { CalendarList, LocaleConfig } from "react-native-calendars";
 
 type CalendarEvent = {
   data: string;
@@ -9,7 +9,24 @@ type CalendarEvent = {
 type OverviewCalendarProps = {
   calendarEvents?: CalendarEvent[];
   disabledDays?: string[];
+  onDayPress?: (date: string) => void;
 };
+
+type CalendarDay = {
+  dateString: string;
+};
+
+LocaleConfig.locales["pt-br"] = {
+  monthNames: [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  ],
+  monthNamesShort: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+  dayNames: ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"],
+  dayNamesShort: ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
+  today: "Hoje",
+};
+LocaleConfig.defaultLocale = "pt-br";
 
 const WEEKDAY_PT: Record<number, string> = {
   0: "domingo",
@@ -60,6 +77,7 @@ function buildMarkedDates(calendarEvents: CalendarEvent[], disabledDays: string[
 export default function Calendar({
   calendarEvents = [],
   disabledDays = [],
+  onDayPress,
 }: OverviewCalendarProps) {
   const { width: screenWidth } = useWindowDimensions();
   const [calendarWidth, setCalendarWidth] = useState<number>(Math.max(280, screenWidth - 60));
@@ -80,8 +98,10 @@ export default function Calendar({
     <View style={styles.calendarWrapper} onLayout={handleCalendarLayout}>
       <CalendarList
         markedDates={markedDates}
+        onDayPress={(day: CalendarDay) => onDayPress?.(day.dateString)}
         current={toISODate(new Date())}
         calendarWidth={calendarWidth}
+        minDate={toISODate(new Date())}
         pastScrollRange={0}
         futureScrollRange={6}
         horizontal

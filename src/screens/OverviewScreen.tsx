@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, Image} from "react-native";
-import Card from "src/components/Card";
-import Calendar from "src/components/Calendar";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View} from "react-native";
+import Card from "../components/Card";
+import Calendar from "../components/Calendar";
+import NewEvent, { type NewEventPayload } from "../components/NewEvent";
+import { MOCK_APPOINTMENTS } from "../mocks/newEventMock";
 
 type Role = "aluno" | "personal" | "admin";
 
@@ -44,10 +46,11 @@ type OverviewNativeProps = {
   pendingAppointments?: number;
   todayAppointments?: number;
   loading?: boolean;
+  availableHours?: string[];
   onGoSchedule?: () => void;
   onGoPending?: () => void;
   onGoPackages?: () => void;
-  onNewEvent?: () => void;
+  onNewEvent?: (payload?: NewEventPayload) => void;
 };
 
 type ModalState = {
@@ -57,6 +60,22 @@ type ModalState = {
 };
 
 const TOTAL_AULAS = 20;
+
+const STATUS_LABELS: Record<string, string> = {
+  APROVADO: "Aprovado",
+  PENDENTE_CLIENTE_APROVACAO: "Pendente aprovação do cliente",
+  PENDENTE_PERSONAL_APROVACAO: "Pendente aprovação do personal",
+  CONCLUIDO: "Concluído",
+  PENDENTE_PERSONAL_CONCLUIR: "Pendente conclusão do personal",
+  CANCELADO_CLIENTE: "Cancelado pelo cliente",
+  CANCELADO_PERSONAL: "Cancelado pelo personal",
+  AUSENCIA_CLIENTE: "Ausência do cliente",
+  AUSENCIA_PERSONAL: "Ausência do personal",
+};
+
+function getStatusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status;
+}
 
 function formatDate(dateISO: string) {
   const date = new Date(dateISO);
@@ -101,7 +120,7 @@ function AppointmentRow({ item, isAluno }: { item: AppointmentItem; isAluno: boo
   return (
     <View style={styles.appointmentCard}>
       <View style={styles.rowBetween}>
-        <Text style={styles.status}>{item.agendamentoStatus}</Text>
+        <Text style={styles.status}>{getStatusLabel(item.agendamentoStatus)}</Text>
         <Text style={styles.typeBadge}>{item.tipoAula}</Text>
       </View>
       <Text style={styles.appointmentName}>{personName || "Sem nome"}</Text>
@@ -122,6 +141,7 @@ export default function OverviewScreen({
   pendingAppointments = 0,
   todayAppointments = 0,
   loading = false,
+  availableHours = [],
   onGoSchedule,
   onGoPending,
   onGoPackages,
@@ -132,10 +152,78 @@ export default function OverviewScreen({
     title: "",
     description: "",
   });
+  const [selectedDate, setSelectedDate] = useState<string>();
+  const [newEventVisible, setNewEventVisible] = useState(false);
+  const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() => (
+    appointments.length > 0 ? appointments : MOCK_APPOINTMENTS
+  ));
   const isAluno = !!userRoles?.includes("aluno");
+  const headerTitle = isAluno ? "Meu painel" : "Painel de agendamentos";
+  const headerSubtitle = isAluno
+    ? "Acompanhe seu plano e saldo disponível"
+    : "Gerencie as aulas do dia e solicitações pendentes";
+
+  const displayedAppointments = localAppointments;
+  const displayedCalendarEvents = [
+    ...calendarEvents,
+    ...displayedAppointments.map((appointment) => ({ data: appointment.data })),
+  ];
 
   function openError(title: string, description: string) {
     setModal({ visible: true, title, description });
+  }
+
+  function handleCalendarDayPress(date: string) {
+    const dayAppointments = displayedAppointments.filter(
+      (appointment) => appointment.data?.split("T")[0] === date
+    );
+
+    if (dayAppointments.length === 0) {
+      if (!isAluno) return;
+
+      if (!actualPlan) {
+        openError("Erro", "Voce precisa ter um plano ativo para agendar uma aula.");
+        return;
+      }
+
+      const hasBalance =
+        (classBalance?.saldoPresencial ?? 0) > 0 ||
+        (classBalance?.saldoFuncional ?? 0) > 0 ||
+        (classBalance?.saldoResidencial ?? 0) > 0;
+
+      if (!hasBalance) {
+        openError(
+          "Aulas indisponiveis",
+          "Voce nao possui aulas disponiveis para agendamento. Adquira um plano ou contate seu personal."
+        );
+        return;
+      }
+
+      setSelectedDate(date);
+      setNewEventVisible(true);
+      return;
+    }
+
+    const description = dayAppointments
+      .map((appointment) => {
+        const personName = isAluno ? appointment.personalNome : appointment.alunoNome;
+        return [
+          personName || "Sem nome",
+          formatHour(appointment.data) + " - " + formatHour(appointment.datafim),
+          appointment.tipoAula,
+        ].join(" | ");
+      })
+      .join("\n");
+
+    setModal({
+      visible: true,
+      title: dayAppointments.length > 1 ? "Agendamentos" : "Agendamento",
+      description: formatDate(date) + "\n\n" + description,
+    });
+  }
+
+  function handleModalAction() {
+    setModal((previous) => ({ ...previous, visible: false }));
   }
 
   function handleNewEvent() {
@@ -162,27 +250,69 @@ export default function OverviewScreen({
       return;
     }
 
-    onNewEvent?.();
+    setSelectedDate(undefined);
+    setNewEventVisible(true);
+  }
+
+  function handleScheduleSubmit(payload: NewEventPayload) {
+    const newAppointment: AppointmentItem = {
+      agendamentoId: Date.now(),
+      agendamentoStatus: "PENDENTE_PERSONAL_APROVACAO",
+      data: payload.date + "T" + payload.startHour,
+      datafim: payload.date + "T" + payload.endHour,
+      personalNome: payload.personal.nome,
+      alunoNome: "Aluno atual",
+      tipoAula: payload.type,
+      endereco: {
+        bairro: payload.address.street,
+        cidade: payload.address.city,
+      },
+    };
+
+    setLocalAppointments((previous) => [...previous, newAppointment]);
+    setNewEventVisible(false);
+    onNewEvent?.(payload);
   }
 
   return (
     <View style={styles.screen}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{headerTitle}</Text>
+        <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
+
+        {isAluno ? (
+          <View style={styles.headerStatsRow}>
+            <View style={styles.headerStatCard}>
+              <Text style={styles.headerStatValue}>{classBalance?.saldoPresencial ?? 0}</Text>
+              <Text style={styles.headerStatLabel}>Presencial</Text>
+            </View>
+            <View style={styles.headerStatCard}>
+              <Text style={styles.headerStatValue}>{classBalance?.saldoFuncional ?? 0}</Text>
+              <Text style={styles.headerStatLabel}>Funcional</Text>
+            </View>
+            <View style={styles.headerStatCard}>
+              <Text style={styles.headerStatValue}>{classBalance?.saldoResidencial ?? 0}</Text>
+              <Text style={styles.headerStatLabel}>Residencial</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.headerStatsRow}>
+            <View style={styles.headerStatCard}>
+              <Text style={styles.headerStatValue}>{todayAppointments}</Text>
+              <Text style={styles.headerStatLabel}>Hoje</Text>
+            </View>
+            <View style={styles.headerStatCard}>
+              <Text style={styles.headerStatValue}>{pendingAppointments}</Text>
+              <Text style={styles.headerStatLabel}>Pendentes</Text>
+            </View>
+          </View>
+        )}
+      </View>
+
       <ScrollView contentContainerStyle={styles.content}>
+
         {isAluno ? (
           <>
-            <Card
-              title="Saldo de aulas"
-              subtitle={
-                <View>
-                  <BalanceBar label="Presencial" current={classBalance?.saldoPresencial ?? 0} />
-                  <BalanceBar label="Funcional" current={classBalance?.saldoFuncional ?? 0} />
-                  <BalanceBar label="Residencial" current={classBalance?.saldoResidencial ?? 0} />
-                </View>
-              }
-              cta="Ver meus agendamentos"
-              onPress={onGoSchedule}
-            />
-
             <Card
               title="Status do plano"
               subtitle={
@@ -194,24 +324,13 @@ export default function OverviewScreen({
               onPress={onGoPackages}
             />
           </>
-        ) : (
-          <>
-            <Card
-              title="Aulas para realizar hoje"
-              subtitle={todayAppointments}
-              cta="Ir para agendamentos"
-              onPress={onGoSchedule}
-            />
-            <Card
-              title="Aulas pendentes para aprovação"
-              subtitle={pendingAppointments}
-              cta="Ir para solicitacoes"
-              onPress={onGoPending}
-            />
-          </>
-        )}
+        ) : null}
 
-        <Calendar calendarEvents={calendarEvents} disabledDays={disabledDays} />
+        <Calendar
+          calendarEvents={displayedCalendarEvents}
+          disabledDays={disabledDays}
+          onDayPress={handleCalendarDayPress}
+        />
 
         <View style={styles.card}>
           <View style={styles.rowBetween}>
@@ -225,13 +344,13 @@ export default function OverviewScreen({
 
           {loading ? (
             <Text style={styles.loadingText}>Carregando...</Text>
-          ) : appointments.length === 0 ? (
+          ) : displayedAppointments.length === 0 ? (
             <Text style={styles.emptyText}>Nenhum agendamento encontrado.</Text>
           ) : (
             <FlatList
-              data={appointments}
-              keyExtractor={(item) => String(item.agendamentoId)}
-              renderItem={({ item }) => <AppointmentRow item={item} isAluno={isAluno} />}
+              data={displayedAppointments}
+              keyExtractor={(item: AppointmentItem) => String(item.agendamentoId)}
+              renderItem={({ item }: { item: AppointmentItem }) => <AppointmentRow item={item} isAluno={isAluno} />}
               scrollEnabled={false}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
             />
@@ -244,26 +363,74 @@ export default function OverviewScreen({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{modal.title}</Text>
             <Text style={styles.modalDescription}>{modal.description}</Text>
-            <Pressable style={styles.modalButton} onPress={() => setModal((prev) => ({ ...prev, visible: false }))}>
+            <Pressable style={styles.modalButton} onPress={handleModalAction}>
               <Text style={styles.modalButtonText}>Fechar</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
+
+      <NewEvent
+        key={`${newEventVisible}-${selectedDate ?? "new"}`}
+        visible={newEventVisible}
+        initialDate={selectedDate}
+        availableHours={availableHours}
+        onClose={() => setNewEventVisible(false)}
+        onSubmit={handleScheduleSubmit}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
-    paddingTop: 30,
-    paddingBottom: 100,
+    flex: 1,
     backgroundColor: "#e8eef4",
   },
   content: {
-    padding: 16,
-    paddingBottom: 28,
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 120,
     gap: 14,
+  },
+  header: {
+    backgroundColor: "#192633",
+    width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 44,
+    paddingBottom: 14,
+  },
+  headerTitle: {
+    color: "#ffffff",
+    fontSize: 27,
+    fontWeight: "700",
+  },
+  headerSubtitle: {
+    color: "#c6d4df",
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  headerStatsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  headerStatCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  headerStatValue: {
+    color: "#192633",
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  headerStatLabel: {
+    color: "#58667a",
+    fontSize: 12,
+    fontWeight: "600",
   },
   balanceItem: {
     marginBottom: 10,
