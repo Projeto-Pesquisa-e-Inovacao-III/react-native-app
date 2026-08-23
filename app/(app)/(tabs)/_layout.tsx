@@ -9,7 +9,7 @@ export default function TabsLayout() {
   const { roles } = useAuth();
 
   const getActiveTab = (): TabName => {
-    if (pathname.includes('/schedule')) return 'schedule';
+    if (pathname.includes('/schedule') || pathname.includes('/personal-schedule')) return 'schedule';
     if (pathname.includes('/requests')) return 'requests';
     if (pathname.includes('/plans')) return 'plans';
     if (pathname.includes('/users')) return 'users';
@@ -23,7 +23,12 @@ export default function TabsLayout() {
         router.push('/(app)/(tabs)');
         break;
       case 'schedule':
-        router.push('/(app)/(tabs)/schedule');
+        const isPersonalOrAdmin = roles?.includes('personal') || roles?.includes('admin');
+        if (isPersonalOrAdmin) {
+          router.push('/(app)/(tabs)/personal-schedule');
+        } else {
+          router.push('/(app)/(tabs)/schedule');
+        }
         break;
       case 'requests':
         router.push('/(app)/(tabs)/requests');
@@ -53,6 +58,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Início' }} />
       <Tabs.Screen name="schedule" options={{ title: 'Agenda' }} />
+      <Tabs.Screen name="personal-schedule" options={{ title: 'Agenda Personal', href: null }} />
       <Tabs.Screen name="requests" options={{ title: 'Solicitações' }} />
       <Tabs.Screen name="plans" options={{ title: 'Planos' }} />
       <Tabs.Screen name="users" options={{ title: 'Usuários' }} />

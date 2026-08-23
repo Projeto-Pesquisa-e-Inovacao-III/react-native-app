@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ScheduleRoute from '../../app/(app)/(tabs)/schedule';
-import PersonalScheduleRoute from '../../app/(app)/personal-schedule';
+import PersonalScheduleRoute from '../../app/(app)/(tabs)/personal-schedule';
 
 export type ScheduleDebugMode = 'student' | 'personal';
 
