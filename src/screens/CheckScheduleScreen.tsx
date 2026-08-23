@@ -16,13 +16,19 @@ import {
   Animated,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  LayoutAnimation,
   Platform,
   UIManager,
 } from 'react-native';
-import { api } from '../services/api';
 import { statusProperties } from '../constants/cardStatus';
-import type { CheckSchedule, AbsenceAppointment, PaginatedResponse } from '../models/schedule';
+import {
+  findPersonalRequests,
+  getScheduleData,
+  acceptUserAppointment,
+  refuseAppointment,
+  concludeAppointment,
+  reportAbsencePersonal,
+} from '../constants/schedule';
+import type { CheckSchedule, AbsenceAppointment } from '../models/schedule';
 import ConfirmModal from '../components/modals/ConfirmModal';
 import SuccessModal from '../components/modals/SuccessModal';
 import ConcludeAppointmentModal from '../components/modals/ConcludeAppointmentModal';
@@ -48,8 +54,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
 function formatDate(iso: string) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -67,39 +71,6 @@ function startOfDay(date: Date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-
-// ─── API ─────────────────────────────────────────────────────────────────────
-
-async function fetchPersonalRequests(
-  page = 0,
-  size = '10',
-  status?: string,
-  classType?: string,
-  name?: string,
-): Promise<PaginatedResponse<CheckSchedule>> {
-  const res = await api.get('/agendamentos/solicitacoes', {
-    params: {
-      ...(status && { status }),
-      ...(classType && { tipoAgendamento: classType }),
-      ...(name && { nome: name }),
-      page,
-      size,
-    },
-  });
-  return res.data;
-}
-
-async function fetchKpis(): Promise<{
-  totalPendente: number;
-  totalRespondido: number;
-  totalCanceladoPorMesAtual: number;
-  totalAgendamentosHoje: number;
-}> {
-  const res = await api.get('/agendamentos/kpis');
-  return res.data;
-}
-
-// ─── KPI Card (CheckScheduleKpis) ─────────────────────────────────────────────
 
 function KpiCard({
   title,
@@ -122,8 +93,6 @@ function KpiCard({
   );
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
-
 function StatusBadge({ status, isNarrow }: { status: string; isNarrow: boolean }) {
   const prop = statusProperties.find((s) => s.cardStatus === status);
   if (!prop) return null;
@@ -142,8 +111,6 @@ function StatusBadge({ status, isNarrow }: { status: string; isNarrow: boolean }
     </View>
   );
 }
-
-// ─── Appointment Card (mobileCard) ────────────────────────────────────────────
 
 type CardProps = {
   card: CheckSchedule;
@@ -187,7 +154,6 @@ function AppointmentCard({
         onPress={() => onPress(card.agendamentoId)}
         activeOpacity={0.85}
       >
-        {/* Header: StatusBadge + TypeBadge */}
         <View style={[styles.cardHeader, isNarrow && styles.cardHeaderNarrow]}>
           <StatusBadge status={card.status} isNarrow={isNarrow} />
           <View style={[styles.typeBadge, isNarrow && styles.typeBadgeNarrow]}>
@@ -195,7 +161,6 @@ function AppointmentCard({
           </View>
         </View>
 
-        {/* User section: Avatar + Info */}
         <View style={styles.userSection}>
           <View style={styles.avatarWrapper}>
             {card.foto ? (
@@ -224,7 +189,6 @@ function AppointmentCard({
           </View>
         </View>
 
-        {/* Actions Row (.mobileActions) */}
         <View style={styles.actionsRow}>
           {isPendingApproval && (
             <>
@@ -300,8 +264,6 @@ function AppointmentCard({
   );
 }
 
-// ─── Filter Bar (CardFilterCheckSchedule) ─────────────────────────────────────
-
 const STATUS_OPTIONS = [
   { label: 'Todos', value: '' },
   { label: 'Pendente resposta do personal', value: 'PENDENTE_PERSONAL_APROVACAO' },
@@ -334,7 +296,6 @@ function FilterBar({
 }: FilterBarProps) {
   return (
     <View style={styles.filterContainer}>
-      {/* Input de busca com ícone e botão de limpar */}
       <View style={styles.searchWrapper}>
         <SearchIcon size={18} color="#9ca3af" />
         <TextInput
@@ -351,7 +312,6 @@ function FilterBar({
         )}
       </View>
 
-      {/* Chips horizontais de status */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -372,7 +332,6 @@ function FilterBar({
         ))}
       </ScrollView>
 
-      {/* Botão de limpar filtros (.mobileButton) */}
       {hasFilters && (
         <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.8}>
           <RefreshIcon size={14} color="#ffffff" />
@@ -382,8 +341,6 @@ function FilterBar({
     </View>
   );
 }
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CheckScheduleScreen() {
   const { width } = useWindowDimensions();
@@ -407,14 +364,12 @@ export default function CheckScheduleScreen() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  // Painel colapsável de Filtros e KPIs com Animação Fluida
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const panelAnim = useRef(new Animated.Value(0)).current;
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const panelAnim = useRef(new Animated.Value(1)).current;
 
   const flatListRef = useRef<FlatList>(null);
   const fadeScrollTop = useRef(new Animated.Value(0)).current;
 
-  // Modal state
   type ModalType = 'accept' | 'decline' | 'conclude' | 'absence' | null;
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedId, setSelectedId] = useState<number>(0);
@@ -460,17 +415,19 @@ export default function CheckScheduleScreen() {
     setActiveModal(null);
   }
 
-  // Load data
   const loadData = useCallback(
     async (pageNum: number, replace: boolean) => {
       try {
-        const data = await fetchPersonalRequests(
+        const res = await findPersonalRequests(
           pageNum,
           '10',
+          undefined,
+          undefined,
           statusFilter || undefined,
           undefined,
           nameFilter || undefined,
         );
+        const data = res.data;
         if (replace) {
           setAppointments(data.content);
         } else {
@@ -478,7 +435,7 @@ export default function CheckScheduleScreen() {
         }
         setHasMore(data.page.number < data.page.totalPages - 1);
       } catch {
-        // silenciosamente define lista vazia ou falha sem popup
+        // Silenciosamente define lista vazia ou falha sem popup
       }
     },
     [statusFilter, nameFilter],
@@ -486,10 +443,10 @@ export default function CheckScheduleScreen() {
 
   const loadKpis = useCallback(async () => {
     try {
-      const data = await fetchKpis();
-      setKpis(data);
+      const res = await getScheduleData();
+      setKpis(res.data);
     } catch {
-      // silently fail
+      // Ignora erro silenciosamente
     }
   }, []);
 
@@ -515,21 +472,20 @@ export default function CheckScheduleScreen() {
     setLoadingMore(false);
   }, [loadingMore, hasMore, page, loadData]);
 
-  // Actions
   async function handleAcceptConfirm() {
-    await api.put(`/agendamentos/${selectedId}/aprovar`);
+    await acceptUserAppointment(selectedId);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Aceito', content: 'O agendamento foi aceito com sucesso.' });
   }
 
   async function handleDeclineConfirm() {
-    await api.delete(`/agendamentos/${selectedId}`);
+    await refuseAppointment(selectedId);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Recusado', content: 'O agendamento foi recusado.' });
   }
 
   async function handleConcludeSubmit(data: { resumo: string; grupoMuscular: string[] }) {
-    await api.put(`/agendamentos/${selectedId}/confirmar-conclusao`, data);
+    await concludeAppointment(selectedId, data);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Concluído', content: 'O agendamento foi concluído com sucesso.' });
   }
@@ -540,7 +496,7 @@ export default function CheckScheduleScreen() {
       tipoUsuario: data.type.includes('PERSONAL') ? 'PERSONAL' : 'ALUNO',
       descricaoCancelamento: data.description || null,
     };
-    await api.put('/agendamentos/ausencia', payload);
+    await reportAbsencePersonal(payload);
     await onRefresh();
     setSuccessInfo({ title: 'Ausência Registrada', content: 'A ausência foi registrada com sucesso.' });
   }
@@ -549,9 +505,7 @@ export default function CheckScheduleScreen() {
     Alert.alert('Reagendar', `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`);
   }
 
-  function handleCardPress(_id: number) {
-    // Navigate or details
-  }
+  function handleCardPress(_id: number) {}
 
   const activeFiltersCount = (nameFilter ? 1 : 0) + (statusFilter ? 1 : 0);
   const hasFilters = activeFiltersCount > 0;
@@ -563,7 +517,6 @@ export default function CheckScheduleScreen() {
 
   const activeStatusLabel = STATUS_OPTIONS.find((s) => s.value === statusFilter)?.label;
 
-  // Scroll to top listener
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const offsetY = event.nativeEvent.contentOffset.y;
     const shouldShow = offsetY > 200;
@@ -610,11 +563,8 @@ export default function CheckScheduleScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Header Compacto com Botão de Toggle */}
       <View style={styles.header}>
         <View style={[styles.headerInner, isTablet && styles.headerInnerTablet]}>
-          
-          {/* Barra Superior: Título e Botão em Coluna */}
           <View style={styles.headerTopBar}>
             <View style={styles.titleWrapper}>
               <Text style={styles.title}>Solicitações de Agendamentos</Text>
@@ -640,7 +590,6 @@ export default function CheckScheduleScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Se o painel estiver fechado e houver filtros ativos, mostra resumo compacto */}
           {!isPanelOpen && hasFilters && (
             <View style={styles.compactFilterSummary}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactFilterChips}>
@@ -661,7 +610,6 @@ export default function CheckScheduleScreen() {
             </View>
           )}
 
-          {/* Painel Expansível de KPIs e Filtros com Animação */}
           <Animated.View
             style={[
               styles.collapsibleContent,
@@ -673,7 +621,6 @@ export default function CheckScheduleScreen() {
             ]}
           >
             <View style={styles.collapsibleInner}>
-              {/* Grid de KPIs Responsivo */}
               {isTablet ? (
                 <View style={styles.kpiRowTablet}>
                   <KpiCard
@@ -720,7 +667,6 @@ export default function CheckScheduleScreen() {
                 </View>
               )}
 
-              {/* Filtros */}
               <FilterBar
                 name={nameFilter}
                 onNameChange={setNameFilter}
@@ -734,7 +680,6 @@ export default function CheckScheduleScreen() {
         </View>
       </View>
 
-      {/* Lista de Agendamentos */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#192633" />
@@ -768,7 +713,6 @@ export default function CheckScheduleScreen() {
         />
       )}
 
-      {/* Botão flutuante Voltar ao Topo (.scrollToTopBtn) */}
       {showScrollTop && (
         <Animated.View style={[styles.scrollTopBtnContainer, { opacity: fadeScrollTop }]}>
           <TouchableOpacity style={styles.scrollTopBtn} onPress={scrollToTop} activeOpacity={0.85}>
@@ -777,7 +721,6 @@ export default function CheckScheduleScreen() {
         </Animated.View>
       )}
 
-      {/* Modais */}
       <ConfirmModal
         visible={activeModal === 'accept'}
         title="Aceitar Agendamento"
@@ -821,8 +764,6 @@ export default function CheckScheduleScreen() {
   );
 }
 
-// ─── Estilos Fielmente Mapeados do react-app ──────────────────────────────────
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -836,7 +777,6 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
 
-  // Header (.theadRow = #192633)
   header: {
     backgroundColor: '#192633',
     paddingTop: 50,
@@ -869,7 +809,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
 
-  // Botão de Toggle do Painel de Filtros e KPIs (layout em coluna abaixo do texto)
   togglePanelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -910,7 +849,6 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
   },
 
-  // Resumo compacto de filtros ativos quando painel está fechado
   compactFilterSummary: {
     marginTop: 8,
     paddingTop: 8,
@@ -955,7 +893,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#273c50',
   },
 
-  // ─── KPI Grid Responsivo ──────────────────────────────────────────────────
   kpiRowTablet: {
     flexDirection: 'row',
     gap: 16,
@@ -980,7 +917,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
-  // .cardContainer (CheckScheduleKpis.module.css)
   kpiCard: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
@@ -1007,7 +943,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // ─── Filtros ──────────────────────────────────────────────────────────────
   filterContainer: {
     gap: 10,
   },
@@ -1057,16 +992,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // .mobileButton (var(--bg-orange) = #f59e0b / #F26430)
   clearBtn: {
-    alignSelf: 'flex-start',
+    width: '100%',
+    textAlign: 'center',
+    justifyContent: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: '#f59e0b',
-    marginTop: 4,
+    marginTop: 15,
     gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1075,12 +1011,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   clearBtnText: {
-    color: '#ffffff',
+    color: '#000000ff',
     fontSize: 13,
     fontWeight: '600',
   },
 
-  // ─── Lista ────────────────────────────────────────────────────────────────
   listContent: {
     paddingTop: 8,
     paddingBottom: 80,
@@ -1090,7 +1025,6 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
 
-  // .mobileCardWrapper
   cardWrapper: {
     width: '100%',
     paddingHorizontal: 16,
@@ -1101,7 +1035,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  // .mobileCard
   card: {
     width: '100%',
     backgroundColor: '#ffffff',
@@ -1116,7 +1049,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
-  // .mobileCardHeader
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1129,7 +1061,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
 
-  // .mobileStatusBadge
   badge: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -1147,7 +1078,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // .mobileCardType
   typeBadge: {
     backgroundColor: '#4b5563',
     paddingHorizontal: 8,
@@ -1165,7 +1095,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // .mobileUserSection
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1220,7 +1149,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // .mobileActions
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1243,7 +1171,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // .mobileEmptyContainer
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1285,7 +1212,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // .scrollToTopBtn
   scrollTopBtnContainer: {
     position: 'absolute',
     bottom: 75,
