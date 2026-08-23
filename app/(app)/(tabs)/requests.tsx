@@ -19,7 +19,7 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { statusProperties } from '../constants/cardStatus';
+import { statusProperties } from '../../../src/constants/cardStatus';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -27,13 +27,13 @@ import {
   refuseAppointment,
   concludeAppointment,
   reportAbsencePersonal,
-} from '../constants/schedule';
-import type { CheckSchedule, AbsenceAppointment } from '../models/schedule';
-import ConfirmModal from '../components/modals/ConfirmModal';
-import SuccessModal from '../components/modals/SuccessModal';
-import ConcludeAppointmentModal from '../components/modals/ConcludeAppointmentModal';
-import RegisterAbsenceModal from '../components/modals/RegisterAbsenceModal';
-import BottomTabBar from '../components/BottomTabBar';
+} from '../../../src/constants/schedule';
+import type { CheckSchedule, AbsenceAppointment } from '../../../src/models/schedule';
+import ConfirmModal from '../../../src/components/modals/ConfirmModal';
+import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeAppointmentModal';
+import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
+import BottomTabBar from '../../../src/components/BottomTabBar';
 import {
   CircleCheckIcon,
   CircleXIcon,
@@ -48,7 +48,7 @@ import {
   SearchIcon,
   MapPinIcon,
   CloseIcon,
-} from '../components/icons/ScheduleIcons';
+} from '../../../src/components/icons/ScheduleIcons';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

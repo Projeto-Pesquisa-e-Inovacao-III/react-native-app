@@ -9,6 +9,13 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setOnUnauthorized(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -17,8 +24,7 @@ api.interceptors.response.use(
       const isException = exceptions.some((path) => url.includes(path));
 
       if (!isException) {
-        // TODO: redirecionar para a tela de login via React Navigation
-        // navigationRef.current?.navigate('Login');
+        unauthorizedHandler?.();
       }
     }
 

@@ -1,12 +1,21 @@
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-export default function NotImplementedScreen(){
-    return (
-      <View style={styles.placeholderContainer}>
-        <Text style={styles.placeholderTitle}>Em breve</Text>
-        <Text style={styles.placeholderText}>Esta aba ainda nao foi implementada.</Text>
-      </View>
-    );
+type Props = {
+  title?: string;
+  message?: string;
+};
+
+export default function NotImplemented({
+  title = 'Em breve',
+  message = 'Esta tela ainda não foi implementada.',
+}: Props) {
+  return (
+    <View style={styles.placeholderContainer}>
+      <Text style={styles.placeholderTitle}>{title}</Text>
+      <Text style={styles.placeholderText}>{message}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

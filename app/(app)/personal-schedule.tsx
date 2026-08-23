@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronLeft, ChevronRight, Clock3, CalendarDays } from 'lucide-react-native';
-import BottomTabBar from '../components/BottomTabBar';
+import BottomTabBar from '../../src/components/BottomTabBar';
 
 type EventStatus = 'approved' | 'pending' | 'cancelled' | 'completed';
 
