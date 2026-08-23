@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   Modal,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,18 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {
-  ArrowRight,
-  CalendarDays,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  MapPin,
-  Plus,
-  X,
-} from 'lucide-react-native';
+import { ArrowRight, Check, Clock3, MapPin, Plus, X } from 'lucide-react-native';
 import BottomTabBar from '../components/BottomTabBar';
+import MonthlyCalendar from '../components/MonthlyCalendar';
 
 type AppointmentStatus = 'PENDENTE' | 'APROVADO' | 'CANCELADO' | 'CONCLUIDO';
 
@@ -57,14 +47,21 @@ const SAMPLE_APPOINTMENTS: Appointment[] = [
     id: 3,
     name: 'Rafael Nunes',
     type: 'Residencial',
-    start: '2026-08-27T07:30:00',
-    end: '2026-08-27T08:15:00',
+    start: '2026-08-28T07:30:00',
+    end: '2026-08-28T08:15:00',
+    address: 'Avenida Paulista, 1500',
+    status: 'CONCLUIDO',
+  },
+  {
+    id: 4,
+    name: 'Rafael Nunes',
+    type: 'Residencial',
+    start: '2026-08-21T07:30:00',
+    end: '2026-08-21T08:15:00',
     address: 'Avenida Paulista, 1500',
     status: 'CONCLUIDO',
   },
 ];
-
-const dayLabels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
 function formatDateLabel(date: Date) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
@@ -77,35 +74,12 @@ function formatTimeLabel(date: Date) {
   }).format(date);
 }
 
-function formatMonthLabel(date: Date) {
-  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(date);
-}
-
 function isSameDay(dateA: Date, dateB: Date) {
   return (
     dateA.getFullYear() === dateB.getFullYear() &&
     dateA.getMonth() === dateB.getMonth() &&
     dateA.getDate() === dateB.getDate()
   );
-}
-
-function getMonthMatrix(date: Date) {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const startOffset = (firstDay.getDay() + 6) % 7;
-  const daysInMonth = lastDay.getDate();
-  const totalCells = Math.ceil((daysInMonth + startOffset) / 7) * 7;
-  const calendarDays: Array<Date | null> = [];
-
-  for (let i = 0; i < totalCells; i += 1) {
-    const dayNumber = i - startOffset + 1;
-    const cellDate = dayNumber > 0 && dayNumber <= daysInMonth ? new Date(year, month, dayNumber) : null;
-    calendarDays.push(cellDate);
-  }
-
-  return calendarDays;
 }
 
 function getStatusStyle(status: AppointmentStatus) {
@@ -139,14 +113,17 @@ export default function ScheduleScreen() {
     [appointments, selectedDate],
   );
 
-  const monthDays = useMemo(() => getMonthMatrix(currentMonth), [currentMonth]);
+  const appointmentDateKeys = useMemo(() => {
+    const keys = new Set<string>();
+    appointments.forEach((item) => {
+      const date = new Date(item.start);
+      keys.add(`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`);
+    });
+    return keys;
+  }, [appointments]);
 
-  const goToPreviousMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  };
-
-  const goToNextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  const hasEventOnDate = (date: Date) => {
+    return appointmentDateKeys.has(`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`);
   };
 
   return (
@@ -161,59 +138,23 @@ export default function ScheduleScreen() {
           </View>
 
           <View style={styles.calendarCard}>
-          <View style={styles.monthHeader}>
-            <TouchableOpacity onPress={goToPreviousMonth} style={styles.arrowButton} activeOpacity={0.8}>
-              <ChevronLeft size={18} color="#1F2937" />
+            <MonthlyCalendar
+              currentMonth={currentMonth}
+              selectedDate={selectedDate}
+              onDateSelect={setSelectedDate}
+              onMonthChange={setCurrentMonth}
+              hasEventOnDate={hasEventOnDate}
+            />
+
+            <TouchableOpacity style={styles.primaryButton} onPress={() => setIsModalVisible(true)} activeOpacity={0.9}>
+              <Plus size={18} color="#FFFFFF" />
+              <Text style={styles.primaryButtonText}>Agendar</Text>
             </TouchableOpacity>
-
-            <View style={styles.monthTitleWrap}>
-              <CalendarDays size={18} color="#1C6AAB" />
-              <Text style={styles.monthTitle}>{formatMonthLabel(currentMonth)}</Text>
-            </View>
-
-            <TouchableOpacity onPress={goToNextMonth} style={styles.arrowButton} activeOpacity={0.8}>
-              <ChevronRight size={18} color="#1F2937" />
-            </TouchableOpacity>
           </View>
 
-          <View style={styles.weekRow}>
-            {dayLabels.map((label) => (
-              <Text key={label} style={styles.weekLabel}>{label}</Text>
-            ))}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderText}>{formatDateLabel(selectedDate)}</Text>
           </View>
-
-          <View style={styles.dayGrid}>
-            {monthDays.map((value, index) => {
-              if (!value) {
-                return <View key={`empty-${index}`} style={styles.emptyCell} />;
-              }
-
-              const isSelected = isSameDay(value, selectedDate);
-              const isCurrentMonth = value.getMonth() === currentMonth.getMonth();
-              const hasEvent = appointments.some((item) => isSameDay(new Date(item.start), value));
-
-              return (
-                <Pressable
-                  key={value.toISOString()}
-                  style={[styles.dayCell, isSelected && styles.dayCellSelected, !isCurrentMonth && styles.dayCellMuted]}
-                  onPress={() => setSelectedDate(value)}
-                >
-                  <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>{value.getDate()}</Text>
-                  {hasEvent && <View style={styles.dayDot} />}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <TouchableOpacity style={styles.primaryButton} onPress={() => setIsModalVisible(true)} activeOpacity={0.9}>
-            <Plus size={18} color="#FFFFFF" />
-            <Text style={styles.primaryButtonText}>Agendar</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderText}>{formatDateLabel(selectedDate)}</Text>
-        </View>
 
           {filteredAppointments.length === 0 ? (
             <View style={styles.emptyState}>
@@ -385,80 +326,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
-  },
-  monthHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  arrowButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#EEF4FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  monthTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  monthTitle: {
-    color: '#0F172A',
-    fontSize: 17,
-    fontWeight: '700',
-    textTransform: 'capitalize',
-  },
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  weekLabel: {
-    flex: 1,
-    color: '#6B7280',
-    fontWeight: '600',
-    fontSize: 11,
-    textAlign: 'center',
-  },
-  dayGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  emptyCell: {
-    width: `${100 / 7}%`,
-    height: 46,
-  },
-  dayCell: {
-    width: `${100 / 7}%`,
-    height: 46,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 2,
-  },
-  dayCellSelected: {
-    backgroundColor: '#1C6AAB',
-  },
-  dayCellMuted: {
-    opacity: 0.35,
-  },
-  dayNumber: {
-    color: '#111827',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  dayNumberSelected: {
-    color: '#FFFFFF',
-  },
-  dayDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#F59E0B',
-    marginTop: 4,
   },
   sectionHeader: {
     marginTop: 20,

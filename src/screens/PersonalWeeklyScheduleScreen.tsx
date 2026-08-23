@@ -44,6 +44,13 @@ const mockEvents: WeeklyEvent[] = [
     end: '2026-08-28T17:00:00',
     status: 'cancelled',
   },
+  {
+    id: '5',
+    title: 'Avaliação',
+    start: '2026-08-28T18:00:00',
+    end: '2026-08-28T19:00:00',
+    status: 'cancelled',
+  },
 ];
 
 function startOfWeek(date: Date) {
