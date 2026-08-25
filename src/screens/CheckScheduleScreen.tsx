@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -292,6 +293,7 @@ function FilterBar({ name, onNameChange, filterStatus, onStatusChange, hasFilter
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CheckScheduleScreen() {
+  const navigation = useNavigation<any>();
   const [appointments, setAppointments] = useState<CheckSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -526,7 +528,13 @@ export default function CheckScheduleScreen() {
         onClose={() => setSuccessInfo(null)}
       />
 
-      <BottomTabBar activeTab="requests" />
+      <BottomTabBar
+        activeTab="requests"
+        onTabPress={(tab) => {
+        if (tab === "more") navigation.navigate("MoreOptions");
+      }}
+      />
+      
     </View>
   );
 }
