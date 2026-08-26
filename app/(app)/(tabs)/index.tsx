@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View} from "react-native";
-import Card from "../components/Card";
-import Calendar from "../components/Calendar";
-import NewEvent, { type NewEventPayload } from "../components/NewEvent";
-import { MOCK_APPOINTMENTS } from "../mocks/newEventMock";
+import { useAuth } from "../../../src/contexts/AuthContext";
+import Card from "../../../src/components/Card";
+import Calendar from "../../../src/components/Calendar";
+import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
+import { MOCK_APPOINTMENTS } from "../../../src/mocks/newEventMock";
 
 type Role = "aluno" | "personal" | "admin";
 
@@ -132,9 +133,16 @@ function AppointmentRow({ item, isAluno }: { item: AppointmentItem; isAluno: boo
 }
 
 export default function OverviewScreen({
-  userRoles,
-  actualPlan,
-  classBalance,
+  userRoles: propsUserRoles,
+  actualPlan = {
+    nome: 'Plano Gold',
+    dataExpiracao: '2026-12-10',
+  },
+  classBalance = {
+    saldoPresencial: 5,
+    saldoFuncional: 0,
+    saldoResidencial: 0,
+  },
   appointments = [],
   calendarEvents = [],
   disabledDays = [],
@@ -146,7 +154,9 @@ export default function OverviewScreen({
   onGoPending,
   onGoPackages,
   onNewEvent,
-}: OverviewNativeProps) {
+}: Partial<OverviewNativeProps> = {}) {
+  const { roles: authRoles } = useAuth();
+  const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
   const [modal, setModal] = useState<ModalState>({
     visible: false,
     title: "",

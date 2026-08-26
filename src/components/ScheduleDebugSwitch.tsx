@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import ScheduleScreen from '../screens/ScheduleScreen';
-import PersonalWeeklyScheduleScreen from '../screens/PersonalWeeklyScheduleScreen';
+import ScheduleRoute from '../../app/(app)/(tabs)/schedule';
+import PersonalScheduleRoute from '../../app/(app)/(tabs)/personal-schedule';
 
 export type ScheduleDebugMode = 'student' | 'personal';
 
@@ -28,7 +28,7 @@ export default function ScheduleDebugSwitch() {
         </TouchableOpacity>
       </View>
 
-      {mode === 'student' ? <ScheduleScreen /> : <PersonalWeeklyScheduleScreen />}
+      {mode === 'student' ? <ScheduleRoute /> : <PersonalScheduleRoute />}
     </View>
   );
 }

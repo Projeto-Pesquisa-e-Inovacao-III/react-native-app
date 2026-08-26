@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronLeft, ChevronRight, Clock3, CalendarDays } from 'lucide-react-native';
-import BottomTabBar from '../components/BottomTabBar';
 
 type EventStatus = 'approved' | 'pending' | 'cancelled' | 'completed';
 
@@ -223,8 +222,6 @@ export default function PersonalWeeklyScheduleScreen() {
             </View>
           </View>
         </ScrollView>
-
-        <BottomTabBar activeTab="schedule" onTabPress={() => {}} />
       </View>
     </SafeAreaView>
   );

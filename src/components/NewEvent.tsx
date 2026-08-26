@@ -43,6 +43,7 @@ type NewEventProps = {
   personals?: MockPersonal[];
   schedules?: MockSchedule[];
   addresses?: MockAddress[];
+  availableHours?: string[];
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";
@@ -409,6 +410,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#456176",
+  },
+  label: {
+    fontSize: 13,
+    color: "#587386",
+    marginBottom: 8,
   },
   personalRow: {
     gap: 10,

@@ -11,14 +11,18 @@ import {
   RefreshControl,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import BottomTabBar from "../components/BottomTabBar";
-import { PackageCard } from "../components/PackageCard";
-import AddPackagePlan from "../components/modals/AddPackagePlan";
-import TimerModal from "../components/modals/TimerModal";
-import SuccessModal from "../components/modals/SuccessModal";
-import ErrorModal from "../components/modals/ErrorModal";
-import PagBankModal from "../components/modals/PagBankModal";
-import type { ProductExhibition } from "../models/products";
+import { PackageCard } from "../../../src/components/PackageCard";
+import AddPackagePlan from "../../../src/components/modals/AddPackagePlan";
+import TimerModal from "../../../src/components/modals/TimerModal";
+import SuccessModal from "../../../src/components/modals/SuccessModal";
+import ErrorModal from "../../../src/components/modals/ErrorModal";
+import PagBankModal from "../../../src/components/modals/PagBankModal";
+import type { ProductExhibition } from "../../../src/models/products";
+import {
+  getProductsExhibitions,
+  buyProductExhibition,
+  desactivateProductExhibition,
+} from "../../../src/constants/products";
 
 type ModalType =
   | "add"
@@ -30,68 +34,6 @@ type ModalType =
   | "error"
   | "loadingPagBank"
   | null;
-
-// ─── DADOS SIMULADOS (MOCK) ──────────────────────────────────────────────────
-async function getProductsExhibitionsMock(): Promise<{ data: ProductExhibition[] }> {
-  return {
-    data: [
-      {
-        id: 1,
-        titulo: "Plano Mensal",
-        subtitulo: "Ideal para começar seus treinos.",
-        descricao: "",
-        beneficios: [
-          { valor: "Acesso ilimitado à plataforma" },
-          { valor: "Suporte via chat" },
-          { valor: "1 Avaliação física" },
-        ],
-        preco: 99.9,
-        tipoProduto: "PACOTE",
-        periodo: "Mensal",
-        status: "ATIVO",
-        tipoAula: "PRESENCIAL",
-        quantidadeAula: 12,
-        duracaoMes: 1,
-      },
-      {
-        id: 2,
-        titulo: "Plano Trimestral",
-        subtitulo: "Mais econômico com plano de dieta.",
-        descricao: "",
-        beneficios: [
-          { valor: "Acesso ilimitado à plataforma" },
-          { valor: "Suporte prioritário" },
-          { valor: "3 Avaliações físicas" },
-          { valor: "Planilha de dieta inclusa" },
-        ],
-        preco: 259.9,
-        tipoProduto: "PACOTE",
-        periodo: "Trimestral",
-        status: "ATIVO",
-        tipoAula: "RESIDENCIAL",
-        quantidadeAula: 36,
-        duracaoMes: 3,
-      },
-      {
-        id: 3,
-        titulo: "Nutricionista Adicional",
-        subtitulo: "Consultas mensais com nutricionista parceiro.",
-        descricao: "",
-        beneficios: [
-          { valor: "Consulta mensal online" },
-          { valor: "Cardápio personalizado" },
-        ],
-        preco: 79.9,
-        tipoProduto: "ADICIONAL",
-        periodo: "Mensal",
-        status: "ATIVO",
-        tipoAula: "FUNCIONAL",
-        quantidadeAula: 1,
-        duracaoMes: 1,
-      },
-    ],
-  };
-}
 
 export default function PlansScreen() {
   const [activeTab, setActiveTab] = useState<"pacotes" | "adicionais">("pacotes");
@@ -111,10 +53,10 @@ export default function PlansScreen() {
 
   const { data: productsData, isLoading, refetch } = useQuery({
     queryKey: ["productsExhibitions"],
-    queryFn: () => getProductsExhibitionsMock(),
-    select: (response) => ({
-      pacotes: response.data.filter((p) => p.tipoProduto === "PACOTE"),
-      adicionais: response.data.filter((p) => p.tipoProduto === "ADICIONAL"),
+    queryFn: () => getProductsExhibitions(),
+    select: (response: any) => ({
+      pacotes: (response.data || []).filter((p: ProductExhibition) => p.tipoProduto === "PACOTE"),
+      adicionais: (response.data || []).filter((p: ProductExhibition) => p.tipoProduto === "ADICIONAL"),
     }),
   });
 
@@ -137,15 +79,23 @@ export default function PlansScreen() {
 
   // ─── AÇÕES E FLUXOS FUNCIONAIS ─────────────────────────────────────────────
 
-  function handleBuy(id: number) {
+  async function handleBuy(id: number) {
     setOpenModal("loadingPagBank");
-    setTimeout(() => {
+    try {
+      await buyProductExhibition(id);
       setModalInfos({
         title: "Compra Concluída",
         content: "Seu pacote foi adquirido com sucesso!",
       });
       setOpenModal("success");
-    }, 1500);
+      refetch();
+    } catch {
+      setModalInfos({
+        title: "Erro na Compra",
+        content: "Não foi possível concluir a compra do pacote. Tente novamente.",
+      });
+      setOpenModal("error");
+    }
   }
 
   function handleOpenEdit(id: number, isAdicional: boolean = false) {
@@ -158,16 +108,26 @@ export default function PlansScreen() {
     setOpenModal("delete");
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (selectedPackageId !== null) {
-      setProductsExhibitions((prev) => prev.filter((p) => p.id !== selectedPackageId));
-      setProductsExhibitionsAdicional((prev) => prev.filter((p) => p.id !== selectedPackageId));
-      setSelectedPackageId(null);
-      setModalInfos({
-        title: "Exclusão Concluída",
-        content: "O pacote foi excluído com sucesso.",
-      });
-      setOpenModal("success");
+      try {
+        await desactivateProductExhibition(selectedPackageId);
+        setProductsExhibitions((prev) => prev.filter((p) => p.id !== selectedPackageId));
+        setProductsExhibitionsAdicional((prev) => prev.filter((p) => p.id !== selectedPackageId));
+        setSelectedPackageId(null);
+        setModalInfos({
+          title: "Exclusão Concluída",
+          content: "O pacote foi desativado com sucesso.",
+        });
+        setOpenModal("success");
+        refetch();
+      } catch {
+        setModalInfos({
+          title: "Erro ao excluir",
+          content: "Não foi possível desativar o pacote.",
+        });
+        setOpenModal("error");
+      }
     }
   }
 
@@ -300,7 +260,7 @@ export default function PlansScreen() {
         />
       )}
 
-     {/* 4. Modal de Sucesso */}
+      {/* 4. Modal de Sucesso */}
       <SuccessModal
         visible={openModal === "success"}
         title={modalInfos.title}
@@ -319,9 +279,6 @@ export default function PlansScreen() {
 
       {/* 6. Modal de Carregamento / PagBank */}
       {openModal === "loadingPagBank" && <PagBankModal />}
-
-      {/* Barra de Navegação Inferior */}
-      <BottomTabBar activeTab="requests" />
     </SafeAreaView>
   );
 }

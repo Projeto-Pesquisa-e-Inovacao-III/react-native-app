@@ -9,8 +9,8 @@ import {
   View,
 } from 'react-native';
 import { ArrowRight, Check, Clock3, MapPin, Plus, X } from 'lucide-react-native';
-import BottomTabBar from '../components/BottomTabBar';
-import MonthlyCalendar from '../components/MonthlyCalendar';
+import BottomTabBar from '../../../src/components/BottomTabBar';
+import MonthlyCalendar from '../../../src/components/MonthlyCalendar';
 
 type AppointmentStatus = 'PENDENTE' | 'APROVADO' | 'CANCELADO' | 'CONCLUIDO';
 
@@ -132,7 +132,6 @@ export default function ScheduleScreen() {
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
             <View>
-              <Text style={styles.sectionLabel}>Agenda</Text>
               <Text style={styles.sectionTitle}>Meus agendamentos</Text>
             </View>
           </View>
@@ -208,14 +207,14 @@ export default function ScheduleScreen() {
 
                     {item.status === 'APROVADO' && (
                       <TouchableOpacity style={[styles.actionButton, styles.secondaryAction]} activeOpacity={0.9}>
-                        <ArrowRight size={16} color="#1C6AAB" />
+                        <ArrowRight size={16} color="#19587A" />
                         <Text style={[styles.actionText, styles.secondaryText]}>Ver detalhes</Text>
                       </TouchableOpacity>
                     )}
 
                     {item.status === 'CONCLUIDO' && (
                       <TouchableOpacity style={[styles.actionButton, styles.secondaryAction]} activeOpacity={0.9}>
-                        <ArrowRight size={16} color="#1C6AAB" />
+                        <ArrowRight size={16} color="#19587A" />
                         <Text style={[styles.actionText, styles.secondaryText]}>Resumo</Text>
                       </TouchableOpacity>
                     )}
@@ -287,7 +286,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sectionLabel: {
-    color: '#1C6AAB',
+    color: '#19587A',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
@@ -303,7 +302,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1C6AAB',
+    backgroundColor: '#19587A',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -450,7 +449,7 @@ const styles = StyleSheet.create({
     color: '#B42318',
   },
   secondaryText: {
-    color: '#1C6AAB',
+    color: '#19587A',
   },
   modalOverlay: {
     flex: 1,
@@ -511,7 +510,7 @@ const styles = StyleSheet.create({
   modalPrimary: {
     flex: 1,
     borderRadius: 12,
-    backgroundColor: '#1C6AAB',
+    backgroundColor: '#19587A',
     paddingVertical: 12,
     alignItems: 'center',
   },
