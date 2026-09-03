@@ -8,9 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ArrowRight, Check, Clock3, MapPin, Plus, X } from 'lucide-react-native';
+import { ArrowRight, Check, Clock3, MapPin, Plus, X, Bell } from 'lucide-react-native';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import MonthlyCalendar from '../../../src/components/MonthlyCalendar';
+import { useNotifications } from '../../../src/contexts/NotificationContext';
+import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 
 type AppointmentStatus = 'PENDENTE' | 'APROVADO' | 'CANCELADO' | 'CONCLUIDO';
 
@@ -101,8 +103,10 @@ export default function ScheduleScreen() {
   const today = useMemo(() => new Date(), []);
   const [selectedDate, setSelectedDate] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [appointments] = useState<Appointment[]>(SAMPLE_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<Appointment[]>(SAMPLE_APPOINTMENTS);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
+  const { scheduleAppointmentNotification, unreadCount } = useNotifications();
 
   const filteredAppointments = useMemo(
     () =>
@@ -134,6 +138,18 @@ export default function ScheduleScreen() {
             <View>
               <Text style={styles.sectionTitle}>Meus agendamentos</Text>
             </View>
+            <TouchableOpacity
+              style={styles.bellButton}
+              onPress={() => setIsNotificationModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Bell size={20} color="#19587A" />
+              {unreadCount > 0 && (
+                <View style={styles.headerBadge}>
+                  <Text style={styles.headerBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.calendarCard}>
@@ -252,7 +268,26 @@ export default function ScheduleScreen() {
                 style={styles.modalPrimary}
                 onPress={() => {
                   setIsModalVisible(false);
-                  // TODO: ir para tela detalhes
+
+                  const newAppt: Appointment = {
+                    id: Date.now(),
+                    name: 'Fabio Costa',
+                    type: 'Personal',
+                    start: selectedDate.toISOString(),
+                    end: new Date(selectedDate.getTime() + 3600000).toISOString(),
+                    address: 'Academia / Local a definir',
+                    status: 'PENDENTE',
+                  };
+                  setAppointments((prev) => [newAppt, ...prev]);
+
+                  // Dispara notificação simultânea para o Aluno e para o Personal
+                  scheduleAppointmentNotification({
+                    studentName: 'Aluno',
+                    personalName: 'Fabio Costa (Personal)',
+                    classType: 'Personal',
+                    date: formatDateLabel(selectedDate),
+                    time: '18:00 - 19:00',
+                  });
                 }}
                 activeOpacity={0.9}
               >
@@ -262,6 +297,11 @@ export default function ScheduleScreen() {
           </View>
         </View>
       </Modal>
+
+      <NotificationCenterModal
+        visible={isNotificationModalVisible}
+        onClose={() => setIsNotificationModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -284,6 +324,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 18,
+  },
+  bellButton: {
+    position: 'relative',
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#EEF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 999,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  headerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
   },
   sectionLabel: {
     color: '#19587A',

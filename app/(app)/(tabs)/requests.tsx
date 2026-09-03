@@ -20,6 +20,9 @@ import {
   UIManager,
 } from 'react-native';
 import { statusProperties } from '../../../src/constants/cardStatus';
+import { Bell } from 'lucide-react-native';
+import { useNotifications } from '../../../src/contexts/NotificationContext';
+import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -348,6 +351,8 @@ export default function CheckScheduleScreen() {
   const isNarrow = width < 360;
 
   const [appointments, setAppointments] = useState<CheckSchedule[]>([]);
+  const { scheduleApprovalNotification, scheduleCancellationNotification, scheduleRescheduleNotification, unreadCount } = useNotifications();
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -473,15 +478,35 @@ export default function CheckScheduleScreen() {
   }, [loadingMore, hasMore, page, loadData]);
 
   async function handleAcceptConfirm() {
+    const item = appointments.find((r) => r.agendamentoId === selectedId);
     await acceptUserAppointment(selectedId);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Aceito', content: 'O agendamento foi aceito com sucesso.' });
+
+    // Dispara notificação de aprovação simultânea para Aluno e Personal
+    scheduleApprovalNotification({
+      studentName: item?.nome || 'Aluno',
+      personalName: 'Personal Trainer',
+      classType: item?.tipoAula || 'Aula',
+      date: item?.dataInicio ? formatDate(item.dataInicio) : '',
+      time: item?.dataInicio ? formatTime(item.dataInicio) : '',
+    });
   }
 
   async function handleDeclineConfirm() {
+    const item = appointments.find((r) => r.agendamentoId === selectedId);
     await refuseAppointment(selectedId);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Recusado', content: 'O agendamento foi recusado.' });
+
+    // Notifica o Aluno que a aula foi cancelada
+    scheduleCancellationNotification({
+      studentName: item?.nome || 'Aluno',
+      personalName: 'Personal Trainer',
+      classType: item?.tipoAula || 'Aula',
+      date: item?.dataInicio ? formatDate(item.dataInicio) : '',
+      time: item?.dataInicio ? formatTime(item.dataInicio) : '',
+    });
   }
 
   async function handleConcludeSubmit(data: { resumo: string; grupoMuscular: string[] }) {
@@ -503,6 +528,15 @@ export default function CheckScheduleScreen() {
 
   function handleReschedule(id: number, _date: string) {
     Alert.alert('Reagendar', `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`);
+    // Quando implementado, chamar:
+    // const item = appointments.find((r) => r.agendamentoId === id);
+    // scheduleRescheduleNotification({
+    //   studentName: item?.nome || 'Aluno',
+    //   personalName: 'Personal Trainer',
+    //   classType: item?.tipoAula || 'Aula',
+    //   date: novaData,
+    //   time: novoHorario,
+    // });
   }
 
   function handleCardPress(_id: number) {}
@@ -566,8 +600,22 @@ export default function CheckScheduleScreen() {
       <View style={styles.header}>
         <View style={[styles.headerInner, isTablet && styles.headerInnerTablet]}>
           <View style={styles.headerTopBar}>
-            <View style={styles.titleWrapper}>
-              <Text style={styles.title}>Solicitações de Agendamentos</Text>
+            <View style={styles.titleRow}>
+              <View style={styles.titleWrapper}>
+                <Text style={styles.title}>Solicitações de Agendamentos</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.bellBtn}
+                onPress={() => setIsNotificationModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Bell size={18} color="#ffffff" />
+                {unreadCount > 0 && (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -758,6 +806,11 @@ export default function CheckScheduleScreen() {
         content={successInfo?.content}
         onClose={() => setSuccessInfo(null)}
       />
+
+      <NotificationCenterModal
+        visible={isNotificationModalVisible}
+        onClose={() => setIsNotificationModalVisible(false)}
+      />
     </View>
   );
 }
@@ -797,8 +850,41 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 4,
   },
-  titleWrapper: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     width: '100%',
+  },
+  bellBtn: {
+    position: 'relative',
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: '#273c50',
+    borderWidth: 1,
+    borderColor: '#3c5a78',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ef4444',
+    borderRadius: 999,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  titleWrapper: {
+    flex: 1,
   },
   title: {
     fontWeight: '700',
