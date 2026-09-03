@@ -6,17 +6,18 @@ import { useQuery } from '@tanstack/react-query';
 import { findUserData } from '../../../src/constants/user';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import UserAvatar from '../../../src/components/UserAvatar';
 
 export default function MoreRoute() {
   const router = useRouter();
   const { roles, logout } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const { data: userName } = useQuery({
+  const { data: userData } = useQuery({
     queryKey: ['user'],
-    queryFn: () => findUserData(),
-    select: (response) => {
-      return response.data.nome;
+    queryFn: async () => {
+      const response = await findUserData();
+      return response.data;
     },
     retry: false,
   });
@@ -44,13 +45,15 @@ export default function MoreRoute() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 40) }]}>
         <View style={styles.profileInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {userName ? userName.charAt(0).toUpperCase() : 'U'}
-            </Text>
+          <View style={styles.avatarWrapper}>
+            <UserAvatar
+              userName={userData?.nome}
+              foto={userData?.caminhoFoto}
+              size={136}
+            />
           </View>
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{userName || "Usuário"}</Text>
+            <Text style={styles.userName}>{userData?.nome || "Usuário"}</Text>
             <Text style={styles.userRole}>
               {roles?.includes("admin") ? "Administrador" : roles?.includes("personal") ? "Personal Trainer" : "Aluno"}
             </Text>
@@ -146,25 +149,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
-  avatar: {
-    width: 144,
-    height: 144,
+  avatarWrapper: {
     borderRadius: 72,
-    backgroundColor: '#ccc',
     borderWidth: 4,
     borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 15,
     elevation: 5,
-  },
-  avatarText: {
-    fontSize: 48,
-    color: '#ffffff',
-    fontWeight: 'bold',
   },
   userDetails: {
     alignItems: 'center',

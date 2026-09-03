@@ -35,7 +35,7 @@ import type { PersonalDTO } from '../../src/models/personal';
 
 import InputWithIcon from '../../src/components/InputWithIcon';
 import Select from '../../src/components/Select';
-import UserAvatar from '../../src/components/UserAvatar';
+import UserAvatar, { setCachedAvatar, clearCachedAvatar } from '../../src/components/UserAvatar';
 import AsideEditUser from '../../src/components/AsideEditUser';
 import SuccessModal from '../../src/components/modals/SuccessModal';
 import ErrorModal from '../../src/components/modals/ErrorModal';
@@ -166,22 +166,15 @@ export default function EditUserScreen() {
     });
 
     if (userInfo.data.caminhoFoto) {
-      const cleanFoto = userInfo.data.caminhoFoto.replace(/^"|"$/g, '');
-      const fotoFilename = cleanFoto.split('/').pop();
       setUserImage((prev) => {
-        // Mantém a foto local recém-selecionada pelo usuário
-        if (prev && (prev.startsWith('file://') || prev.startsWith('content://'))) {
+        // Se o usuário selecionou uma imagem local recentemente, mantém
+        if (prev && (prev.startsWith('file://') || prev.startsWith('content://') || prev.startsWith('data:'))) {
           return prev;
         }
-        return fotoFilename ? `${BASE_URL}/usuarios/foto/${fotoFilename}` : '';
+        return userInfo.data?.caminhoFoto || '';
       });
     } else {
-      setUserImage((prev) => {
-        if (prev && (prev.startsWith('file://') || prev.startsWith('content://'))) {
-          return prev;
-        }
-        return '';
-      });
+      setUserImage('');
     }
   }, [userInfo.data]);
 
@@ -214,6 +207,8 @@ export default function EditUserScreen() {
       const match = /\.(\w+)$/.exec(filename);
       const type = asset.mimeType || (match ? `image/${match[1]}` : 'image/jpeg');
 
+      console.log('[Upload] URI local:', asset.uri);
+
       const formData = new FormData();
       formData.append('imagem', {
         uri: asset.uri,
@@ -221,12 +216,28 @@ export default function EditUserScreen() {
         type,
       } as any);
 
-      // Exibe imediatamente o preview local
+      // Preview local imediato enquanto faz o upload
       setUserImage(asset.uri);
 
-      await insertUserImage(formData);
+      const uploadResponse = await insertUserImage(formData);
+      console.log('[Upload] Resposta do servidor:', uploadResponse?.status, JSON.stringify(uploadResponse?.data));
+
+      // Refetch para sincronizar os dados do usuário
       await queryClient.refetchQueries({ queryKey: ['userData'] });
       await queryClient.refetchQueries({ queryKey: ['user'] });
+
+      const updatedUserInfo = await findUserData();
+      const updatedCaminhoFoto = updatedUserInfo?.data?.caminhoFoto;
+      console.log('[Upload] caminhoFoto retornado pelo backend:', updatedCaminhoFoto);
+
+      if (updatedCaminhoFoto) {
+        const cleanFoto = updatedCaminhoFoto.replace(/^"|"$/g, '');
+        const fotoFilename = cleanFoto.split('/').pop();
+        if (fotoFilename) {
+          // Salva no cache da sessão com a URI local para exibição imediata sem recarregar
+          setCachedAvatar(fotoFilename, asset.uri);
+        }
+      }
 
       setModalText({
         title: 'Foto atualizada!',
@@ -234,7 +245,7 @@ export default function EditUserScreen() {
       });
       setOpenModal('success');
     } catch (error: any) {
-      console.error('Erro ao enviar imagem:', error);
+      console.error('[Upload] Erro:', error?.response?.status, JSON.stringify(error?.response?.data), error?.message);
       setModalText({
         title: 'Houve um erro',
         content:
@@ -247,6 +258,7 @@ export default function EditUserScreen() {
       setUploadingImage(false);
     }
   }
+
 
   async function handleUpdateUserInfo() {
     setSaving(true);
@@ -339,8 +351,9 @@ export default function EditUserScreen() {
 
   async function handleRemoveImage() {
     try {
-      await removerUserImage();
+      clearCachedAvatar();
       setUserImage('');
+      await removerUserImage();
       await queryClient.refetchQueries({ queryKey: ['userData'] });
       await queryClient.refetchQueries({ queryKey: ['user'] });
       setModalText({
@@ -401,6 +414,7 @@ export default function EditUserScreen() {
               <View style={styles.avatarWrapper}>
                 <UserAvatar
                   customImageUrl={userImage}
+                  foto={userInfo.data?.caminhoFoto || undefined}
                   userName={state.firstName}
                   size={136}
                 />
