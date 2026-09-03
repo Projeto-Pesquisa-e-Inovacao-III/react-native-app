@@ -747,10 +747,7 @@ export default function CheckScheduleScreen() {
         studentName={appointments.find((a) => a.agendamentoId === selectedId)?.nome}
         onClose={closeModal}
         onSuccess={() => {
-          setActiveModal(null);
-          setTimeout(() => {
-            setActiveModal('conclude');
-          }, 150);
+          setActiveModal('conclude');
         }}
       />
 
