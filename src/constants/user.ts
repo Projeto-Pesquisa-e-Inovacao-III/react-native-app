@@ -25,7 +25,11 @@ export function removerUserImage() {
 }
 
 export function insertUserImage(imageData: FormData) {
-  return api.post('/usuarios/me/imagem', imageData);
+  return api.post('/usuarios/me/imagem', imageData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
 }
 
 export function update(userdata: UpdateUserDTO) {
