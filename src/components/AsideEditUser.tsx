@@ -56,7 +56,7 @@ export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
 
   function handleNavigate(route: string) {
     try {
-      router.push(route as any);
+      router.replace(route as any);
     } catch {
       // Caso a rota ainda não esteja criada
     }
