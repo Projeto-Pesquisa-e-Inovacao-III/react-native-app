@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { BASE_URL } from '../services/api';
 
@@ -27,13 +27,25 @@ export default function UserAvatar({
   let resolvedSource = '';
   if (customImageUrl) {
     resolvedSource = customImageUrl;
-  } else if (cleanFoto && (cleanFoto.startsWith('http://') || cleanFoto.startsWith('https://'))) {
+  } else if (
+    cleanFoto &&
+    (cleanFoto.startsWith('http://') ||
+      cleanFoto.startsWith('https://') ||
+      cleanFoto.startsWith('file://') ||
+      cleanFoto.startsWith('content://'))
+  ) {
     resolvedSource = cleanFoto;
   } else if (fotoFilename) {
     resolvedSource = `${BASE_URL}/usuarios/foto/${fotoFilename}`;
   }
 
+  // Reseta o estado de erro sempre que a fonte da imagem mudar
+  useEffect(() => {
+    setImageError(false);
+  }, [resolvedSource, customImageUrl, foto]);
+
   const hasValidImage = !!resolvedSource && !imageError;
+  const initialFontSize = size >= 80 ? Math.round(size * 0.38) : 18;
 
   return (
     <View style={[styles.avatarContainer, { width: size, height: size, borderRadius: size / 2 }]}>
@@ -45,7 +57,9 @@ export default function UserAvatar({
         />
       ) : (
         <View style={[styles.userWithoutAvatar, { width: size, height: size, borderRadius: size / 2 }]}>
-          <Text style={styles.initialText}>{getInitials(userName)}</Text>
+          <Text style={[styles.initialText, { fontSize: initialFontSize }]}>
+            {getInitials(userName)}
+          </Text>
         </View>
       )}
     </View>
@@ -68,7 +82,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   initialText: {
-    fontSize: 18,
     fontWeight: 'bold',
     color: '#093A5D', // --color-indigo
     textAlign: 'center',
