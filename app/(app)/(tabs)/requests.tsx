@@ -618,24 +618,6 @@ export default function CheckScheduleScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={[styles.togglePanelBtn, isPanelOpen && styles.togglePanelBtnActive]}
-              onPress={togglePanel}
-              activeOpacity={0.8}
-            >
-              <SlidersIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
-              <Text style={[styles.togglePanelBtnText, isPanelOpen && styles.togglePanelBtnTextActive]}>
-                {isPanelOpen ? 'Ocultar Filtros e KPIs' : 'Exibir Filtros e KPIs'}
-              </Text>
-              {hasFilters && !isPanelOpen && (
-                <View style={styles.activeFilterBadge}>
-                  <Text style={styles.activeFilterBadgeText}>{activeFiltersCount}</Text>
-                </View>
-              )}
-              <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
-                <ChevronDownIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
-              </Animated.View>
-            </TouchableOpacity>
           </View>
 
           {!isPanelOpen && hasFilters && (
@@ -656,6 +638,27 @@ export default function CheckScheduleScreen() {
                 </TouchableOpacity>
               </ScrollView>
             </View>
+          )}
+
+          {!isPanelOpen && (
+            <TouchableOpacity
+              style={[styles.togglePanelBtn, isPanelOpen && styles.togglePanelBtnActive]}
+              onPress={togglePanel}
+              activeOpacity={0.8}
+            >
+              <SlidersIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
+              <Text style={[styles.togglePanelBtnText, isPanelOpen && styles.togglePanelBtnTextActive]}>
+                Filtros e KPIs
+              </Text>
+              {hasFilters && !isPanelOpen && (
+                <View style={styles.activeFilterBadge}>
+                  <Text style={styles.activeFilterBadgeText}>{activeFiltersCount}</Text>
+                </View>
+              )}
+              <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
+                <ChevronDownIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
+              </Animated.View>
+            </TouchableOpacity>
           )}
 
           <Animated.View
@@ -723,6 +726,23 @@ export default function CheckScheduleScreen() {
                 hasFilters={hasFilters}
                 onClear={clearFilters}
               />
+
+              {isPanelOpen && (
+                <TouchableOpacity
+                  style={[styles.togglePanelBtn, styles.togglePanelBtnActive]}
+                  onPress={togglePanel}
+                  activeOpacity={0.8}
+                >
+                  <SlidersIcon size={16} color="#1a1a1a" />
+                  <Text style={[styles.togglePanelBtnText, styles.togglePanelBtnTextActive]}>
+                    Filtros e KPIs
+                  </Text>
+                  <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
+                    <ChevronDownIcon size={16} color="#1a1a1a" />
+                  </Animated.View>
+                </TouchableOpacity>
+              )}
+
             </View>
           </Animated.View>
         </View>
@@ -907,6 +927,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   togglePanelBtnActive: {
+    marginTop: 12,
     backgroundColor: '#f59e0b',
     borderColor: '#d97706',
   },
