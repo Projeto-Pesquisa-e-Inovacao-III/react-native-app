@@ -123,8 +123,7 @@ export default function QRCodeScannerModal({
       setScanStatus('success');
       setTimeout(() => {
         onSuccess();
-        onClose();
-      }, 700);
+      }, 600);
     } else {
       // Invalid code or different appointment
       setScanStatus('error');
@@ -148,8 +147,7 @@ export default function QRCodeScannerModal({
     setScanStatus('success');
     setTimeout(() => {
       onSuccess();
-      onClose();
-    }, 500);
+    }, 400);
   }
 
   const translateY = scanAnim.interpolate({

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL ?? 'http://localhost:8080/api';
+export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL ?? 'http://192.168.18.6:8080/api';
 
 const exceptions = ['/login', '/register', '/forgot-password', '/logout'];
 
