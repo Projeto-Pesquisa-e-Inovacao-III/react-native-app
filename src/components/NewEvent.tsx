@@ -40,10 +40,10 @@ type NewEventProps = {
   initialDate?: string;
   onClose: () => void;
   onSubmit?: (payload: NewEventPayload) => void;
+  availableHours?: string[];
   personals?: MockPersonal[];
   schedules?: MockSchedule[];
   addresses?: MockAddress[];
-  availableHours?: string[];
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";
@@ -302,7 +302,7 @@ export default function NewEvent({
 
             <View style={styles.addressDivider} />
             <Text style={styles.addressSectionTitle}>Endereço do local</Text>
-            <Text style={styles.label}>Ou informe outro endereço</Text>
+            <Text style={styles.savedAddressText}>Ou informe outro endereço</Text>
 
             <TextInput
               style={styles.input}
