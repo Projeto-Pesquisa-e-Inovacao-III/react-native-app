@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { Bell, Sparkles } from "lucide-react-native";
+import { Bell, Sparkles, QrCode } from "lucide-react-native";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
 import Card from "../../../src/components/Card";
@@ -18,6 +18,7 @@ import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import AiPanelModal from "../../../src/components/modals/AiPanelModal";
+import QRCodeDisplayModal, { type AppointmentForQr } from "../../../src/components/modals/QRCodeDisplayModal";
 import { MOCK_APPOINTMENTS } from "../../../src/mocks/newEventMock";
 import {
   findUserAppointments,
@@ -129,15 +130,19 @@ function AppointmentRow({
   item,
   isAluno,
   onOpenAi,
+  onShowQrCode,
 }: {
   item: AppointmentItem;
   isAluno: boolean;
   onOpenAi?: (item: AppointmentItem) => void;
+  onShowQrCode?: (item: AppointmentItem) => void;
 }) {
   const personName = isAluno ? item.personalNome : item.alunoNome;
   const address = [item.endereco?.bairro, item.endereco?.cidade]
     .filter(Boolean)
     .join(", ");
+  const isPendingConclusion = item.agendamentoStatus === "PENDENTE_PERSONAL_CONCLUIR";
+  const isApproved = item.agendamentoStatus === "APROVADO";
 
   return (
     <View style={styles.appointmentCard}>
@@ -173,6 +178,32 @@ function AppointmentRow({
         >
           <Sparkles size={14} color="#0f567f" />
           <Text style={styles.aiHintBannerText}>Ver dica do Treinador IA</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {isAluno && (isPendingConclusion || isApproved) ? (
+        <TouchableOpacity
+          style={[
+            styles.qrCodeButton,
+            isPendingConclusion && styles.qrCodeButtonHighlight,
+          ]}
+          onPress={() => onShowQrCode?.(item)}
+          activeOpacity={0.85}
+        >
+          <QrCode
+            size={16}
+            color={isPendingConclusion ? "#FFFFFF" : "#0f567f"}
+          />
+          <Text
+            style={[
+              styles.qrCodeButtonText,
+              isPendingConclusion && styles.qrCodeButtonTextHighlight,
+            ]}
+          >
+            {isPendingConclusion
+              ? "Apresentar QR Code ao Personal"
+              : "Ver QR Code da Aula"}
+          </Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -237,6 +268,31 @@ export default function OverviewScreen({
   // Modal de IA (Dica do Treinador IA)
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [selectedAiAppointment, setSelectedAiAppointment] = useState<AppointmentItem | null>(null);
+
+  // Modal de QR Code para validação da aula pelo personal
+  const [selectedQrAppointment, setSelectedQrAppointment] = useState<AppointmentForQr | null>(null);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+
+  function handleOpenQr(item: AppointmentItem) {
+    const addressStr = [
+      item.endereco?.logradouro,
+      item.endereco?.numero,
+      item.endereco?.bairro,
+      item.endereco?.cidade,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    setSelectedQrAppointment({
+      id: item.agendamentoId,
+      name: item.personalNome || "Personal Trainer",
+      type: item.tipoAula,
+      start: item.data,
+      end: item.datafim,
+      address: addressStr || "Local a combinar",
+    });
+    setQrModalVisible(true);
+  }
 
   const isAluno = !!userRoles?.includes("aluno");
   const headerTitle = isAluno ? "Meu painel" : "Painel de agendamentos";
@@ -518,6 +574,7 @@ export default function OverviewScreen({
                   item={item}
                   isAluno={isAluno}
                   onOpenAi={handleOpenAi}
+                  onShowQrCode={handleOpenQr}
                 />
               )}
               scrollEnabled={false}
@@ -571,6 +628,16 @@ export default function OverviewScreen({
         analiseIa={selectedAiAppointment?.analiseIa}
         note={selectedAiAppointment?.descricao}
         studentName={selectedAiAppointment?.alunoNome}
+      />
+
+      {/* Modal de QR Code para validação do treino pelo personal */}
+      <QRCodeDisplayModal
+        visible={qrModalVisible}
+        appointment={selectedQrAppointment}
+        onClose={() => {
+          setQrModalVisible(false);
+          setSelectedQrAppointment(null);
+        }}
       />
     </View>
   );
@@ -798,5 +865,30 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: "#ffffff",
     fontWeight: "700",
+  },
+  qrCodeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 10,
+    backgroundColor: "#EEF4FF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  qrCodeButtonHighlight: {
+    backgroundColor: "#0f567f",
+    borderColor: "#0f567f",
+  },
+  qrCodeButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f567f",
+  },
+  qrCodeButtonTextHighlight: {
+    color: "#FFFFFF",
   },
 });

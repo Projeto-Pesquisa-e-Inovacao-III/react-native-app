@@ -29,7 +29,9 @@
         {
           "cameraPermission": "Permita o acesso à câmera para ler o QR Code da aula.",
           "barcodeScannerEnabled": true
-        },
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",

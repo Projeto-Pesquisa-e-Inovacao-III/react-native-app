@@ -8,16 +8,34 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ArrowRight, Check, Clock3, MapPin, Plus, X, Bell } from 'lucide-react-native';
+import {
+  ArrowRight,
+  Check,
+  Clock3,
+  MapPin,
+  Plus,
+  X,
+  Bell,
+  QrCode,
+  Maximize2,
+} from 'lucide-react-native';
+import QRCode from 'react-native-qrcode-svg';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import MonthlyCalendar from '../../../src/components/MonthlyCalendar';
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
+import QRCodeDisplayModal from '../../../src/components/modals/QRCodeDisplayModal';
 
-type AppointmentStatus = 'PENDENTE' | 'APROVADO' | 'CANCELADO' | 'CONCLUIDO';
+type AppointmentStatus =
+  | 'PENDENTE'
+  | 'APROVADO'
+  | 'CANCELADO'
+  | 'CONCLUIDO'
+  | 'PENDENTE_PERSONAL_CONCLUIR';
 
 type Appointment = {
-  id: number;
+  id: number;          // local key / display id
+  agendamentoId: number; // real API id — used as QR payload
   name: string;
   type: string;
   start: string;
@@ -26,9 +44,27 @@ type Appointment = {
   status: AppointmentStatus;
 };
 
+const now = new Date();
+const pad = (n: number) => n.toString().padStart(2, '0');
+const todayYear = now.getFullYear();
+const todayMonth = pad(now.getMonth() + 1);
+const todayDate = pad(now.getDate());
+const todayIso = `${todayYear}-${todayMonth}-${todayDate}`;
+
 const SAMPLE_APPOINTMENTS: Appointment[] = [
   {
+    id: 101,
+    agendamentoId: 101, // deve coincidir com o agendamentoId real da API
+    name: 'Fabio Costa',
+    type: 'Musculação / Personal',
+    start: `${todayIso}T10:00:00`,
+    end: `${todayIso}T11:00:00`,
+    address: 'Academia CSF - Sala 02',
+    status: 'PENDENTE_PERSONAL_CONCLUIR',
+  },
+  {
     id: 1,
+    agendamentoId: 1,
     name: 'Fabio Costa',
     type: 'Personal',
     start: '2026-08-23T08:00:00',
@@ -38,6 +74,7 @@ const SAMPLE_APPOINTMENTS: Appointment[] = [
   },
   {
     id: 2,
+    agendamentoId: 2,
     name: 'Fernanda Souza',
     type: 'Funcional',
     start: '2026-08-25T18:00:00',
@@ -47,6 +84,7 @@ const SAMPLE_APPOINTMENTS: Appointment[] = [
   },
   {
     id: 3,
+    agendamentoId: 3,
     name: 'Rafael Nunes',
     type: 'Residencial',
     start: '2026-08-28T07:30:00',
@@ -56,6 +94,7 @@ const SAMPLE_APPOINTMENTS: Appointment[] = [
   },
   {
     id: 4,
+    agendamentoId: 4,
     name: 'Rafael Nunes',
     type: 'Residencial',
     start: '2026-08-21T07:30:00',
@@ -90,6 +129,8 @@ function getStatusStyle(status: AppointmentStatus) {
       return { label: 'Aprovado', background: '#EAFBF1', color: '#127B49' };
     case 'PENDENTE':
       return { label: 'Pendente', background: '#FFF6D9', color: '#8A6300' };
+    case 'PENDENTE_PERSONAL_CONCLUIR':
+      return { label: 'Pendente Conclusão', background: '#FFF4ED', color: '#B43403' };
     case 'CANCELADO':
       return { label: 'Cancelado', background: '#FDECEC', color: '#B42318' };
     case 'CONCLUIDO':
@@ -106,6 +147,8 @@ export default function ScheduleScreen() {
   const [appointments, setAppointments] = useState<Appointment[]>(SAMPLE_APPOINTMENTS);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
+  const [selectedQrAppointment, setSelectedQrAppointment] = useState<Appointment | null>(null);
+  const [selectedDetailsAppointment, setSelectedDetailsAppointment] = useState<Appointment | null>(null);
   const { scheduleAppointmentNotification, unreadCount } = useNotifications();
 
   const filteredAppointments = useMemo(
@@ -221,20 +264,64 @@ export default function ScheduleScreen() {
                       </>
                     )}
 
-                    {item.status === 'APROVADO' && (
-                      <TouchableOpacity style={[styles.actionButton, styles.secondaryAction]} activeOpacity={0.9}>
+                    {(item.status === 'APROVADO' || item.status === 'PENDENTE_PERSONAL_CONCLUIR') && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.secondaryAction]}
+                        activeOpacity={0.9}
+                        onPress={() => setSelectedDetailsAppointment(item)}
+                      >
                         <ArrowRight size={16} color="#19587A" />
                         <Text style={[styles.actionText, styles.secondaryText]}>Ver detalhes</Text>
                       </TouchableOpacity>
                     )}
 
                     {item.status === 'CONCLUIDO' && (
-                      <TouchableOpacity style={[styles.actionButton, styles.secondaryAction]} activeOpacity={0.9}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.secondaryAction]}
+                        activeOpacity={0.9}
+                        onPress={() => setSelectedDetailsAppointment(item)}
+                      >
                         <ArrowRight size={16} color="#19587A" />
                         <Text style={[styles.actionText, styles.secondaryText]}>Resumo</Text>
                       </TouchableOpacity>
                     )}
                   </View>
+
+                  {/* QR de Aprovação abaixo de Ver detalhes */}
+                  {(item.status === 'APROVADO' || item.status === 'PENDENTE_PERSONAL_CONCLUIR') && (
+                    <View style={styles.qrCardSection}>
+                      <View style={styles.qrCardHeader}>
+                        <View style={styles.qrIconBadge}>
+                          <QrCode size={16} color="#19587A" />
+                        </View>
+                        <View style={styles.qrHeaderTextCol}>
+                          <Text style={styles.qrCardTitle}>QR Code de Aprovação</Text>
+                          <Text style={styles.qrCardSubtitle}>
+                            Mostre ao personal no final da aula para concluir o treino
+                          </Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.qrCodeBox}
+                        activeOpacity={0.85}
+                        onPress={() => setSelectedQrAppointment(item)}
+                      >
+                        <View style={styles.qrCodeInnerWrapper}>
+                          <QRCode
+                            value={JSON.stringify({ agendamentoId: item.agendamentoId })}
+                            size={140}
+                            color="#0F172A"
+                            backgroundColor="#FFFFFF"
+                          />
+                        </View>
+                        <View style={styles.qrExpandButton}>
+                          <Maximize2 size={13} color="#19587A" />
+                          <Text style={styles.qrExpandButtonText}>Toque para ampliar</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })
@@ -271,6 +358,7 @@ export default function ScheduleScreen() {
 
                   const newAppt: Appointment = {
                     id: Date.now(),
+                    agendamentoId: 0, // 0 = ainda não sincronizado com a API
                     name: 'Fabio Costa',
                     type: 'Personal',
                     start: selectedDate.toISOString(),
@@ -288,6 +376,91 @@ export default function ScheduleScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Detalhes do Agendamento */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={!!selectedDetailsAppointment}
+        onRequestClose={() => setSelectedDetailsAppointment(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.detailsHeader}>
+              <Text style={styles.modalTitle}>Detalhes do Agendamento</Text>
+              <TouchableOpacity
+                onPress={() => setSelectedDetailsAppointment(null)}
+                style={styles.detailsCloseBtn}
+              >
+                <X size={18} color="#667085" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedDetailsAppointment && (
+              <>
+                <View style={styles.detailsBody}>
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Personal:</Text>
+                    <Text style={styles.detailsValue}>{selectedDetailsAppointment.name}</Text>
+                  </View>
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Modalidade:</Text>
+                    <Text style={styles.detailsValue}>{selectedDetailsAppointment.type}</Text>
+                  </View>
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Data:</Text>
+                    <Text style={styles.detailsValue}>
+                      {formatDateLabel(new Date(selectedDetailsAppointment.start))}
+                    </Text>
+                  </View>
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Horário:</Text>
+                    <Text style={styles.detailsValue}>
+                      {formatTimeLabel(new Date(selectedDetailsAppointment.start))} -{' '}
+                      {formatTimeLabel(new Date(selectedDetailsAppointment.end))}
+                    </Text>
+                  </View>
+                  <View style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>Local:</Text>
+                    <Text style={styles.detailsValue}>{selectedDetailsAppointment.address}</Text>
+                  </View>
+                </View>
+
+                {(selectedDetailsAppointment.status === 'APROVADO' ||
+                  selectedDetailsAppointment.status === 'PENDENTE_PERSONAL_CONCLUIR') && (
+                  <TouchableOpacity
+                    style={styles.detailsQrBtn}
+                    onPress={() => {
+                      const appt = selectedDetailsAppointment;
+                      setSelectedDetailsAppointment(null);
+                      setSelectedQrAppointment(appt);
+                    }}
+                    activeOpacity={0.9}
+                  >
+                    <QrCode size={18} color="#FFFFFF" />
+                    <Text style={styles.detailsQrBtnText}>Ver QR Code de Aprovação</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.modalSecondary}
+                  onPress={() => setSelectedDetailsAppointment(null)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.modalSecondaryText}>Fechar</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal com QR Code ampliado para escaneamento */}
+      <QRCodeDisplayModal
+        visible={!!selectedQrAppointment}
+        appointment={selectedQrAppointment}
+        onClose={() => setSelectedQrAppointment(null)}
+      />
 
       <NotificationCenterModal
         visible={isNotificationModalVisible}
@@ -572,6 +745,123 @@ const styles = StyleSheet.create({
   },
   modalPrimaryText: {
     color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  qrCardSection: {
+    marginTop: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  qrCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  qrIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EEF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrHeaderTextCol: {
+    flex: 1,
+  },
+  qrCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  qrCardSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+    lineHeight: 15,
+  },
+  qrCodeBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  qrCodeInnerWrapper: {
+    padding: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+  },
+  qrExpandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#EEF4FF',
+  },
+  qrExpandButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#19587A',
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  detailsCloseBtn: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  detailsBody: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  detailsLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  detailsValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  detailsQrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#19587A',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  detailsQrBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
   },
 });
