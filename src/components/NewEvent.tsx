@@ -47,10 +47,10 @@ type NewEventProps = {
   initialDate?: string;
   onClose: () => void;
   onSubmit?: (payload: NewEventPayload) => void;
+  availableHours?: string[];
   personals?: MockPersonal[];
   schedules?: MockSchedule[];
   addresses?: MockAddress[];
-  availableHours?: string[];
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";

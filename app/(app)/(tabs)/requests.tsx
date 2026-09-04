@@ -35,6 +35,7 @@ import type { CheckSchedule, AbsenceAppointment } from '../../../src/models/sche
 import ConfirmModal from '../../../src/components/modals/ConfirmModal';
 import SuccessModal from '../../../src/components/modals/SuccessModal';
 import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeAppointmentModal';
+import QRCodeScannerModal from '../../../src/components/modals/QRCodeScannerModal';
 import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import {
@@ -375,7 +376,7 @@ export default function CheckScheduleScreen() {
   const flatListRef = useRef<FlatList>(null);
   const fadeScrollTop = useRef(new Animated.Value(0)).current;
 
-  type ModalType = 'accept' | 'decline' | 'conclude' | 'absence' | null;
+  type ModalType = 'accept' | 'decline' | 'conclude' | 'absence' | 'qr_scanner' | null;
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedId, setSelectedId] = useState<number>(0);
   const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
@@ -765,7 +766,7 @@ export default function CheckScheduleScreen() {
               onAccept={(id) => openModal('accept', id)}
               onDecline={(id) => openModal('decline', id)}
               onReschedule={handleReschedule}
-              onConclude={(id) => openModal('conclude', id)}
+              onConclude={(id) => openModal('qr_scanner', id)}
               onAbsence={(id) => openModal('absence', id)}
               onPress={handleCardPress}
             />
@@ -806,6 +807,16 @@ export default function CheckScheduleScreen() {
         isDestructive
         onConfirm={handleDeclineConfirm}
         onClose={closeModal}
+      />
+
+      <QRCodeScannerModal
+        visible={activeModal === 'qr_scanner'}
+        appointmentId={selectedId}
+        studentName={appointments.find((a) => a.agendamentoId === selectedId)?.nome}
+        onClose={closeModal}
+        onSuccess={() => {
+          setActiveModal('conclude');
+        }}
       />
 
       <ConcludeAppointmentModal
