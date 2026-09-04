@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -24,14 +25,24 @@ import BottomTabBar from '../../../src/components/BottomTabBar';
 import MonthlyCalendar from '../../../src/components/MonthlyCalendar';
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
-import QRCodeDisplayModal from '../../../src/components/modals/QRCodeDisplayModal';
+import QRCodeDisplayModal, { AppointmentForQr } from '../../../src/components/modals/QRCodeDisplayModal';
+import { appointmentAtCalendar } from '../../../src/constants/schedule';
 
+// Statuses confirmados no STATUS_CONFIG do AppointmentCard.tsx (web). PENDENTE e
+// CANCELADO ficam mantidos só pelo placeholder otimista local (novo agendamento
+// criado na hora, antes de sincronizar com a API).
 type AppointmentStatus =
-  | 'PENDENTE'
   | 'APROVADO'
-  | 'CANCELADO'
+  | 'PENDENTE'
+  | 'PENDENTE_CLIENTE_APROVACAO'
+  | 'PENDENTE_PERSONAL_APROVACAO'
+  | 'PENDENTE_PERSONAL_CONCLUIR'
   | 'CONCLUIDO'
-  | 'PENDENTE_PERSONAL_CONCLUIR';
+  | 'CANCELADO'
+  | 'CANCELADO_CLIENTE'
+  | 'CANCELADO_PERSONAL'
+  | 'AUSENCIA_CLIENTE'
+  | 'AUSENCIA_PERSONAL';
 
 type Appointment = {
   id: number;          // local key / display id
@@ -44,65 +55,47 @@ type Appointment = {
   status: AppointmentStatus;
 };
 
-const now = new Date();
-const pad = (n: number) => n.toString().padStart(2, '0');
-const todayYear = now.getFullYear();
-const todayMonth = pad(now.getMonth() + 1);
-const todayDate = pad(now.getDate());
-const todayIso = `${todayYear}-${todayMonth}-${todayDate}`;
+// Mapeia Appointment -> AppointmentForQr garantindo que o QR sempre carregue o
+// agendamentoId real da API, e não o id local/display (que pode divergir).
+function toQrAppointment(appt: Appointment): AppointmentForQr {
+  return {
+    id: appt.agendamentoId,
+    name: appt.name,
+    type: appt.type,
+    start: appt.start,
+    end: appt.end,
+    address: appt.address,
+  };
+}
 
-const SAMPLE_APPOINTMENTS: Appointment[] = [
-  {
-    id: 101,
-    agendamentoId: 101, // deve coincidir com o agendamentoId real da API
-    name: 'Fabio Costa',
-    type: 'Musculação / Personal',
-    start: `${todayIso}T10:00:00`,
-    end: `${todayIso}T11:00:00`,
-    address: 'Academia CSF - Sala 02',
-    status: 'PENDENTE_PERSONAL_CONCLUIR',
-  },
-  {
-    id: 1,
-    agendamentoId: 1,
-    name: 'Fabio Costa',
-    type: 'Personal',
-    start: '2026-08-23T08:00:00',
-    end: '2026-08-23T09:00:00',
-    address: 'Rua Alberto Almeida, 23 - Centro',
-    status: 'APROVADO',
-  },
-  {
-    id: 2,
-    agendamentoId: 2,
-    name: 'Fernanda Souza',
-    type: 'Funcional',
-    start: '2026-08-25T18:00:00',
-    end: '2026-08-25T19:00:00',
-    address: 'Academia Prime, Sala 3',
-    status: 'PENDENTE',
-  },
-  {
-    id: 3,
-    agendamentoId: 3,
-    name: 'Rafael Nunes',
-    type: 'Residencial',
-    start: '2026-08-28T07:30:00',
-    end: '2026-08-28T08:15:00',
-    address: 'Avenida Paulista, 1500',
-    status: 'CONCLUIDO',
-  },
-  {
-    id: 4,
-    agendamentoId: 4,
-    name: 'Rafael Nunes',
-    type: 'Residencial',
-    start: '2026-08-21T07:30:00',
-    end: '2026-08-21T08:15:00',
-    address: 'Avenida Paulista, 1500',
-    status: 'CONCLUIDO',
-  },
-];
+// Formato REAL de GET /agendamentos/calendario (appointmentAtCalendar),
+// confirmado via inspector de rede: só devolve agendamentoId, data (início) e
+// status. NÃO tem datafim, nome, tipoAula nem endereco — esse endpoint parece
+// pensado só pra marcar dias com evento no calendário, não pra listar detalhes.
+type ApiAppointment = {
+  agendamentoId: number;
+  data: string;
+  status: string;
+};
+
+// O QR code é gerado a partir de appointment.agendamentoId, então é essencial
+// que esse valor seja sempre o id real vindo da API — nunca um valor local/mock.
+//
+// ATENÇÃO: como appointmentAtCalendar não traz nome/tipo/endereço/hora de fim,
+// esses campos ficam vazios por enquanto (placeholders abaixo). Ver mensagem
+// sobre como preencher isso de verdade.
+function mapApiAppointment(raw: ApiAppointment): Appointment {
+  return {
+    id: raw.agendamentoId,
+    agendamentoId: raw.agendamentoId,
+    name: 'Personal', // não vem da API — precisa de outra fonte
+    type: '', // não vem da API — precisa de outra fonte
+    start: raw.data,
+    end: raw.data, // não há hora de fim nesse endpoint; usando o início como placeholder
+    address: '', // não vem da API — precisa de outra fonte
+    status: raw.status as AppointmentStatus,
+  };
+}
 
 function formatDateLabel(date: Date) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
@@ -128,11 +121,21 @@ function getStatusStyle(status: AppointmentStatus) {
     case 'APROVADO':
       return { label: 'Aprovado', background: '#EAFBF1', color: '#127B49' };
     case 'PENDENTE':
-      return { label: 'Pendente', background: '#FFF6D9', color: '#8A6300' };
+    case 'PENDENTE_CLIENTE_APROVACAO':
+      return { label: 'Pendente de confirmação', background: '#FFF6D9', color: '#8A6300' };
+    case 'PENDENTE_PERSONAL_APROVACAO':
+      return { label: 'Aguardando personal', background: '#FFF6D9', color: '#8A6300' };
     case 'PENDENTE_PERSONAL_CONCLUIR':
       return { label: 'Pendente Conclusão', background: '#FFF4ED', color: '#B43403' };
     case 'CANCELADO':
-      return { label: 'Cancelado', background: '#FDECEC', color: '#B42318' };
+    case 'CANCELADO_CLIENTE':
+      return { label: 'Cancelado por você', background: '#FDECEC', color: '#B42318' };
+    case 'CANCELADO_PERSONAL':
+      return { label: 'Cancelado pelo personal', background: '#FDECEC', color: '#B42318' };
+    case 'AUSENCIA_CLIENTE':
+      return { label: 'Ausência registrada', background: '#FDECEC', color: '#B42318' };
+    case 'AUSENCIA_PERSONAL':
+      return { label: 'Ausência do personal', background: '#FDECEC', color: '#B42318' };
     case 'CONCLUIDO':
       return { label: 'Concluído', background: '#EEF4FF', color: '#1D4ED8' };
     default:
@@ -144,12 +147,46 @@ export default function ScheduleScreen() {
   const today = useMemo(() => new Date(), []);
   const [selectedDate, setSelectedDate] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [appointments, setAppointments] = useState<Appointment[]>(SAMPLE_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
-  const [selectedQrAppointment, setSelectedQrAppointment] = useState<Appointment | null>(null);
+  const [selectedQrAppointment, setSelectedQrAppointment] = useState<AppointmentForQr | null>(null);
   const [selectedDetailsAppointment, setSelectedDetailsAppointment] = useState<Appointment | null>(null);
   const { scheduleAppointmentNotification, unreadCount } = useNotifications();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAppointments() {
+      try {
+        const res = await appointmentAtCalendar();
+        const data = res.data;
+        // Aceita tanto uma lista simples quanto uma Page do Spring
+        // ({ content: [...] }), caso o formato mude no futuro.
+        const list: ApiAppointment[] = Array.isArray(data) ? data : data?.content ?? [];
+        if (__DEV__) {
+          console.log('[schedule] Resposta de /agendamentos/calendario:', JSON.stringify(data));
+        }
+        if (isMounted) {
+          setAppointments(list.map(mapApiAppointment));
+        }
+      } catch (err) {
+        if (__DEV__) {
+          console.warn('[schedule] Falha ao buscar agendamentos do aluno:', err);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingAppointments(false);
+        }
+      }
+    }
+
+    loadAppointments();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredAppointments = useMemo(
     () =>
@@ -214,7 +251,11 @@ export default function ScheduleScreen() {
             <Text style={styles.sectionHeaderText}>{formatDateLabel(selectedDate)}</Text>
           </View>
 
-          {filteredAppointments.length === 0 ? (
+          {isLoadingAppointments ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="small" color="#19587A" />
+            </View>
+          ) : filteredAppointments.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>Nenhum horário neste dia</Text>
               <Text style={styles.emptyDescription}>Use o botão Agendar para adicionar um novo compromisso.</Text>
@@ -251,7 +292,7 @@ export default function ScheduleScreen() {
                   </View>
 
                   <View style={styles.actionRow}>
-                    {item.status === 'PENDENTE' && (
+                    {(item.status === 'PENDENTE' || item.status === 'PENDENTE_CLIENTE_APROVACAO') && (
                       <>
                         <TouchableOpacity style={[styles.actionButton, styles.successAction]} activeOpacity={0.9}>
                           <Check size={16} color="#127B49" />
@@ -305,7 +346,7 @@ export default function ScheduleScreen() {
                       <TouchableOpacity
                         style={styles.qrCodeBox}
                         activeOpacity={0.85}
-                        onPress={() => setSelectedQrAppointment(item)}
+                        onPress={() => setSelectedQrAppointment(toQrAppointment(item))}
                       >
                         <View style={styles.qrCodeInnerWrapper}>
                           <QRCode
@@ -433,7 +474,7 @@ export default function ScheduleScreen() {
                     onPress={() => {
                       const appt = selectedDetailsAppointment;
                       setSelectedDetailsAppointment(null);
-                      setSelectedQrAppointment(appt);
+                      setSelectedQrAppointment(toQrAppointment(appt));
                     }}
                     activeOpacity={0.9}
                   >

@@ -117,19 +117,28 @@ export default function QRCodeScannerModal({
 
     setIsProcessing(true);
     const scannedId = extractAppointmentId(data);
+    // appointmentId às vezes chega como string (ex.: vindo de route params do
+    // Expo Router), mesmo a prop sendo tipada como number. Normalizamos os dois
+    // lados para number antes de comparar, senão "101" === 101 falha sempre.
+    const expectedId = Number(appointmentId);
 
-    if (scannedId === appointmentId) {
+    if (__DEV__) {
+      console.log('[QRCodeScannerModal] scanned:', data, '-> parsed:', scannedId, 'expected:', appointmentId, typeof appointmentId);
+    }
+
+    if (scannedId !== null && !Number.isNaN(expectedId) && scannedId === expectedId) {
       // Success!
       setScanStatus('success');
       setTimeout(() => {
         onSuccess();
-        onClose();
       }, 700);
     } else {
       // Invalid code or different appointment
       setScanStatus('error');
-      if (scannedId !== null) {
-        setErrorMessage(`QR Code de outro agendamento (#${scannedId}). Esperado: #${appointmentId}`);
+      if (Number.isNaN(expectedId)) {
+        setErrorMessage('Agendamento inválido para validação. Feche e tente novamente.');
+      } else if (scannedId !== null) {
+        setErrorMessage(`QR Code de outro agendamento (#${scannedId}). Esperado: #${expectedId}`);
       } else {
         setErrorMessage('QR Code inválido ou não reconhecido.');
       }
@@ -148,7 +157,6 @@ export default function QRCodeScannerModal({
     setScanStatus('success');
     setTimeout(() => {
       onSuccess();
-      onClose();
     }, 500);
   }
 
