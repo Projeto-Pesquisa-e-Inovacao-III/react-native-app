@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import * as Notifications from 'expo-notifications';
 import {
   registerForNotificationsAsync,
+  registerForPushNotificationsAsync,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
@@ -9,6 +10,7 @@ import {
   type AppNotificationItem,
   type NotificationRecipient,
 } from '../services/notificationService';
+import { savePushToken } from '../constants/user';
 
 type NotifParams = {
   studentName?: string;
@@ -20,6 +22,7 @@ type NotifParams = {
 
 type NotificationContextType = {
   notifications: AppNotificationItem[];
+  pushToken: string | null;
   unreadCount: number;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
@@ -38,10 +41,21 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
+  const [pushToken, setPushToken] = useState<string | null>(null);
 
   useEffect(() => {
-    registerForNotificationsAsync();
+    // 1. Registra e obtém o Expo Push Token do aparelho
+    registerForPushNotificationsAsync().then((token) => {
+      if (token) {
+        setPushToken(token);
+        // Tenta enviar o token para o backend (quando o endpoint estiver pronto)
+        savePushToken(token).catch(() => {
+          // Backend ainda não implementou o endpoint, falha silenciosa
+        });
+      }
+    });
 
+    // 2. Escuta notificações recebidas (tanto locais quanto push remotas do backend)
     const subscription = Notifications.addNotificationReceivedListener((notificationEvent) => {
       const { title, body, data } = notificationEvent.request.content;
       const recipient = (data?.recipient as NotificationRecipient) || 'ambos';
@@ -196,6 +210,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     <NotificationContext.Provider
       value={{
         notifications,
+        pushToken,
         unreadCount,
         markAsRead,
         markAllAsRead,

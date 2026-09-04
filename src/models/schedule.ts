@@ -48,13 +48,15 @@ export type ScheduleAfterInserted = {
   };
   personalId: number;
   tipoAulaProdutoContratado: string;
-  analiseIa?: {
-    intro: string;
-    tips: {
-      title: string;
-      text: string;
-    }[];
-  };
+  analiseIa?: AnaliseIa;
+};
+
+export type AnaliseIa = {
+  intro: string;
+  tips: {
+    title: string;
+    text: string;
+  }[];
 };
 
 export type CheckSchedule = {

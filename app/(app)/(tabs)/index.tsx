@@ -1,13 +1,32 @@
-import React, { useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity } from "react-native";
-import { Bell } from "lucide-react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
+import { Bell, Sparkles } from "lucide-react-native";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
 import Card from "../../../src/components/Card";
 import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
+import AiPanelModal from "../../../src/components/modals/AiPanelModal";
 import { MOCK_APPOINTMENTS } from "../../../src/mocks/newEventMock";
+import {
+  findUserAppointments,
+  appointmentAtCalendar,
+} from "../../../src/constants/schedule";
+import { getTotalByClassType } from "../../../src/constants/overview";
+import { actualPlan as getActualPlan } from "../../../src/constants/products";
+import { appoitmentsCount } from "../../../src/constants/personal";
+import type { AnaliseIa } from "../../../src/models/schedule";
 
 type Role = "aluno" | "personal" | "admin";
 
@@ -30,9 +49,14 @@ type AppointmentItem = {
   personalNome: string;
   alunoNome: string;
   tipoAula: string;
+  caminhoFoto?: string;
+  descricao?: string;
+  analiseIa?: AnaliseIa;
   endereco?: {
     bairro?: string;
     cidade?: string;
+    logradouro?: string;
+    numero?: string;
   };
 };
 
@@ -101,66 +125,78 @@ function formatHour(dateISO: string) {
   }).format(date);
 }
 
-function BalanceBar({ label, current }: { label: string; current: number }) {
-  const safeCurrent = Math.max(0, current);
-  const percentage = Math.min(100, (safeCurrent / TOTAL_AULAS) * 100);
-  return (
-    <View style={styles.balanceItem}>
-      <View style={styles.balanceHeader}>
-        <Text style={styles.balanceLabel}>{label}</Text>
-        <Text style={styles.balanceValue}>{safeCurrent + " / " + TOTAL_AULAS}</Text>
-      </View>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: percentage }]} />
-      </View>
-    </View>
-  );
-}
-
-function AppointmentRow({ item, isAluno }: { item: AppointmentItem; isAluno: boolean }) {
+function AppointmentRow({
+  item,
+  isAluno,
+  onOpenAi,
+}: {
+  item: AppointmentItem;
+  isAluno: boolean;
+  onOpenAi?: (item: AppointmentItem) => void;
+}) {
   const personName = isAluno ? item.personalNome : item.alunoNome;
-  const address = [item.endereco?.bairro, item.endereco?.cidade].filter(Boolean).join(", ");
+  const address = [item.endereco?.bairro, item.endereco?.cidade]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <View style={styles.appointmentCard}>
       <View style={styles.rowBetween}>
         <Text style={styles.status}>{getStatusLabel(item.agendamentoStatus)}</Text>
-        <Text style={styles.typeBadge}>{item.tipoAula}</Text>
+        <View style={styles.headerRightActions}>
+          <Text style={styles.typeBadge}>{item.tipoAula}</Text>
+          {item.analiseIa ? (
+            <TouchableOpacity
+              style={styles.sparklesButton}
+              onPress={() => onOpenAi?.(item)}
+              activeOpacity={0.8}
+            >
+              <Sparkles size={16} color="#0f567f" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
       <Text style={styles.appointmentName}>{personName || "Sem nome"}</Text>
       <Text style={styles.appointmentMeta}>{formatDate(item.data)}</Text>
-      <Text style={styles.appointmentMeta}>{formatHour(item.data) + " - " + formatHour(item.datafim)}</Text>
-      <Text style={styles.appointmentMeta}>{address || "Endereco nao informado"}</Text>
+      <Text style={styles.appointmentMeta}>
+        {formatHour(item.data) + " - " + formatHour(item.datafim)}
+      </Text>
+      <Text style={styles.appointmentMeta}>
+        {address || "Endereço não informado"}
+      </Text>
+
+      {item.analiseIa ? (
+        <TouchableOpacity
+          style={styles.aiHintBanner}
+          onPress={() => onOpenAi?.(item)}
+          activeOpacity={0.8}
+        >
+          <Sparkles size={14} color="#0f567f" />
+          <Text style={styles.aiHintBannerText}>Ver dica do Treinador IA</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
 
 export default function OverviewScreen({
   userRoles: propsUserRoles,
-  actualPlan = {
-    nome: 'Plano Gold',
-    dataExpiracao: '2026-12-10',
-  },
-  classBalance = {
-    saldoPresencial: 5,
-    saldoFuncional: 0,
-    saldoResidencial: 0,
-  },
-  appointments = [],
-  calendarEvents = [],
+  actualPlan: propsActualPlan,
+  classBalance: propsClassBalance,
+  appointments: propsAppointments = [],
+  calendarEvents: propsCalendarEvents = [],
   disabledDays = [],
-  pendingAppointments = 0,
-  todayAppointments = 0,
-  loading = false,
+  pendingAppointments: propsPendingAppointments = 0,
+  todayAppointments: propsTodayAppointments = 0,
+  loading: propsLoading = false,
   availableHours = [],
-  onGoSchedule,
-  onGoPending,
   onGoPackages,
   onNewEvent,
 }: Partial<OverviewNativeProps> = {}) {
-  const { roles: authRoles } = useAuth();
-  const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
+  const { roles: authRoles, isAuthenticated } = useAuth();
+  const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ["aluno"];
   const { scheduleAppointmentNotification, unreadCount } = useNotifications();
+
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
   const [modal, setModal] = useState<ModalState>({
     visible: false,
@@ -169,9 +205,39 @@ export default function OverviewScreen({
   });
   const [selectedDate, setSelectedDate] = useState<string>();
   const [newEventVisible, setNewEventVisible] = useState(false);
-  const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() => (
-    appointments.length > 0 ? appointments : MOCK_APPOINTMENTS
-  ));
+
+  // Estados locais com dados dinâmicos da API
+  const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() =>
+    propsAppointments.length > 0 ? propsAppointments : MOCK_APPOINTMENTS
+  );
+  const [localCalendarEvents, setLocalCalendarEvents] = useState<CalendarEvent[]>(
+    propsCalendarEvents
+  );
+  const [localPlan, setLocalPlan] = useState<Plan | null>(
+    propsActualPlan ?? {
+      nome: "Plano Gold",
+      dataExpiracao: "2026-12-10",
+    }
+  );
+  const [localClassBalance, setLocalClassBalance] = useState<ClassBalance>(
+    propsClassBalance ?? {
+      saldoPresencial: 5,
+      saldoFuncional: 0,
+      saldoResidencial: 0,
+    }
+  );
+  const [localTodayAppointments, setLocalTodayAppointments] = useState<number>(
+    propsTodayAppointments
+  );
+  const [localPendingAppointments, setLocalPendingAppointments] = useState<number>(
+    propsPendingAppointments
+  );
+  const [localLoading, setLocalLoading] = useState<boolean>(propsLoading);
+
+  // Modal de IA (Dica do Treinador IA)
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [selectedAiAppointment, setSelectedAiAppointment] = useState<AppointmentItem | null>(null);
+
   const isAluno = !!userRoles?.includes("aluno");
   const headerTitle = isAluno ? "Meu painel" : "Painel de agendamentos";
   const headerSubtitle = isAluno
@@ -180,9 +246,80 @@ export default function OverviewScreen({
 
   const displayedAppointments = localAppointments;
   const displayedCalendarEvents = [
-    ...calendarEvents,
+    ...localCalendarEvents,
     ...displayedAppointments.map((appointment) => ({ data: appointment.data })),
   ];
+
+  // Carrega dados da API do backend
+  const loadOverviewData = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setLocalLoading(true);
+    try {
+      const promises: Promise<any>[] = [
+        findUserAppointments().catch(() => null),
+        appointmentAtCalendar().catch(() => null),
+      ];
+
+      if (isAluno) {
+        promises.push(getTotalByClassType().catch(() => null));
+        promises.push(getActualPlan().catch(() => null));
+      } else {
+        const todayStr = new Date().toISOString().split("T")[0];
+        promises.push(
+          appoitmentsCount({ status: "APROVADO", data: todayStr }).catch(() => null)
+        );
+        promises.push(
+          appoitmentsCount({ status: "PENDENTE_PERSONAL_APROVACAO" }).catch(() => null)
+        );
+      }
+
+      const [apptsRes, calRes, res3, res4] = await Promise.all(promises);
+
+      if (apptsRes?.data && Array.isArray(apptsRes.data)) {
+        setLocalAppointments(apptsRes.data);
+      }
+
+      if (calRes?.data && Array.isArray(calRes.data)) {
+        setLocalCalendarEvents(calRes.data);
+      }
+
+      if (isAluno) {
+        if (res3 && typeof res3 === "object") {
+          setLocalClassBalance({
+            saldoPresencial: res3.saldoPresencial ?? 0,
+            saldoFuncional: res3.saldoFuncional ?? 0,
+            saldoResidencial: res3.saldoResidencial ?? 0,
+          });
+        }
+        if (res4?.data) {
+          setLocalPlan({
+            nome: res4.data.nomeProduto || res4.data.nome || "Plano Ativo",
+            dataExpiracao: res4.data.dataExpiracao || res4.data.dataFim || "",
+          });
+        }
+      } else {
+        if (typeof res3?.data === "number") {
+          setLocalTodayAppointments(res3.data);
+        }
+        if (typeof res4?.data === "number") {
+          setLocalPendingAppointments(res4.data);
+        }
+      }
+    } catch {
+      // Mantém fallback atual se houver erro
+    } finally {
+      setLocalLoading(false);
+    }
+  }, [isAuthenticated, isAluno]);
+
+  useEffect(() => {
+    loadOverviewData();
+  }, [loadOverviewData]);
+
+  function handleOpenAi(item: AppointmentItem) {
+    setSelectedAiAppointment(item);
+    setAiModalVisible(true);
+  }
 
   function openError(title: string, description: string) {
     setModal({ visible: true, title, description });
@@ -196,20 +333,20 @@ export default function OverviewScreen({
     if (dayAppointments.length === 0) {
       if (!isAluno) return;
 
-      if (!actualPlan) {
-        openError("Erro", "Voce precisa ter um plano ativo para agendar uma aula.");
+      if (!localPlan) {
+        openError("Erro", "Você precisa ter um plano ativo para agendar uma aula.");
         return;
       }
 
       const hasBalance =
-        (classBalance?.saldoPresencial ?? 0) > 0 ||
-        (classBalance?.saldoFuncional ?? 0) > 0 ||
-        (classBalance?.saldoResidencial ?? 0) > 0;
+        (localClassBalance?.saldoPresencial ?? 0) > 0 ||
+        (localClassBalance?.saldoFuncional ?? 0) > 0 ||
+        (localClassBalance?.saldoResidencial ?? 0) > 0;
 
       if (!hasBalance) {
         openError(
-          "Aulas indisponiveis",
-          "Voce nao possui aulas disponiveis para agendamento. Adquira um plano ou contate seu personal."
+          "Aulas indisponíveis",
+          "Você não possui aulas disponíveis para agendamento. Adquira um pacote ou plano para prosseguir."
         );
         return;
       }
@@ -247,20 +384,20 @@ export default function OverviewScreen({
       return;
     }
 
-    if (!actualPlan) {
-      openError("Erro", "Voce precisa ter um plano ativo para agendar uma aula.");
+    if (!localPlan) {
+      openError("Erro", "Você precisa ter um plano ativo para agendar uma aula.");
       return;
     }
 
     const hasBalance =
-      (classBalance?.saldoPresencial ?? 0) > 0 ||
-      (classBalance?.saldoFuncional ?? 0) > 0 ||
-      (classBalance?.saldoResidencial ?? 0) > 0;
+      (localClassBalance?.saldoPresencial ?? 0) > 0 ||
+      (localClassBalance?.saldoFuncional ?? 0) > 0 ||
+      (localClassBalance?.saldoResidencial ?? 0) > 0;
 
     if (!hasBalance) {
       openError(
-        "Erro",
-        "Voce nao possui aulas disponiveis para agendamento. Adquira um plano ou contate seu personal."
+        "Saldo insuficiente",
+        "Você não possui saldo de aulas disponível para agendamento. Adquira um plano ou contate seu personal."
       );
       return;
     }
@@ -270,31 +407,8 @@ export default function OverviewScreen({
   }
 
   function handleScheduleSubmit(payload: NewEventPayload) {
-    const newAppointment: AppointmentItem = {
-      agendamentoId: Date.now(),
-      agendamentoStatus: "PENDENTE_PERSONAL_APROVACAO",
-      data: payload.date + "T" + payload.startHour,
-      datafim: payload.date + "T" + payload.endHour,
-      personalNome: payload.personal.nome,
-      alunoNome: "Aluno atual",
-      tipoAula: payload.type,
-      endereco: {
-        bairro: payload.address.street,
-        cidade: payload.address.city,
-      },
-    };
-
-    setLocalAppointments((previous) => [...previous, newAppointment]);
-    setNewEventVisible(false);
-
-    // Dispara a notificação simultânea para o Aluno e para o Personal
-    scheduleAppointmentNotification({
-      studentName: 'Aluno atual',
-      personalName: payload.personal.nome,
-      classType: payload.type,
-      date: formatDate(payload.date),
-      time: `${payload.startHour} - ${payload.endHour}`,
-    });
+    // Recarrega os dados do painel atualizados da API
+    loadOverviewData();
 
     onNewEvent?.(payload);
   }
@@ -315,7 +429,9 @@ export default function OverviewScreen({
             <Bell size={22} color="#FFFFFF" />
             {unreadCount > 0 && (
               <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                <Text style={styles.headerBadgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
               </View>
             )}
           </TouchableOpacity>
@@ -324,26 +440,32 @@ export default function OverviewScreen({
         {isAluno ? (
           <View style={styles.headerStatsRow}>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{classBalance?.saldoPresencial ?? 0}</Text>
+              <Text style={styles.headerStatValue}>
+                {localClassBalance?.saldoPresencial ?? 0}
+              </Text>
               <Text style={styles.headerStatLabel}>Presencial</Text>
             </View>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{classBalance?.saldoFuncional ?? 0}</Text>
+              <Text style={styles.headerStatValue}>
+                {localClassBalance?.saldoFuncional ?? 0}
+              </Text>
               <Text style={styles.headerStatLabel}>Funcional</Text>
             </View>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{classBalance?.saldoResidencial ?? 0}</Text>
+              <Text style={styles.headerStatValue}>
+                {localClassBalance?.saldoResidencial ?? 0}
+              </Text>
               <Text style={styles.headerStatLabel}>Residencial</Text>
             </View>
           </View>
         ) : (
           <View style={styles.headerStatsRow}>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{todayAppointments}</Text>
+              <Text style={styles.headerStatValue}>{localTodayAppointments}</Text>
               <Text style={styles.headerStatLabel}>Hoje</Text>
             </View>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{pendingAppointments}</Text>
+              <Text style={styles.headerStatValue}>{localPendingAppointments}</Text>
               <Text style={styles.headerStatLabel}>Pendentes</Text>
             </View>
           </View>
@@ -351,20 +473,20 @@ export default function OverviewScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-
         {isAluno ? (
-          <>
-            <Card
-              title="Status do plano"
-              subtitle={
-                actualPlan
-                  ? "Plano: " + actualPlan.nome + "\nExpira em: " + formatDate(actualPlan.dataExpiracao)
-                  : "Voce nao possui plano ativo"
-              }
-              cta={actualPlan ? undefined : "Ver planos"}
-              onPress={onGoPackages}
-            />
-          </>
+          <Card
+            title="Status do plano"
+            subtitle={
+              localPlan
+                ? "Plano: " +
+                  localPlan.nome +
+                  "\nExpira em: " +
+                  formatDate(localPlan.dataExpiracao)
+                : "Você não possui plano ativo"
+            }
+            cta={localPlan ? undefined : "Ver planos"}
+            onPress={onGoPackages}
+          />
         ) : null}
 
         <Calendar
@@ -378,20 +500,26 @@ export default function OverviewScreen({
             <Text style={styles.cardTitle}>Agendamentos</Text>
             {isAluno ? (
               <Pressable style={styles.primaryButton} onPress={handleNewEvent}>
-                <Text style={styles.primaryButtonText}>Novo agendamento</Text>
+                <Text style={styles.primaryButtonText}>+ Novo agendamento</Text>
               </Pressable>
             ) : null}
           </View>
 
-          {loading ? (
-            <Text style={styles.loadingText}>Carregando...</Text>
+          {localLoading ? (
+            <ActivityIndicator size="small" color="#0f567f" style={{ marginVertical: 14 }} />
           ) : displayedAppointments.length === 0 ? (
             <Text style={styles.emptyText}>Nenhum agendamento encontrado.</Text>
           ) : (
             <FlatList
               data={displayedAppointments}
               keyExtractor={(item: AppointmentItem) => String(item.agendamentoId)}
-              renderItem={({ item }: { item: AppointmentItem }) => <AppointmentRow item={item} isAluno={isAluno} />}
+              renderItem={({ item }: { item: AppointmentItem }) => (
+                <AppointmentRow
+                  item={item}
+                  isAluno={isAluno}
+                  onOpenAi={handleOpenAi}
+                />
+              )}
               scrollEnabled={false}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
             />
@@ -399,7 +527,13 @@ export default function OverviewScreen({
         </View>
       </ScrollView>
 
-      <Modal transparent animationType="fade" visible={modal.visible} onRequestClose={() => setModal((prev) => ({ ...prev, visible: false }))}>
+      {/* Modal de detalhes simples de agendamento */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={modal.visible}
+        onRequestClose={() => setModal((prev) => ({ ...prev, visible: false }))}
+      >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{modal.title}</Text>
@@ -411,6 +545,7 @@ export default function OverviewScreen({
         </View>
       </Modal>
 
+      {/* Modal de Agendamento com API integrada */}
       <NewEvent
         key={`${newEventVisible}-${selectedDate ?? "new"}`}
         visible={newEventVisible}
@@ -420,9 +555,22 @@ export default function OverviewScreen({
         onSubmit={handleScheduleSubmit}
       />
 
+      {/* Modal da Central de Notificações */}
       <NotificationCenterModal
         visible={notificationModalVisible}
         onClose={() => setNotificationModalVisible(false)}
+      />
+
+      {/* Modal de Dica do Treinador IA */}
+      <AiPanelModal
+        visible={aiModalVisible}
+        onClose={() => {
+          setAiModalVisible(false);
+          setSelectedAiAppointment(null);
+        }}
+        analiseIa={selectedAiAppointment?.analiseIa}
+        note={selectedAiAppointment?.descricao}
+        studentName={selectedAiAppointment?.alunoNome}
       />
     </View>
   );
@@ -510,37 +658,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  balanceItem: {
-    marginBottom: 10,
-  },
-  balanceHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  balanceLabel: {
-    color: "#2a4f66",
-    fontWeight: "600",
-  },
-  balanceValue: {
-    color: "#1b3d53",
-    fontWeight: "700",
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: "#dce9f2",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#0f567f",
-  },
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
+    width: "100%",
+  },
+  headerRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sparklesButton: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: "#e0f2fe",
   },
   primaryButton: {
     backgroundColor: "#0f567f",
@@ -559,6 +692,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
+    width: "100%",
   },
   status: {
     fontSize: 12,
@@ -586,15 +720,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 2,
   },
+  aiHintBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#eff8ff",
+    borderWidth: 1,
+    borderColor: "#bee3f8",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  aiHintBannerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f567f",
+  },
   separator: {
     height: 10,
   },
-  loadingText: {
-    color: "#4d6b80",
-    fontStyle: "italic",
-  },
   emptyText: {
     color: "#4d6b80",
+    textAlign: "center",
+    paddingVertical: 14,
   },
   card: {
     display: "flex",
@@ -610,10 +759,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardTitle: {
-      fontSize: 17,
-      fontWeight: "700",
-      color: "#173a52",
-      marginBottom: 8,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#173a52",
   },
   modalBackdrop: {
     flex: 1,

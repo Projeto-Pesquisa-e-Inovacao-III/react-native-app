@@ -279,15 +279,6 @@ export default function ScheduleScreen() {
                     status: 'PENDENTE',
                   };
                   setAppointments((prev) => [newAppt, ...prev]);
-
-                  // Dispara notificação simultânea para o Aluno e para o Personal
-                  scheduleAppointmentNotification({
-                    studentName: 'Aluno',
-                    personalName: 'Fabio Costa (Personal)',
-                    classType: 'Personal',
-                    date: formatDateLabel(selectedDate),
-                    time: '18:00 - 19:00',
-                  });
                 }}
                 activeOpacity={0.9}
               >
