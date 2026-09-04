@@ -92,3 +92,8 @@ export function forgotPassword(number: string, newPassword: string, token: strin
     token: token,
   });
 }
+
+export function savePushToken(pushToken: string) {
+  return api.post('/usuarios/me/push-token', { pushToken });
+}
+

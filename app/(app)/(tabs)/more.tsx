@@ -1,17 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Banknote, Boxes, Clock, History as HistoryIcon, IdCard, LogOut, User, ChevronRight, Calendar } from 'lucide-react-native';
+import { Banknote, Boxes, Clock, History as HistoryIcon, IdCard, LogOut, User, ChevronRight, Calendar, Bell } from 'lucide-react-native';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { findUserData } from '../../../src/constants/user';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import UserAvatar from '../../../src/components/UserAvatar';
 
 export default function MoreRoute() {
   const router = useRouter();
   const { roles, logout } = useAuth();
   const insets = useSafeAreaInsets();
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = React.useState(false);
 
   const { data: userData } = useQuery({
     queryKey: ['user'],
@@ -69,6 +71,12 @@ export default function MoreRoute() {
               icon={<IdCard size={22} color="#192633" />} 
               title='Suas informações' 
               onClick={() => router.push("/edit-user")} 
+              isLast={false}
+            />
+            <OptionItem 
+              icon={<Bell size={22} color="#192633" />} 
+              title='Notificações' 
+              onClick={() => setIsNotificationModalOpen(true)} 
               isLast={true}
             />
           </View>
@@ -122,6 +130,11 @@ export default function MoreRoute() {
           </View>
         </View>
       </View>
+
+      <NotificationCenterModal
+        visible={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
+      />
     </ScrollView>
   );
 }
