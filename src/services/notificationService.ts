@@ -35,12 +35,14 @@ export type AppNotificationItem = {
   data?: AppNotificationData;
 };
 
+import Constants from 'expo-constants';
+
 /**
- * Inicializa permissões e canais de notificação no Android e iOS.
+ * Inicializa permissões, canais de notificação e obtém o Expo Push Token do dispositivo.
  */
-export async function registerForNotificationsAsync(): Promise<boolean> {
+export async function registerForPushNotificationsAsync(): Promise<string | null> {
   if (Platform.OS === 'web') {
-    return true;
+    return null;
   }
 
   try {
@@ -62,11 +64,31 @@ export async function registerForNotificationsAsync(): Promise<boolean> {
       finalStatus = status;
     }
 
-    return finalStatus === 'granted';
+    if (finalStatus !== 'granted') {
+      return null;
+    }
+
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ??
+      Constants?.easConfig?.projectId;
+
+    const pushTokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+
+    return pushTokenData.data;
   } catch (error) {
-    console.warn('Erro ao registrar permissões de notificação:', error);
-    return false;
+    console.warn('Não foi possível obter Expo Push Token:', error);
+    return null;
   }
+}
+
+/**
+ * Inicializa permissões e canais de notificação no Android e iOS.
+ */
+export async function registerForNotificationsAsync(): Promise<boolean> {
+  const token = await registerForPushNotificationsAsync();
+  return !!token;
 }
 
 /**

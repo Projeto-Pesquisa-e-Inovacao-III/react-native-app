@@ -8,8 +8,9 @@ import {
   ScrollView,
   SafeAreaView,
 } from 'react-native';
-import { Bell, CheckCheck, Trash2, X, Send, User, Award, ShieldAlert } from 'lucide-react-native';
+import { Bell, CheckCheck, Trash2, X, Send, User, Award, ShieldAlert, Key } from 'lucide-react-native';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { useAuth } from '../../contexts/AuthContext';
 import type { NotificationRecipient } from '../../services/notificationService';
 
 type Props = {
@@ -20,14 +21,22 @@ type Props = {
 export default function NotificationCenterModal({ visible, onClose }: Props) {
   const {
     notifications,
+    pushToken,
     unreadCount,
     markAsRead,
     markAllAsRead,
     clearAll,
     scheduleAppointmentNotification,
   } = useNotifications();
+  const { roles } = useAuth();
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'aluno' | 'personal'>('all');
+  const defaultFilter = roles?.includes('personal')
+    ? 'personal'
+    : roles?.includes('aluno')
+    ? 'aluno'
+    : 'all';
+
+  const [activeFilter, setActiveFilter] = useState<'all' | 'aluno' | 'personal'>(defaultFilter);
 
   const filteredNotifications = notifications.filter((item) => {
     if (activeFilter === 'all') return true;
@@ -138,6 +147,16 @@ export default function NotificationCenterModal({ visible, onClose }: Props) {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Badge do Push Token do dispositivo */}
+          {pushToken ? (
+            <View style={styles.pushTokenContainer}>
+              <Key size={12} color="#0f567f" />
+              <Text style={styles.pushTokenText} numberOfLines={1} selectable>
+                Push Token: {pushToken}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Botão de teste e ações em lote */}
           <View style={styles.actionToolbar}>
@@ -399,5 +418,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#475467',
     lineHeight: 18,
+  },
+  pushTokenContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+  },
+  pushTokenText: {
+    fontSize: 11,
+    color: '#0369A1',
+    fontWeight: '600',
+    flex: 1,
   },
 });
