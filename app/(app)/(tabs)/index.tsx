@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View} from "react-native";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import Card from "../../../src/components/Card";
+import OverviewCardPackageStatus from "../../../src/components/OverviewCardPackageStatus";
 import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
 import { MOCK_APPOINTMENTS } from "../../../src/mocks/newEventMock";
@@ -322,18 +322,10 @@ export default function OverviewScreen({
       <ScrollView contentContainerStyle={styles.content}>
 
         {isAluno ? (
-          <>
-            <Card
-              title="Status do plano"
-              subtitle={
-                actualPlan
-                  ? "Plano: " + actualPlan.nome + "\nExpira em: " + formatDate(actualPlan.dataExpiracao)
-                  : "Voce nao possui plano ativo"
-              }
-              cta={actualPlan ? undefined : "Ver planos"}
-              onPress={onGoPackages}
-            />
-          </>
+          <OverviewCardPackageStatus
+            actualPlan={actualPlan}
+            onPackages={onGoPackages}
+          />
         ) : null}
 
         <Calendar
