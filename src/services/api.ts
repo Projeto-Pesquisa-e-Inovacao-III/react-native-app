@@ -1,4 +1,5 @@
 import axios from 'axios';
+import Constants from 'expo-constants';
 
 export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL ?? 'http://192.168.18.6:8080/api';
 
