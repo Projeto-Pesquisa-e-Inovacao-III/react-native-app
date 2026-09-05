@@ -1,7 +1,19 @@
-import React, { useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View} from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Bell, QrCode, Sparkles } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
+import { useNotifications } from "../../../src/contexts/NotificationContext";
 import OverviewCardPackageStatus from "../../../src/components/OverviewCardPackageStatus";
 import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
@@ -202,13 +214,6 @@ function AppointmentRow({
 export default function OverviewScreen({
   userRoles: propsUserRoles,
   actualPlan: propsActualPlan,
-  classBalance = {
-    saldoPresencial: 5,
-    saldoFuncional: 0,
-    saldoResidencial: 0,
-  },
-  appointments = [],
-  calendarEvents = [],
   classBalance: propsClassBalance,
   appointments: propsAppointments = [],
   calendarEvents: propsCalendarEvents = [],
@@ -220,8 +225,11 @@ export default function OverviewScreen({
   onGoPackages,
   onNewEvent,
 }: Partial<OverviewNativeProps> = {}) {
-  const { roles: authRoles } = useAuth();
+  const { roles: authRoles, isAuthenticated } = useAuth();
   const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
+  const { scheduleAppointmentNotification, unreadCount } = useNotifications();
+
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
   const isAluno = !!userRoles?.includes("aluno");
   const { data: actualPlanResponse } = useQuery({
     queryKey: ['actualPlan'],
@@ -242,8 +250,37 @@ export default function OverviewScreen({
   const [selectedDate, setSelectedDate] = useState<string>();
   const [newEventVisible, setNewEventVisible] = useState(false);
   const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() => (
-    appointments.length > 0 ? appointments : MOCK_APPOINTMENTS
+    propsAppointments.length > 0 ? propsAppointments : MOCK_APPOINTMENTS
   ));
+  const [localCalendarEvents, setLocalCalendarEvents] = useState<CalendarEvent[]>(propsCalendarEvents);
+  const [localPlan, setLocalPlan] = useState<Plan | null>(
+    propsActualPlan ?? { nome: "Plano Gold", dataExpiracao: "2026-12-10" }
+  );
+  const [localClassBalance, setLocalClassBalance] = useState<ClassBalance>(
+    propsClassBalance ?? { saldoPresencial: 5, saldoFuncional: 0, saldoResidencial: 0 }
+  );
+  const [localTodayAppointments, setLocalTodayAppointments] = useState(propsTodayAppointments);
+  const [localPendingAppointments, setLocalPendingAppointments] = useState(propsPendingAppointments);
+  const [localLoading, setLocalLoading] = useState(propsLoading);
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [selectedAiAppointment, setSelectedAiAppointment] = useState<AppointmentItem | null>(null);
+  const [selectedQrAppointment, setSelectedQrAppointment] = useState<AppointmentForQr | null>(null);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+
+  function handleOpenQr(item: AppointmentItem) {
+    const address = [item.endereco?.logradouro, item.endereco?.numero, item.endereco?.bairro, item.endereco?.cidade]
+      .filter(Boolean)
+      .join(", ");
+    setSelectedQrAppointment({
+      id: item.agendamentoId,
+      name: item.personalNome || "Personal Trainer",
+      type: item.tipoAula,
+      start: item.data,
+      end: item.datafim,
+      address: address || "Local a combinar",
+    });
+    setQrModalVisible(true);
+  }
   const headerTitle = isAluno ? "Meu painel" : "Painel de agendamentos";
   const headerSubtitle = isAluno
     ? "Acompanhe seu plano e saldo disponível"
