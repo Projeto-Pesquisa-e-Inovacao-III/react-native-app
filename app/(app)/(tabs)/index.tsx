@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View} from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import OverviewCardPackageStatus from "../../../src/components/OverviewCardPackageStatus";
 import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
 import { MOCK_APPOINTMENTS } from "../../../src/mocks/newEventMock";
+import { actualPlan as getActualPlan } from "../../../src/constants/products";
 
 type Role = "aluno" | "personal" | "admin";
 
@@ -134,10 +136,7 @@ function AppointmentRow({ item, isAluno }: { item: AppointmentItem; isAluno: boo
 
 export default function OverviewScreen({
   userRoles: propsUserRoles,
-  actualPlan = {
-    nome: 'Plano Gold',
-    dataExpiracao: '2026-12-10',
-  },
+  actualPlan: propsActualPlan,
   classBalance = {
     saldoPresencial: 5,
     saldoFuncional: 0,
@@ -157,6 +156,18 @@ export default function OverviewScreen({
 }: Partial<OverviewNativeProps> = {}) {
   const { roles: authRoles } = useAuth();
   const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
+  const isAluno = !!userRoles?.includes("aluno");
+  const { data: actualPlanResponse } = useQuery({
+    queryKey: ['actualPlan'],
+    queryFn: getActualPlan,
+    enabled: isAluno && !propsActualPlan,
+  });
+  const actualPlan = propsActualPlan ?? (actualPlanResponse?.data
+    ? {
+        nome: actualPlanResponse.data.nomeProduto || actualPlanResponse.data.nome || 'Plano ativo',
+        dataExpiracao: actualPlanResponse.data.dataExpiracao || actualPlanResponse.data.dataFim || '',
+      }
+    : null);
   const [modal, setModal] = useState<ModalState>({
     visible: false,
     title: "",
@@ -167,7 +178,6 @@ export default function OverviewScreen({
   const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() => (
     appointments.length > 0 ? appointments : MOCK_APPOINTMENTS
   ));
-  const isAluno = !!userRoles?.includes("aluno");
   const headerTitle = isAluno ? "Meu painel" : "Painel de agendamentos";
   const headerSubtitle = isAluno
     ? "Acompanhe seu plano e saldo disponível"
