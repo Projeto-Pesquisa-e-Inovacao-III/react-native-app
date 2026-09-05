@@ -3,6 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// ------------------------------------------------------------------
+// Tipos de tab disponíveis para o personal (versão portada da web)
+// ------------------------------------------------------------------
 export type TabName = 'home' | 'schedule' | 'requests' | 'plans' | 'users' | 'more';
 
 type Props = {
