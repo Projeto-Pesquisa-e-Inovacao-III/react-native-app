@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -30,10 +30,8 @@ import {
 import { useAuth } from '../../src/contexts/AuthContext';
 import {
   createAnamnesis,
-  updateAnamnesis,
-  getAnamnesis,
 } from '../../src/constants/anamnesis';
-import type { AnamnesisData, CondicaoDto } from '../../src/models/anamnesis';
+import type { AnamnesisData } from '../../src/models/anamnesis';
 import {
   parseNumericValue,
   validateHeightWeightValues,
@@ -92,7 +90,6 @@ export default function AnamnesisScreen() {
 
   const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
-  const [isExisting, setIsExisting] = useState(false);
 
   // Formulário
   const [height, setHeight] = useState('');
@@ -114,56 +111,6 @@ export default function AnamnesisScreen() {
   const [stepTwoError, setStepTwoError] = useState('');
   const [openModal, setOpenModal] = useState<'success' | 'error' | null>(null);
   const [modalText, setModalText] = useState({ title: '', content: '' });
-
-  // Verifica se o aluno já possui anamnese preenchida (edição)
-  const existingQuery = useQuery({
-    queryKey: ['anamnesisData'],
-    queryFn: async () => {
-      try {
-        const res = await getAnamnesis();
-        return res.data;
-      } catch {
-        return null;
-      }
-    },
-    retry: false,
-  });
-
-  useEffect(() => {
-    if (!existingQuery.data) return;
-    const d = existingQuery.data;
-    setIsExisting(true);
-
-    if (d.altura) setHeight(String(d.altura));
-    if (d.peso) setWeight(String(d.peso));
-
-    const isPredefinedObjective = OBJECTIVE_OPTIONS.some((opt) => opt.value === d.objectivoPrincipal);
-    if (isPredefinedObjective) {
-      setObjectiveValue(d.objectivoPrincipal);
-    } else if (d.objectivoPrincipal) {
-      setObjectiveValue('OUTRO');
-      setObjectiveObservation(d.objectivoPrincipal);
-    }
-
-    if (d.nivelDeAtividade) setActivityLevel(d.nivelDeAtividade);
-    if (d.observacaoSaude) setHealthObservations(d.observacaoSaude);
-    if (d.rotina) setDailyRoutine(d.rotina);
-
-    if (d.condicoes && Array.isArray(d.condicoes)) {
-      const standards = d.condicoes
-        .filter((c: CondicaoDto) => c.tipo === 'PADRAO')
-        .map((c: CondicaoDto) => c.situacao);
-      const others = d.condicoes
-        .filter((c: CondicaoDto) => c.tipo === 'OUTRO')
-        .map((c: CondicaoDto) => c.situacao);
-
-      setSelectedConditions(standards);
-      if (others.length > 0) {
-        setIsOtherConditionChecked(true);
-        setOtherConditions(others);
-      }
-    }
-  }, [existingQuery.data]);
 
   function handleConditionToggle(item: string) {
     if (item === 'Outro') {
@@ -264,11 +211,7 @@ export default function AnamnesisScreen() {
     };
 
     try {
-      if (isExisting) {
-        await updateAnamnesis(payload);
-      } else {
-        await createAnamnesis(payload);
-      }
+      await createAnamnesis(payload);
 
       await refreshAuth();
       await queryClient.refetchQueries({ queryKey: ['userData'] });
@@ -704,7 +647,7 @@ export default function AnamnesisScreen() {
                 ) : (
                   <>
                     <Text style={styles.primaryBtnText}>
-                      {isExisting ? 'Atualizar Anamnese' : 'Concluir Anamnese'}
+                      Concluir Anamnese
                     </Text>
                     <Check size={18} color="#FFFFFF" />
                   </>

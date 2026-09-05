@@ -62,7 +62,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="requests" options={{ title: 'Solicitações' }} />
       <Tabs.Screen name="plans" options={{ title: 'Planos' }} />
       <Tabs.Screen name="users" options={{ title: 'Usuários' }} />
-      <Tabs.Screen name="edit-user" options={{ title: 'Editar Perfil', href: null }} />
       <Tabs.Screen name="more" options={{ title: 'Mais opções' }} />
     </Tabs>
   );

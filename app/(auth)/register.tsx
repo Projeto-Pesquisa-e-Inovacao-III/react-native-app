@@ -211,13 +211,6 @@ export default function RegisterRoute() {
         >
           {/* Header Superior com Botão de Voltar */}
           <View style={styles.topBar}>
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-            >
-              <ArrowLeft size={22} color="#FFFFFF" />
-            </TouchableOpacity>
             <View style={styles.logoContainer}>
               <LogoCSF width={150} height={50} />
             </View>
@@ -520,7 +513,7 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingVertical: 14,
   },
   backBtn: {

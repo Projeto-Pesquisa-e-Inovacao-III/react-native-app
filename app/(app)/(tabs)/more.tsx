@@ -68,7 +68,7 @@ export default function MoreRoute() {
             <OptionItem 
               icon={<IdCard size={22} color="#192633" />} 
               title='Suas informações' 
-              onClick={() => router.push("/(app)/(tabs)/edit-user")} 
+              onClick={() => router.push("/(app)/(edit-user)/edit-user")} 
               isLast={true}
             />
           </View>

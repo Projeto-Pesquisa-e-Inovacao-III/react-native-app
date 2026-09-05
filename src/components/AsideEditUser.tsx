@@ -24,7 +24,7 @@ export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
       id: 'edituser',
       title: 'Informações Pessoais',
       icon: User,
-      route: '/edit-user',
+      route: '/(app)/(edit-user)/edit-user',
     },
     ...(isAluno
       ? [
@@ -32,7 +32,7 @@ export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
             id: 'anamnesis',
             title: 'Anamnese / Saúde',
             icon: HeartPulse,
-            route: '/anamnesis',
+            route: '/(app)/(edit-user)/edit-anamnesis',
           },
         ]
       : []),
@@ -40,7 +40,7 @@ export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
       id: 'security',
       title: 'Segurança',
       icon: Shield,
-      route: '/security',
+      route: '/(app)/(edit-user)/security',
     },
     ...(isAluno
       ? [
