@@ -23,6 +23,7 @@ import QRCodeDisplayModal, { type AppointmentForQr } from "../../../src/componen
 import {
   findUserAppointments,
   appointmentAtCalendar,
+  findAppointmentById,
   disabledPersonalDays,
   getPersonalList,
 } from "../../../src/constants/schedule";
@@ -65,6 +66,7 @@ type AppointmentItem = {
 };
 
 type CalendarEvent = {
+  agendamentoId?: number;
   data: string;
 };
 
@@ -152,7 +154,52 @@ function getApiList<T>(data: unknown): T[] {
     }
   }
 
+  if (data && typeof data === "object" && "data" in data) {
+    return getApiList((data as { data?: unknown }).data);
+  }
+
   return [];
+}
+
+function normalizeAppointment(data: unknown): AppointmentItem | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const item = data as Record<string, unknown>;
+  const personal =
+    item.personal && typeof item.personal === "object"
+      ? (item.personal as { nome?: string })
+      : undefined;
+  const aluno =
+    item.aluno && typeof item.aluno === "object"
+      ? (item.aluno as { nome?: string })
+      : undefined;
+  const id = getNumericId(item.agendamentoId ?? item.id);
+  const startDate = item.data ?? item.dataInicio;
+  if (id === undefined || typeof startDate !== "string") {
+    return null;
+  }
+
+  return {
+    agendamentoId: id,
+    agendamentoStatus: String(item.agendamentoStatus ?? item.status ?? ""),
+    data: startDate,
+    datafim: String(item.datafim ?? item.dataFim ?? item.dataFinal ?? item.data),
+    personalNome: String(item.personalNome ?? personal?.nome ?? ""),
+    alunoNome: String(item.alunoNome ?? aluno?.nome ?? ""),
+    tipoAula: String(item.tipoAula ?? item.tipo ?? ""),
+    caminhoFoto: typeof item.caminhoFoto === "string" ? item.caminhoFoto : undefined,
+    descricao: typeof item.descricao === "string" ? item.descricao : undefined,
+    analiseIa: item.analiseIa as AnaliseIa | undefined,
+    endereco: item.endereco as AppointmentItem["endereco"] | undefined,
+  };
+}
+
+function normalizeAppointments(data: unknown) {
+  return getApiList<unknown>(data)
+    .map(normalizeAppointment)
+    .filter((item): item is AppointmentItem => item !== null);
 }
 
 function getNumericId(value: unknown) {
@@ -329,8 +376,7 @@ export default function OverviewScreen({
   const appointmentsQuery = useQuery({
     queryKey: ["overview", "appointments"],
     queryFn: () => findUserAppointments(),
-    select: (response: ApiResponse<unknown>) =>
-      getApiList<AppointmentItem>(response.data),
+    select: (response: ApiResponse<unknown>) => normalizeAppointments(response.data),
     enabled: isAuthenticated,
     retry: false,
   });
@@ -338,9 +384,31 @@ export default function OverviewScreen({
   const calendarQuery = useQuery({
     queryKey: ["overview", "calendar"],
     queryFn: () => appointmentAtCalendar(),
-    select: (response: ApiResponse<unknown>) =>
-      getApiList<CalendarEvent>(response.data),
+    select: (response: ApiResponse<unknown>) => getApiList<CalendarEvent>(response.data),
     enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const calendarAppointmentDetailsQuery = useQuery({
+    queryKey: [
+      "overview",
+      "calendarAppointmentDetails",
+      calendarQuery.data?.map((event) => event.agendamentoId).filter(Boolean),
+    ],
+    queryFn: async () => {
+      const ids = (calendarQuery.data ?? [])
+        .map((event) => event.agendamentoId)
+        .filter((id): id is number => id !== undefined);
+      const responses = await Promise.all(ids.map((id) => findAppointmentById(id)));
+      return responses
+        .map((response) => normalizeAppointment(response.data))
+        .filter((item): item is AppointmentItem => item !== null);
+    },
+    enabled:
+      isAuthenticated &&
+      appointmentsQuery.isFetched &&
+      (appointmentsQuery.data?.length ?? 0) === 0 &&
+      (calendarQuery.data ?? []).some((event) => event.agendamentoId !== undefined),
     retry: false,
   });
 
@@ -407,7 +475,9 @@ export default function OverviewScreen({
 
   const displayedAppointments = propsAppointments.length
     ? propsAppointments
-    : appointmentsQuery.data ?? [];
+    : appointmentsQuery.data?.length
+      ? appointmentsQuery.data
+      : calendarAppointmentDetailsQuery.data ?? [];
   const displayedCalendarEvents = [
     ...(propsCalendarEvents.length ? propsCalendarEvents : calendarQuery.data ?? []),
     ...displayedAppointments.map((appointment) => ({ data: appointment.data })),
@@ -425,6 +495,7 @@ export default function OverviewScreen({
     propsLoading ||
     appointmentsQuery.isLoading ||
     calendarQuery.isLoading ||
+    calendarAppointmentDetailsQuery.isLoading ||
     (isAluno
       ? planQuery.isLoading || classBalanceQuery.isLoading
       : todayAppointmentsQuery.isLoading || pendingAppointmentsQuery.isLoading);
