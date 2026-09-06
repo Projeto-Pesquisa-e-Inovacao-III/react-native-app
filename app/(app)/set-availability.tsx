@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { CopyCheck, Info, Settings, TriangleAlert } from "lucide-react-native";
 
 import {
@@ -106,11 +106,6 @@ function TimeRange(props: TimeRangeProps) {
   );
 }
 
-const mockSlots: TimeSlot[] = DAYS_OF_WEEK.flatMap((day) => [
-  { id: Math.random().toString(), horaInicio: "08:00", horaFim: "12:00", diaSemana: day, tipo: "DISPONIVEL", ativo: false },
-  { id: Math.random().toString(), horaInicio: "13:00", horaFim: "18:00", diaSemana: day, tipo: "RESTRITO", ativo: false }
-]);
-
 export default function SetAvailabilityScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -118,22 +113,22 @@ export default function SetAvailabilityScreen() {
   const cronogramQuery = useQuery({
     queryKey: ["personalCronogram"],
     queryFn: getPersonalCronogram,
-    select: function (res: any) {
+    select: function (res: { data: TimeSlot[] }) {
       return res.data;
     },
+    retry: false,
   });
 
   const bufferQuery = useQuery({
     queryKey: ["personalBuffer"],
     queryFn: getPersonalBuffer,
-    select: function (res: any) {
+    select: function (res: { data: { bufferMinutos?: string | number } }) {
       return res.data.bufferMinutos;
     },
+    retry: false,
   });
 
-  const [schedule, setSchedule] = useState<DaySchedule[]>(
-    formatScheduleFromApi(mockSlots)
-  );
+  const [schedule, setSchedule] = useState<DaySchedule[]>([]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const [pendingBuffer, setPendingBuffer] = useState<string | null>(null);
@@ -185,19 +180,57 @@ export default function SetAvailabilityScreen() {
     }, 3000);
   }
 
-  async function verifyIfHasSchedules(day: string, page: number, size: number) {
-    const res: any = await verifySchedules(day, page, size);
-    return { content: res.data.content, pagination: res.data.page as PaginationInfo };
+  async function verifyIfHasSchedules(day: string, page = 0, size = 3) {
+    const response = await verifySchedules(day, page, size);
+    return {
+      content: response.data.content as SchedulesPageItem[],
+      pagination: response.data.page as PaginationInfo,
+    };
   }
 
   async function fetchSchedulesPage(page: number) {
     if (!schedulesToInfoDay) return;
-    const response = await verifyIfHasSchedules(schedulesToInfoDay, page, 3);
-    setSchedulesToInfo(response.content);
-    setSchedulesPagination(response.pagination);
+    try {
+      const response = await verifyIfHasSchedules(schedulesToInfoDay, page, 3);
+      setSchedulesToInfo(response.content);
+      setSchedulesPagination(response.pagination);
+    } catch {
+      setErrorTitle("Erro ao carregar agendamentos");
+      setErrorContent("Não foi possível carregar os agendamentos deste dia.");
+      setErrorVisible(true);
+    }
   }
 
   async function toggleDay(dayIndex: number) {
+    const daySchedule = schedule[dayIndex];
+    if (!daySchedule) return;
+
+    const isEnabled = daySchedule.slots.some(
+      (slot) => slot.tipo === "DISPONIVEL" && slot.ativo
+    );
+
+    if (!isEnabled) {
+      confirmToggleDay(dayIndex);
+      return;
+    }
+
+    try {
+      const schedules = await verifyIfHasSchedules(daySchedule.day);
+      if (schedules.content.length > 0) {
+        setDayIndexToToggle(dayIndex);
+        setSchedulesToInfoDay(daySchedule.day);
+        setSchedulesToInfo(schedules.content);
+        setSchedulesPagination(schedules.pagination);
+        setConfirmVisible(true);
+        return;
+      }
+    } catch {
+      setErrorTitle("Erro ao verificar agendamentos");
+      setErrorContent("Não foi possível verificar os agendamentos deste dia.");
+      setErrorVisible(true);
+      return;
+    }
+
     confirmToggleDay(dayIndex);
   }
 
@@ -332,7 +365,7 @@ export default function SetAvailabilityScreen() {
     setSaveStatus("loading");
 
     try {
-      const promises: Promise<any>[] = [];
+      const promises: Promise<unknown>[] = [];
 
       schedule.forEach(function (daySchedule) {
         daySchedule.slots.forEach(function (slot) {
@@ -370,17 +403,16 @@ export default function SetAvailabilityScreen() {
       dirtySlotIds.current.clear();
       dirtyDays.current.clear();
       setPendingBuffer(null);
+      await queryClient.invalidateQueries({ queryKey: ["personalCronogram"] });
       showSuccess();
-    } catch (error: any) {
-      const message =
-        error && error.response && error.response.data && error.response.data.Exception
-          ? error.response.data.Exception
-          : "Ocorreu um erro ao salvar as alterações.";
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.Exception || "Ocorreu um erro ao salvar as alterações."
+        : "Ocorreu um erro ao salvar as alterações.";
 
       setErrorTitle("Erro ao salvar");
       setErrorContent(message);
       setErrorVisible(true);
-      handleCancel();
       showError();
     }
   }
