@@ -180,7 +180,7 @@ export default function RegisterRoute() {
       // Sincroniza sessão no AuthContext (o backend já fez o login e enviou o cookie)
       await refreshAuth();
       // Redireciona diretamente para a etapa de Anamnese
-      router.replace('/(app)/anamnesis' as any);
+      router.replace('/anamnesis' as any);
     } catch (err: any) {
       console.error('Erro no cadastro:', err);
       const message =

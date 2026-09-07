@@ -22,10 +22,10 @@ import {
   updatePersonalCronogram,
   updateWorkDay,
   verifySchedules,
-} from "../../src/constants/personal";
-import { DaySchedule, PaginationInfo, SchedulesPageItem, TimeSlot } from "../../src/models/availability";
-import InfoPersonalSchedulesModal from "../../src/components/modals/InfoPersonalSchedulesModal";
-import ErrorModal from "../../src/components/modals/ErrorModal";
+} from "../../../src/constants/personal";
+import { DaySchedule, PaginationInfo, SchedulesPageItem, TimeSlot } from "../../../src/models/availability";
+import InfoPersonalSchedulesModal from "../../../src/components/modals/InfoPersonalSchedulesModal";
+import ErrorModal from "../../../src/components/modals/ErrorModal";
 
 type SaveStatus = "idle" | "loading" | "success" | "error";
 
