@@ -16,7 +16,9 @@ export default function EditUserLayout() {
     ? 'anamnesis'
     : pathname.includes('security')
       ? 'security'
-      : 'edituser';
+      : pathname.includes('addresses')
+        ? 'addresses'
+        : 'edituser';
 
   function handleTabPress(tab: TabName) {
     switch (tab) {

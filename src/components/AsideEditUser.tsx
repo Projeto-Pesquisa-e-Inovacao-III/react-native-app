@@ -48,7 +48,7 @@ export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
             id: 'addresses',
             title: 'Endereços',
             icon: MapPin,
-            route: '/addresses',
+            route: '/(app)/(edit-user)/addresses',
           },
         ]
       : []),
