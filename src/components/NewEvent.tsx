@@ -21,7 +21,8 @@ import {
 } from "../mocks/newEventMock";
 import { getPersonalList, insertAppointment } from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
-import { getUserAddresses, lookupCep, type UserAddress } from "../constants/address";
+import { getUserAddresses, lookupCep } from "../constants/address";
+import { UserAddress } from "../models/address"
 import type { Schedule } from "../models/schedule";
 
 export type NewEventPayload = {
@@ -133,7 +134,7 @@ export default function NewEvent({
   // Estado de submissão e erro
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const cepDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const cepDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1. Carregar lista de personais da API
   useEffect(() => {
@@ -175,9 +176,9 @@ export default function NewEvent({
         const response = await getUserAddresses();
         const data = response.data;
         if (isMounted && Array.isArray(data) && data.length > 0) {
-          const mapped: MockAddress[] = data.map((addr: UserAddress) => ({
-            id: addr.id,
-            label: addr.tipo || "Principal",
+          const mapped: MockAddress[] = data.map((addr) => ({
+            id: addr.id ?? 0,
+            label: addr.tipo || "-",
             postalCode: addr.cep?.cep || addr.cep?.id || "",
             street: addr.cep?.logradouro || "",
             city: addr.cep?.localidade || "",

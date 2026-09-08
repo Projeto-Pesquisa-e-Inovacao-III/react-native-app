@@ -23,3 +23,19 @@ export type Address = {
   padrao?: boolean;
   cep?: AddressCep;
 };
+
+export type UserAddress = {
+  id: number;
+  numero: string;
+  complemento?: string;
+  unidade?: string;
+  tipo: string;
+  cep: {
+    id?: string;
+    cep?: string;
+    logradouro: string;
+    bairro: string;
+    localidade: string;
+    uf: string;
+  };
+};
