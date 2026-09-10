@@ -37,6 +37,7 @@ import SuccessModal from '../../../src/components/modals/SuccessModal';
 import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeAppointmentModal';
 import QRCodeScannerModal from '../../../src/components/modals/QRCodeScannerModal';
 import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
+import { useAuth } from '../../../src/contexts/AuthContext';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import {
   CircleCheckIcon,
@@ -347,9 +348,11 @@ function FilterBar({
 }
 
 export default function CheckScheduleScreen() {
-  const { width } = useWindowDimensions();
+  const { roles } = useAuth();
+  const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
   const isNarrow = width < 360;
+  const isPersonal = !!roles?.includes('personal');
 
   const [appointments, setAppointments] = useState<CheckSchedule[]>([]);
   const { scheduleApprovalNotification, scheduleCancellationNotification, scheduleRescheduleNotification, unreadCount } = useNotifications();
@@ -554,6 +557,17 @@ export default function CheckScheduleScreen() {
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const offsetY = event.nativeEvent.contentOffset.y;
+
+    if (isPersonal && isPanelOpen && offsetY > height) {
+      setIsPanelOpen(false);
+      Animated.spring(panelAnim, {
+        toValue: 0,
+        friction: 9,
+        tension: 50,
+        useNativeDriver: false,
+      }).start();
+    }
+
     const shouldShow = offsetY > 200;
     if (shouldShow !== showScrollTop) {
       setShowScrollTop(shouldShow);

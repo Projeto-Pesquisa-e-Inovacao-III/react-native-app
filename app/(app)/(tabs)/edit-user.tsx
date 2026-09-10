@@ -21,25 +21,25 @@ import {
   Trash2,
 } from 'lucide-react-native';
 
-import { useAuth } from '../../src/contexts/AuthContext';
+import { useAuth } from '../../../src/contexts/AuthContext';
 import {
   findUserData,
   update,
   removerUserImage,
   insertUserImage,
-} from '../../src/constants/user';
-import { editPersonalProfile } from '../../src/constants/personal';
-import { BASE_URL } from '../../src/services/api';
-import type { UpdateUserDTO } from '../../src/models/user';
-import type { PersonalDTO } from '../../src/models/personal';
+} from '../../../src/constants/user';
+import { editPersonalProfile } from '../../../src/constants/personal';
+import { BASE_URL } from '../../../src/services/api';
+import type { UpdateUserDTO } from '../../../src/models/user';
+import type { PersonalDTO } from '../../../src/models/personal';
 
-import InputWithIcon from '../../src/components/InputWithIcon';
-import Select from '../../src/components/Select';
-import UserAvatar, { setCachedAvatar, clearCachedAvatar } from '../../src/components/UserAvatar';
-import AsideEditUser from '../../src/components/AsideEditUser';
-import SuccessModal from '../../src/components/modals/SuccessModal';
-import ErrorModal from '../../src/components/modals/ErrorModal';
-import TimerModal from '../../src/components/modals/TimerModal';
+import InputWithIcon from '../../../src/components/InputWithIcon';
+import Select from '../../../src/components/Select';
+import UserAvatar, { setCachedAvatar, clearCachedAvatar } from '../../../src/components/UserAvatar';
+import AsideEditUser from '../../../src/components/AsideEditUser';
+import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ErrorModal from '../../../src/components/modals/ErrorModal';
+import TimerModal from '../../../src/components/modals/TimerModal';
 
 type EditUserState = {
   firstName: string;
@@ -380,6 +380,7 @@ export default function EditUserScreen() {
             paddingBottom: Math.max(insets.bottom, 24) + 40,
           },
         ]}
+        stickyHeaderIndices={[0, 1]}
         showsVerticalScrollIndicator={false}
       >
         {/* Cabeçalho */}

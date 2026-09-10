@@ -34,8 +34,8 @@ export default function UsersTable(props: {
         role.toLowerCase() === 'personal' || role.toLowerCase() === 'deletado'
     );
     const targetRoute = isPersonal
-      ? '/users/view-personal-data'
-      : '/users/view-user-data';
+      ? '/(app)/(tabs)/users/view-personal-data'
+      : '/(app)/(tabs)/users/view-user-data';
 
     try {
       router.push({

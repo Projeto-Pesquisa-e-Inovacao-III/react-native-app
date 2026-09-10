@@ -17,6 +17,7 @@ import TimerModal from "../../../src/components/modals/TimerModal";
 import SuccessModal from "../../../src/components/modals/SuccessModal";
 import ErrorModal from "../../../src/components/modals/ErrorModal";
 import PagBankModal from "../../../src/components/modals/PagBankModal";
+import { useAuth } from "../../../src/contexts/AuthContext";
 import type { ProductExhibition } from "../../../src/models/products";
 import {
   getProductsExhibitions,
@@ -36,6 +37,10 @@ type ModalType =
   | null;
 
 export default function PlansScreen() {
+  const { roles } = useAuth();
+  const isAdmin = !!roles?.includes("admin");
+  const isPersonal = !!roles?.includes("personal") && !isAdmin;
+
   const [activeTab, setActiveTab] = useState<"pacotes" | "adicionais">("pacotes");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -146,13 +151,15 @@ export default function PlansScreen() {
       <View style={styles.headerContainer}>
         <View style={styles.headerTop}>
           <Text style={styles.screenTitle}>Pacotes e Adicionais</Text>
-          <TouchableOpacity
-            style={styles.addBtnHeader}
-            onPress={() => setOpenModal(activeTab === "pacotes" ? "add" : "addAdditional")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addBtnHeaderText}>+ Adicionar</Text>
-          </TouchableOpacity>
+          {isAdmin ? (
+            <TouchableOpacity
+              style={styles.addBtnHeader}
+              onPress={() => setOpenModal(activeTab === "pacotes" ? "add" : "addAdditional")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.addBtnHeaderText}>+ Adicionar</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Abas */}
@@ -196,7 +203,8 @@ export default function PlansScreen() {
                 onClick={() => handleBuy(pkg.id!)}
                 setHandleEdit={() => handleOpenEdit(pkg.id!, activeTab === "adicionais")}
                 setHandleDelete={() => handleOpenDelete(pkg.id!)}
-                isAdmin={true}
+                isAdmin={isAdmin}
+                isPersonal={isPersonal}
               />
             ))}
           </View>

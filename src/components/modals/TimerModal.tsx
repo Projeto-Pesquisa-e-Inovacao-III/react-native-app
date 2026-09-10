@@ -31,11 +31,13 @@ export default function TimerModal({
                 callSuccessModal?.();
                 closeThen(false);
               }}
+              classname={styles.deleteBtn}
             />
             <SmallerButton
               title="Cancelar"
               handleButtonClick={() => closeThen(false)}
               classname={styles.cancelBtn}
+              textColor="#334155"
             />
           </View>
         </View>
@@ -80,5 +82,8 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     backgroundColor: "#e2e8f0",
+  },
+  deleteBtn: {
+    backgroundColor: "#dc2626",
   },
 });

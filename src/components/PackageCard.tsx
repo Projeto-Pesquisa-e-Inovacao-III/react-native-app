@@ -32,29 +32,50 @@ export function PackageCard(props: PackageCardProps) {
   const tipoAulaFormatted = tipoAulaStr
     ? tipoAulaStr.charAt(0) + tipoAulaStr.slice(1).toLowerCase()
     : "";
+  const modalityColor =
+    tipoAulaStr === "RESIDENCIAL"
+      ? "#F26430"
+      : tipoAulaStr === "FUNCIONAL"
+        ? "#82ADC5"
+        : "#093A5D";
+  const modalityBadgeBackground =
+    tipoAulaStr === "RESIDENCIAL"
+      ? "#EB825C36"
+      : tipoAulaStr === "FUNCIONAL"
+        ? "#C4E0F081"
+        : "#BBD8EC81";
 
   return (
-    <View style={styles.packageCardContainer}>
+    <View
+      style={[
+        styles.packageCardContainer,
+        tipoAulaStr === "PRESENCIAL" && styles.packageCardPresential,
+        tipoAulaStr === "RESIDENCIAL" && styles.packageCardHome,
+        tipoAulaStr === "FUNCIONAL" && styles.packageCardFunctional,
+      ]}
+    >
       <View style={styles.cardContent}>
         {/* Cabeçalho do Card */}
         <View style={styles.headerRow}>
-          <View style={styles.tipoAulaBadge}>
-            <Text style={styles.cardTipoAulaText}>{tipoAulaFormatted}</Text>
+          <View style={styles.headerBadges}>
+            <View style={[styles.tipoAulaBadge, { backgroundColor: modalityBadgeBackground }]}>
+              <Text style={[styles.cardTipoAulaText, { color: modalityColor }]}>
+                {tipoAulaFormatted}
+              </Text>
+            </View>
+            <View style={[styles.agendamentoBadge, { backgroundColor: modalityColor }]}>
+              <Text style={styles.agendamentoText}>
+                {props.quantidadeAula && Number(props.quantidadeAula) > 1
+                  ? `${props.quantidadeAula} agendamentos`
+                  : `${props.quantidadeAula} agendamento`}
+              </Text>
+            </View>
           </View>
-          <View style={styles.agendamentoBadge}>
-            <Text style={styles.agendamentoText}>
-              {props.quantidadeAula && Number(props.quantidadeAula) > 1
-                ? `${props.quantidadeAula} agendamentos`
-                : `${props.quantidadeAula} agendamento`}
-            </Text>
+          <View style={styles.iconContainer}>
+            {tipoAulaStr === "PRESENCIAL" && <Dumbbell size={24} color={modalityColor} />}
+            {tipoAulaStr === "RESIDENCIAL" && <Home size={24} color={modalityColor} />}
+            {tipoAulaStr === "FUNCIONAL" && <HeartPulse size={24} color={modalityColor} />}
           </View>
-        </View>
-
-        {/* Ícone da Modalidade */}
-        <View style={styles.iconContainer}>
-          {tipoAulaStr === "PRESENCIAL" && <Dumbbell size={24} color="#093A5D" />}
-          {tipoAulaStr === "RESIDENCIAL" && <Home size={24} color="#093A5D" />}
-          {tipoAulaStr === "FUNCIONAL" && <HeartPulse size={24} color="#093A5D" />}
         </View>
 
         {/* Título e Subtítulo */}
@@ -143,29 +164,51 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginBottom: 16,
   },
+  packageCardPresential: {
+    borderTopColor: "#093A5D",
+    borderTopWidth: 15,
+  },
+  packageCardHome: {
+    borderTopColor: "#F26430",
+    borderTopWidth: 15,
+  },
+  packageCardFunctional: {
+    borderTopColor: "#82ADC5",
+    borderTopWidth: 15,
+  },
   cardContent: {
     marginBottom: 16,
   },
   headerRow: {
+    alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: 12,
+    width: "100%",
+  },
+  headerBadges: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 1,
+    gap: 8,
   },
   tipoAulaBadge: {
+    borderRadius: 16,
+    flexShrink: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
     backgroundColor: "#f3f4f6",
   },
   cardTipoAulaText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#093A5D",
+    flexShrink: 1,
     textTransform: "uppercase",
   },
   agendamentoBadge: {
     backgroundColor: "#093A5D",
+    flexShrink: 0,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 16,
@@ -176,7 +219,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   iconContainer: {
-    marginBottom: 8,
+    alignItems: "center",
+    backgroundColor: "#ECECEC81",
+    borderRadius: 8,
+    flexShrink: 0,
+    justifyContent: "center",
+    marginLeft: 10,
+    padding: 8,
   },
   cardTitle: {
     fontSize: 22,
@@ -218,9 +267,15 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   cardPaymentInfo: {
-    fontSize: 11,
-    color: "#9ca3af",
+    alignSelf: "flex-start",
+    backgroundColor: "#ddffe9",
+    borderRadius: 8,
+    color: "#0d8037",
+    fontSize: 12,
+    fontWeight: "500",
     marginBottom: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   benefitsList: {
     gap: 10,

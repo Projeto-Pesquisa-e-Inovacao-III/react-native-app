@@ -18,14 +18,13 @@ import {
   HeartCrack,
 } from 'lucide-react-native';
 
-import { useAuth } from '../../src/contexts/AuthContext';
-import { findUserData, softDelete, changePassword } from '../../src/constants/user';
-import { validatePassword } from '../../src/utils/validacao';
-import InputWithIcon from '../../src/components/InputWithIcon';
-import AsideEditUser from '../../src/components/AsideEditUser';
-import SuccessModal from '../../src/components/modals/SuccessModal';
-import ErrorModal from '../../src/components/modals/ErrorModal';
-import TimerModal from '../../src/components/modals/TimerModal';
+import { useAuth } from '../../../src/contexts/AuthContext';
+import { findUserData, softDelete, changePassword } from '../../../src/constants/user';
+import { validatePassword } from '../../../src/utils/validacao';
+import InputWithIcon from '../../../src/components/InputWithIcon';
+import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ErrorModal from '../../../src/components/modals/ErrorModal';
+import TimerModal from '../../../src/components/modals/TimerModal';
 
 type UserPhone = {
   id: number;
@@ -169,21 +168,6 @@ export default function SecurityScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabeçalho */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={22} color="#0F172A" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Editar Perfil</Text>
-        </View>
-
-        {/* Abas de Navegação (Aside) */}
-        <AsideEditUser activeTab="security" />
-
         {userInfo.isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#093A5D" />

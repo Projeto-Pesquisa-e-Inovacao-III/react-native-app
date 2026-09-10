@@ -1,32 +1,36 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  ActivityIndicator,
+  View,
 } from "react-native";
-import { Bell, Sparkles, QrCode } from "lucide-react-native";
+import { Bell, QrCode, Sparkles } from "lucide-react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
-import Card from "../../../src/components/Card";
+import OverviewCardPackageStatus from "../../../src/components/OverviewCardPackageStatus";
 import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import AiPanelModal from "../../../src/components/modals/AiPanelModal";
 import QRCodeDisplayModal, { type AppointmentForQr } from "../../../src/components/modals/QRCodeDisplayModal";
-import { MOCK_APPOINTMENTS } from "../../../src/mocks/newEventMock";
 import {
   findUserAppointments,
   appointmentAtCalendar,
+  findAppointmentById,
+  disabledPersonalDays,
+  getPersonalList,
 } from "../../../src/constants/schedule";
 import { getTotalByClassType } from "../../../src/constants/overview";
 import { actualPlan as getActualPlan } from "../../../src/constants/products";
 import { appoitmentsCount } from "../../../src/constants/personal";
+import { findUserData } from "../../../src/constants/user";
 import type { AnaliseIa } from "../../../src/models/schedule";
 
 type Role = "aluno" | "personal" | "admin";
@@ -62,7 +66,21 @@ type AppointmentItem = {
 };
 
 type CalendarEvent = {
+  agendamentoId?: number;
   data: string;
+};
+
+type DisabledDay = {
+  ativo: boolean;
+  diaSemana: string;
+};
+
+type PersonalSummary = {
+  id: number;
+};
+
+type ApiResponse<T> = {
+  data: T;
 };
 
 type OverviewNativeProps = {
@@ -87,8 +105,6 @@ type ModalState = {
   title: string;
   description: string;
 };
-
-const TOTAL_AULAS = 20;
 
 const STATUS_LABELS: Record<string, string> = {
   APROVADO: "Aprovado",
@@ -124,6 +140,120 @@ function formatHour(dateISO: string) {
     minute: "2-digit",
     hour12: false,
   }).format(date);
+}
+
+function getApiList<T>(data: unknown): T[] {
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (data && typeof data === "object" && "content" in data) {
+    const content = (data as { content?: unknown }).content;
+    if (Array.isArray(content)) {
+      return content as T[];
+    }
+  }
+
+  if (data && typeof data === "object" && "data" in data) {
+    return getApiList((data as { data?: unknown }).data);
+  }
+
+  return [];
+}
+
+function normalizeAppointment(data: unknown): AppointmentItem | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const item = data as Record<string, unknown>;
+  const personal =
+    item.personal && typeof item.personal === "object"
+      ? (item.personal as { nome?: string })
+      : undefined;
+  const aluno =
+    item.aluno && typeof item.aluno === "object"
+      ? (item.aluno as { nome?: string })
+      : undefined;
+  const id = getNumericId(item.agendamentoId ?? item.id);
+  const startDate = item.data ?? item.dataInicio;
+  if (id === undefined || typeof startDate !== "string") {
+    return null;
+  }
+
+  return {
+    agendamentoId: id,
+    agendamentoStatus: String(item.agendamentoStatus ?? item.status ?? ""),
+    data: startDate,
+    datafim: String(item.datafim ?? item.dataFim ?? item.dataFinal ?? item.data),
+    personalNome: String(item.personalNome ?? personal?.nome ?? ""),
+    alunoNome: String(item.alunoNome ?? aluno?.nome ?? ""),
+    tipoAula: String(item.tipoAula ?? item.tipo ?? ""),
+    caminhoFoto: typeof item.caminhoFoto === "string" ? item.caminhoFoto : undefined,
+    descricao: typeof item.descricao === "string" ? item.descricao : undefined,
+    analiseIa: item.analiseIa as AnaliseIa | undefined,
+    endereco: item.endereco as AppointmentItem["endereco"] | undefined,
+  };
+}
+
+function normalizeAppointments(data: unknown) {
+  return getApiList<unknown>(data)
+    .map(normalizeAppointment)
+    .filter((item): item is AppointmentItem => item !== null);
+}
+
+function getNumericId(value: unknown) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : undefined;
+}
+
+function normalizeClassBalance(data: unknown): ClassBalance {
+  if (!data || typeof data !== "object") {
+    return { saldoPresencial: 0, saldoFuncional: 0, saldoResidencial: 0 };
+  }
+
+  const balance = data as Partial<ClassBalance>;
+  return {
+    saldoPresencial: balance.saldoPresencial ?? 0,
+    saldoFuncional: balance.saldoFuncional ?? 0,
+    saldoResidencial: balance.saldoResidencial ?? 0,
+  };
+}
+
+function normalizePlan(data: unknown): Plan | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const plan = data as {
+    nomeProduto?: string;
+    nome?: string;
+    dataExpiracao?: string;
+    dataFim?: string;
+  };
+
+  return {
+    nome: plan.nomeProduto || plan.nome || "Plano Ativo",
+    dataExpiracao: plan.dataExpiracao || plan.dataFim || "",
+  };
+}
+
+function getTodayDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDisabledDayNames(data: unknown) {
+  return Array.from(
+    new Set(
+      getApiList<DisabledDay>(data)
+        .filter((day) => !day.ativo)
+        .map((day) => day.diaSemana.toLowerCase())
+    )
+  );
 }
 
 function AppointmentRow({
@@ -225,10 +355,12 @@ export default function OverviewScreen({
   onNewEvent,
 }: Partial<OverviewNativeProps> = {}) {
   const { roles: authRoles, isAuthenticated } = useAuth();
-  const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ["aluno"];
-  const { scheduleAppointmentNotification, unreadCount } = useNotifications();
+  const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
+  const { unreadCount } = useNotifications();
+  const queryClient = useQueryClient();
 
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const isAluno = !!userRoles?.includes("aluno");
   const [modal, setModal] = useState<ModalState>({
     visible: false,
     title: "",
@@ -236,141 +368,156 @@ export default function OverviewScreen({
   });
   const [selectedDate, setSelectedDate] = useState<string>();
   const [newEventVisible, setNewEventVisible] = useState(false);
-
-  // Estados locais com dados dinâmicos da API
-  const [localAppointments, setLocalAppointments] = useState<AppointmentItem[]>(() =>
-    propsAppointments.length > 0 ? propsAppointments : MOCK_APPOINTMENTS
-  );
-  const [localCalendarEvents, setLocalCalendarEvents] = useState<CalendarEvent[]>(
-    propsCalendarEvents
-  );
-  const [localPlan, setLocalPlan] = useState<Plan | null>(
-    propsActualPlan ?? {
-      nome: "Plano Gold",
-      dataExpiracao: "2026-12-10",
-    }
-  );
-  const [localClassBalance, setLocalClassBalance] = useState<ClassBalance>(
-    propsClassBalance ?? {
-      saldoPresencial: 5,
-      saldoFuncional: 0,
-      saldoResidencial: 0,
-    }
-  );
-  const [localTodayAppointments, setLocalTodayAppointments] = useState<number>(
-    propsTodayAppointments
-  );
-  const [localPendingAppointments, setLocalPendingAppointments] = useState<number>(
-    propsPendingAppointments
-  );
-  const [localLoading, setLocalLoading] = useState<boolean>(propsLoading);
-
-  // Modal de IA (Dica do Treinador IA)
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [selectedAiAppointment, setSelectedAiAppointment] = useState<AppointmentItem | null>(null);
-
-  // Modal de QR Code para validação da aula pelo personal
   const [selectedQrAppointment, setSelectedQrAppointment] = useState<AppointmentForQr | null>(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
 
+  const appointmentsQuery = useQuery({
+    queryKey: ["overview", "appointments"],
+    queryFn: () => findUserAppointments(),
+    select: (response: ApiResponse<unknown>) => normalizeAppointments(response.data),
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const calendarQuery = useQuery({
+    queryKey: ["overview", "calendar"],
+    queryFn: () => appointmentAtCalendar(),
+    select: (response: ApiResponse<unknown>) => getApiList<CalendarEvent>(response.data),
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const calendarAppointmentDetailsQuery = useQuery({
+    queryKey: [
+      "overview",
+      "calendarAppointmentDetails",
+      calendarQuery.data?.map((event) => event.agendamentoId).filter(Boolean),
+    ],
+    queryFn: async () => {
+      const ids = (calendarQuery.data ?? [])
+        .map((event) => event.agendamentoId)
+        .filter((id): id is number => id !== undefined);
+      const responses = await Promise.all(ids.map((id) => findAppointmentById(id)));
+      return responses
+        .map((response) => normalizeAppointment(response.data))
+        .filter((item): item is AppointmentItem => item !== null);
+    },
+    enabled:
+      isAuthenticated &&
+      appointmentsQuery.isFetched &&
+      (appointmentsQuery.data?.length ?? 0) === 0 &&
+      (calendarQuery.data ?? []).some((event) => event.agendamentoId !== undefined),
+    retry: false,
+  });
+
+  const planQuery = useQuery({
+    queryKey: ["overview", "actualPlan"],
+    queryFn: () => getActualPlan(),
+    select: (response: ApiResponse<unknown>) => normalizePlan(response.data),
+    enabled: isAuthenticated && isAluno && !propsActualPlan,
+    retry: false,
+  });
+
+  const classBalanceQuery = useQuery({
+    queryKey: ["overview", "classBalance"],
+    queryFn: getTotalByClassType,
+    select: (data: unknown) => normalizeClassBalance(data),
+    enabled: isAuthenticated && isAluno && !propsClassBalance,
+    retry: false,
+  });
+
+  const todayAppointmentsQuery = useQuery({
+    queryKey: ["overview", "todayAppointments", getTodayDate()],
+    queryFn: () => appoitmentsCount({ status: "APROVADO", data: getTodayDate() }),
+    select: (response: ApiResponse<number>) => response.data,
+    enabled: isAuthenticated && !isAluno,
+    retry: false,
+  });
+
+  const pendingAppointmentsQuery = useQuery({
+    queryKey: ["overview", "pendingAppointments"],
+    queryFn: () => appoitmentsCount({ status: "PENDENTE_PERSONAL_APROVACAO" }),
+    select: (response: ApiResponse<number>) => response.data,
+    enabled: isAuthenticated && !isAluno,
+    retry: false,
+  });
+
+  const personalQuery = useQuery({
+    queryKey: ["overview", "personal"],
+    queryFn: isAluno ? getPersonalList : findUserData,
+    select: (response: ApiResponse<unknown>) => {
+      if (isAluno) {
+        return getNumericId(
+          getApiList<PersonalSummary>(response.data)[0]?.id
+        );
+      }
+
+      if (response.data && typeof response.data === "object" && "id" in response.data) {
+        return getNumericId(response.data.id);
+      }
+
+      return undefined;
+    },
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const disabledDaysQuery = useQuery({
+    queryKey: ["overview", "disabledDays", personalQuery.data],
+    queryFn: () => disabledPersonalDays(personalQuery.data!),
+    select: (response: ApiResponse<unknown>) =>
+      getDisabledDayNames(response.data),
+    enabled: isAuthenticated && personalQuery.data !== undefined,
+    retry: false,
+  });
+
+  const displayedAppointments = propsAppointments.length
+    ? propsAppointments
+    : appointmentsQuery.data?.length
+      ? appointmentsQuery.data
+      : calendarAppointmentDetailsQuery.data ?? [];
+  const displayedCalendarEvents = [
+    ...(propsCalendarEvents.length ? propsCalendarEvents : calendarQuery.data ?? []),
+    ...displayedAppointments.map((appointment) => ({ data: appointment.data })),
+  ];
+  const actualPlan = propsActualPlan ?? planQuery.data ?? null;
+  const classBalance = propsClassBalance ?? classBalanceQuery.data;
+  const todayAppointments =
+    propsTodayAppointments ?? todayAppointmentsQuery.data ?? 0;
+  const pendingAppointments =
+    propsPendingAppointments ?? pendingAppointmentsQuery.data ?? 0;
+  const calendarDisabledDays = disabledDays.length
+    ? disabledDays
+    : disabledDaysQuery.data ?? [];
+  const loading =
+    propsLoading ||
+    appointmentsQuery.isLoading ||
+    calendarQuery.isLoading ||
+    calendarAppointmentDetailsQuery.isLoading ||
+    (isAluno
+      ? planQuery.isLoading || classBalanceQuery.isLoading
+      : todayAppointmentsQuery.isLoading || pendingAppointmentsQuery.isLoading);
+
   function handleOpenQr(item: AppointmentItem) {
-    const addressStr = [
-      item.endereco?.logradouro,
-      item.endereco?.numero,
-      item.endereco?.bairro,
-      item.endereco?.cidade,
-    ]
+    const address = [item.endereco?.logradouro, item.endereco?.numero, item.endereco?.bairro, item.endereco?.cidade]
       .filter(Boolean)
       .join(", ");
-
     setSelectedQrAppointment({
       id: item.agendamentoId,
       name: item.personalNome || "Personal Trainer",
       type: item.tipoAula,
       start: item.data,
       end: item.datafim,
-      address: addressStr || "Local a combinar",
+      address: address || "Local a combinar",
     });
     setQrModalVisible(true);
   }
-
-  const isAluno = !!userRoles?.includes("aluno");
   const headerTitle = isAluno ? "Meu painel" : "Painel de agendamentos";
   const headerSubtitle = isAluno
     ? "Acompanhe seu plano e saldo disponível"
     : "Gerencie as aulas do dia e solicitações pendentes";
-
-  const displayedAppointments = localAppointments;
-  const displayedCalendarEvents = [
-    ...localCalendarEvents,
-    ...displayedAppointments.map((appointment) => ({ data: appointment.data })),
-  ];
-
-  // Carrega dados da API do backend
-  const loadOverviewData = useCallback(async () => {
-    if (!isAuthenticated) return;
-    setLocalLoading(true);
-    try {
-      const promises: Promise<any>[] = [
-        findUserAppointments().catch(() => null),
-        appointmentAtCalendar().catch(() => null),
-      ];
-
-      if (isAluno) {
-        promises.push(getTotalByClassType().catch(() => null));
-        promises.push(getActualPlan().catch(() => null));
-      } else {
-        const todayStr = new Date().toISOString().split("T")[0];
-        promises.push(
-          appoitmentsCount({ status: "APROVADO", data: todayStr }).catch(() => null)
-        );
-        promises.push(
-          appoitmentsCount({ status: "PENDENTE_PERSONAL_APROVACAO" }).catch(() => null)
-        );
-      }
-
-      const [apptsRes, calRes, res3, res4] = await Promise.all(promises);
-
-      if (apptsRes?.data && Array.isArray(apptsRes.data)) {
-        setLocalAppointments(apptsRes.data);
-      }
-
-      if (calRes?.data && Array.isArray(calRes.data)) {
-        setLocalCalendarEvents(calRes.data);
-      }
-
-      if (isAluno) {
-        if (res3 && typeof res3 === "object") {
-          setLocalClassBalance({
-            saldoPresencial: res3.saldoPresencial ?? 0,
-            saldoFuncional: res3.saldoFuncional ?? 0,
-            saldoResidencial: res3.saldoResidencial ?? 0,
-          });
-        }
-        if (res4?.data) {
-          setLocalPlan({
-            nome: res4.data.nomeProduto || res4.data.nome || "Plano Ativo",
-            dataExpiracao: res4.data.dataExpiracao || res4.data.dataFim || "",
-          });
-        }
-      } else {
-        if (typeof res3?.data === "number") {
-          setLocalTodayAppointments(res3.data);
-        }
-        if (typeof res4?.data === "number") {
-          setLocalPendingAppointments(res4.data);
-        }
-      }
-    } catch {
-      // Mantém fallback atual se houver erro
-    } finally {
-      setLocalLoading(false);
-    }
-  }, [isAuthenticated, isAluno]);
-
-  useEffect(() => {
-    loadOverviewData();
-  }, [loadOverviewData]);
 
   function handleOpenAi(item: AppointmentItem) {
     setSelectedAiAppointment(item);
@@ -389,15 +536,15 @@ export default function OverviewScreen({
     if (dayAppointments.length === 0) {
       if (!isAluno) return;
 
-      if (!localPlan) {
+      if (!actualPlan) {
         openError("Erro", "Você precisa ter um plano ativo para agendar uma aula.");
         return;
       }
 
       const hasBalance =
-        (localClassBalance?.saldoPresencial ?? 0) > 0 ||
-        (localClassBalance?.saldoFuncional ?? 0) > 0 ||
-        (localClassBalance?.saldoResidencial ?? 0) > 0;
+        (classBalance?.saldoPresencial ?? 0) > 0 ||
+        (classBalance?.saldoFuncional ?? 0) > 0 ||
+        (classBalance?.saldoResidencial ?? 0) > 0;
 
       if (!hasBalance) {
         openError(
@@ -440,15 +587,15 @@ export default function OverviewScreen({
       return;
     }
 
-    if (!localPlan) {
+    if (!actualPlan) {
       openError("Erro", "Você precisa ter um plano ativo para agendar uma aula.");
       return;
     }
 
     const hasBalance =
-      (localClassBalance?.saldoPresencial ?? 0) > 0 ||
-      (localClassBalance?.saldoFuncional ?? 0) > 0 ||
-      (localClassBalance?.saldoResidencial ?? 0) > 0;
+      (classBalance?.saldoPresencial ?? 0) > 0 ||
+      (classBalance?.saldoFuncional ?? 0) > 0 ||
+      (classBalance?.saldoResidencial ?? 0) > 0;
 
     if (!hasBalance) {
       openError(
@@ -463,9 +610,7 @@ export default function OverviewScreen({
   }
 
   function handleScheduleSubmit(payload: NewEventPayload) {
-    // Recarrega os dados do painel atualizados da API
-    loadOverviewData();
-
+    void queryClient.invalidateQueries({ queryKey: ["overview"] });
     onNewEvent?.(payload);
   }
 
@@ -497,19 +642,19 @@ export default function OverviewScreen({
           <View style={styles.headerStatsRow}>
             <View style={styles.headerStatCard}>
               <Text style={styles.headerStatValue}>
-                {localClassBalance?.saldoPresencial ?? 0}
+                {classBalance?.saldoPresencial ?? 0}
               </Text>
               <Text style={styles.headerStatLabel}>Presencial</Text>
             </View>
             <View style={styles.headerStatCard}>
               <Text style={styles.headerStatValue}>
-                {localClassBalance?.saldoFuncional ?? 0}
+                {classBalance?.saldoFuncional ?? 0}
               </Text>
               <Text style={styles.headerStatLabel}>Funcional</Text>
             </View>
             <View style={styles.headerStatCard}>
               <Text style={styles.headerStatValue}>
-                {localClassBalance?.saldoResidencial ?? 0}
+                {classBalance?.saldoResidencial ?? 0}
               </Text>
               <Text style={styles.headerStatLabel}>Residencial</Text>
             </View>
@@ -517,11 +662,11 @@ export default function OverviewScreen({
         ) : (
           <View style={styles.headerStatsRow}>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{localTodayAppointments}</Text>
+              <Text style={styles.headerStatValue}>              {todayAppointments}</Text>
               <Text style={styles.headerStatLabel}>Hoje</Text>
             </View>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>{localPendingAppointments}</Text>
+              <Text style={styles.headerStatValue}>              {pendingAppointments}</Text>
               <Text style={styles.headerStatLabel}>Pendentes</Text>
             </View>
           </View>
@@ -530,24 +675,15 @@ export default function OverviewScreen({
 
       <ScrollView contentContainerStyle={styles.content}>
         {isAluno ? (
-          <Card
-            title="Status do plano"
-            subtitle={
-              localPlan
-                ? "Plano: " +
-                  localPlan.nome +
-                  "\nExpira em: " +
-                  formatDate(localPlan.dataExpiracao)
-                : "Você não possui plano ativo"
-            }
-            cta={localPlan ? undefined : "Ver planos"}
-            onPress={onGoPackages}
+          <OverviewCardPackageStatus
+            actualPlan={actualPlan}
+            onPackages={onGoPackages}
           />
         ) : null}
 
         <Calendar
           calendarEvents={displayedCalendarEvents}
-          disabledDays={disabledDays}
+          disabledDays={calendarDisabledDays}
           onDayPress={handleCalendarDayPress}
         />
 
@@ -561,7 +697,7 @@ export default function OverviewScreen({
             ) : null}
           </View>
 
-          {localLoading ? (
+          {loading ? (
             <ActivityIndicator size="small" color="#0f567f" style={{ marginVertical: 14 }} />
           ) : displayedAppointments.length === 0 ? (
             <Text style={styles.emptyText}>Nenhum agendamento encontrado.</Text>

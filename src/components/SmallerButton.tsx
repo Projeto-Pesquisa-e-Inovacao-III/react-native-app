@@ -12,6 +12,7 @@ type SmallerButtonProps = {
   handleButtonClick?: (value: string | boolean) => void;
   disabled?: boolean;
   loading?: boolean;
+  textColor?: string;
 };
 
 export default function SmallerButton({
@@ -24,6 +25,7 @@ export default function SmallerButton({
   handleButtonClick,
   disabled,
   loading,
+  textColor,
 }: SmallerButtonProps) {
   useEffect(() => {
     if (selected && handleButtonClick) {
@@ -50,7 +52,7 @@ export default function SmallerButton({
       {loading ? (
         <ActivityIndicator size="small" color="#fff" />
       ) : (
-        title ? <Text style={styles.text}>{title}</Text> : null
+        title ? <Text style={[styles.text, textColor ? { color: textColor } : null]}>{title}</Text> : null
       )}
 
       {icon && iconPosition === "right" && <View style={styles.icon}>{icon}</View>}

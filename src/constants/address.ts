@@ -1,21 +1,6 @@
 import axios from 'axios';
 import { api } from '../services/api';
-
-export type UserAddress = {
-  id: number;
-  numero: string;
-  complemento?: string;
-  unidade?: string;
-  tipo: string;
-  cep: {
-    id?: string;
-    cep?: string;
-    logradouro: string;
-    bairro: string;
-    localidade: string;
-    uf: string;
-  };
-};
+import type { Address } from '../models/address';
 
 export type ViaCepResponse = {
   cep?: string;
@@ -28,22 +13,19 @@ export type ViaCepResponse = {
 };
 
 export async function getUserAddresses() {
-  return api.get<UserAddress[]>('/enderecos');
+  return api.get<Address[]>('/enderecos');
 }
 
-export async function createAddress(data: {
-  numero: string;
-  complemento?: string;
-  tipo: string;
-  cep: {
-    id: string;
-    logradouro: string;
-    bairro: string;
-    localidade: string;
-    uf: string;
-  };
-}) {
+export async function createAddress(data: Address) {
   return api.post('/enderecos', data);
+}
+
+export async function updateUserAddress(id: number, data: Address) {
+  return api.put(`/enderecos/${id}`, data);
+}
+
+export async function deleteUserAddress(id: number) {
+  return api.delete(`/enderecos/${id}`);
 }
 
 export async function lookupCep(cleanCep: string): Promise<ViaCepResponse | null> {

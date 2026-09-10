@@ -70,7 +70,7 @@ export default function MoreRoute() {
             <OptionItem 
               icon={<IdCard size={22} color="#192633" />} 
               title='Suas informações' 
-              onClick={() => router.push("/edit-user")} 
+              onClick={() => router.push("/(app)/(edit-user)/edit-user")} 
               isLast={false}
             />
             <OptionItem 
@@ -103,7 +103,7 @@ export default function MoreRoute() {
             {roles?.includes("personal") && roles?.includes("admin") && (
               <>
                 <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/schedule")} />
-                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/packages")} />
+                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
                 <OptionItem icon={<Clock size={22} color="#192633" />} title='Ajustar disponibilidade' onClick={() => router.push("/set-availability")} />
                 <OptionItem icon={<User size={22} color="#192633" />} title='Criar personal' onClick={() => router.push("/create-personal")} isLast={true} />
               </>
@@ -112,7 +112,7 @@ export default function MoreRoute() {
             {/* apenas admin */}
             {roles?.includes("admin") && !roles?.includes("personal") && (
               <>
-                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/packages")} isLast={true} />
+                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} isLast={true} />
               </>
             )}
           </View>
