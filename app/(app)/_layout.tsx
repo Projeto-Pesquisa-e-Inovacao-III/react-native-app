@@ -23,6 +23,8 @@ export default function AppLayout() {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="plans-history" options={{ headerShown: false }} />
+        <Stack.Screen name="plans-history-details" options={{ headerShown: false }} />
       </Stack>
     </SafeAreaView>
   );
