@@ -100,7 +100,7 @@ export default function NewEvent({
 
   // Personais
   const [personalsList, setPersonalsList] = useState<MockPersonal[]>(
-    propPersonals && propPersonals.length > 0 ? propPersonals : MOCK_PERSONALS
+    propPersonals && propPersonals.length > 0 ? propPersonals : []
   );
   const [loadingPersonals, setLoadingPersonals] = useState(false);
   const [selectedPersonalId, setSelectedPersonalId] = useState<number>(DEFAULT_PERSONAL.id);
@@ -110,13 +110,13 @@ export default function NewEvent({
   const [period, setPeriod] = useState<TimePeriod>("MANHÃ");
   const [startHour, setStartHour] = useState("");
   const [dynamicSchedules, setDynamicSchedules] = useState<MockSchedule[]>(
-    propSchedules && propSchedules.length > 0 ? propSchedules : MOCK_SCHEDULES
+    propSchedules && propSchedules.length > 0 ? propSchedules : []
   );
   const [loadingHours, setLoadingHours] = useState(false);
 
   // Endereço
   const [savedAddresses, setSavedAddresses] = useState<MockAddress[]>(
-    propAddresses && propAddresses.length > 0 ? propAddresses : MOCK_ADDRESSES
+    propAddresses && propAddresses.length > 0 ? propAddresses : []
   );
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number>();
@@ -231,9 +231,9 @@ export default function NewEvent({
           }
         }
       } catch {
-        // Se a API de horários falhar (ex: data inválida ou offline), mantém horários padrão como fallback
+        // Se a API de horários falhar, exibe mensagem de sem disponibilidade
         if (isMounted) {
-          setDynamicSchedules(propSchedules || MOCK_SCHEDULES);
+          setDynamicSchedules(propSchedules || []);
         }
       } finally {
         if (isMounted) setLoadingHours(false);

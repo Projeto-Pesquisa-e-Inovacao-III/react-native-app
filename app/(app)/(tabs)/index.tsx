@@ -347,8 +347,8 @@ export default function OverviewScreen({
   appointments: propsAppointments = [],
   calendarEvents: propsCalendarEvents = [],
   disabledDays = [],
-  pendingAppointments: propsPendingAppointments = 0,
-  todayAppointments: propsTodayAppointments = 0,
+  pendingAppointments: propsPendingAppointments,
+  todayAppointments: propsTodayAppointments,
   loading: propsLoading = false,
   availableHours = [],
   onGoPackages,
@@ -431,7 +431,10 @@ export default function OverviewScreen({
   const todayAppointmentsQuery = useQuery({
     queryKey: ["overview", "todayAppointments", getTodayDate()],
     queryFn: () => appoitmentsCount({ status: "APROVADO", data: getTodayDate() }),
-    select: (response: ApiResponse<number>) => response.data,
+    select: (response: ApiResponse<number>) => {
+      const val = response?.data;
+      return typeof val === "number" ? val : Number(val) || 0;
+    },
     enabled: isAuthenticated && !isAluno,
     retry: false,
   });
@@ -439,7 +442,10 @@ export default function OverviewScreen({
   const pendingAppointmentsQuery = useQuery({
     queryKey: ["overview", "pendingAppointments"],
     queryFn: () => appoitmentsCount({ status: "PENDENTE_PERSONAL_APROVACAO" }),
-    select: (response: ApiResponse<number>) => response.data,
+    select: (response: ApiResponse<number>) => {
+      const val = response?.data;
+      return typeof val === "number" ? val : Number(val) || 0;
+    },
     enabled: isAuthenticated && !isAluno,
     retry: false,
   });
@@ -488,6 +494,10 @@ export default function OverviewScreen({
     propsTodayAppointments ?? todayAppointmentsQuery.data ?? 0;
   const pendingAppointments =
     propsPendingAppointments ?? pendingAppointmentsQuery.data ?? 0;
+  const isTodayLoading =
+    propsTodayAppointments === undefined && todayAppointmentsQuery.isLoading;
+  const isPendingLoading =
+    propsPendingAppointments === undefined && pendingAppointmentsQuery.isLoading;
   const calendarDisabledDays = disabledDays.length
     ? disabledDays
     : disabledDaysQuery.data ?? [];
@@ -662,11 +672,19 @@ export default function OverviewScreen({
         ) : (
           <View style={styles.headerStatsRow}>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>              {todayAppointments}</Text>
+              {isTodayLoading ? (
+                <ActivityIndicator size="small" color="#0f567f" style={styles.kpiLoader} />
+              ) : (
+                <Text style={styles.headerStatValue}>{todayAppointments}</Text>
+              )}
               <Text style={styles.headerStatLabel}>Hoje</Text>
             </View>
             <View style={styles.headerStatCard}>
-              <Text style={styles.headerStatValue}>              {pendingAppointments}</Text>
+              {isPendingLoading ? (
+                <ActivityIndicator size="small" color="#0f567f" style={styles.kpiLoader} />
+              ) : (
+                <Text style={styles.headerStatValue}>{pendingAppointments}</Text>
+              )}
               <Text style={styles.headerStatLabel}>Pendentes</Text>
             </View>
           </View>
@@ -705,6 +723,8 @@ export default function OverviewScreen({
             <FlatList
               data={displayedAppointments}
               keyExtractor={(item: AppointmentItem) => String(item.agendamentoId)}
+              style={styles.appointmentList}
+              contentContainerStyle={styles.appointmentListContent}
               renderItem={({ item }: { item: AppointmentItem }) => (
                 <AppointmentRow
                   item={item}
@@ -896,6 +916,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     width: "100%",
+    alignSelf: "stretch",
   },
   status: {
     fontSize: 12,
@@ -949,7 +970,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   card: {
-    display: "flex",
     backgroundColor: "#ffffff",
     borderRadius: 14,
     padding: 14,
@@ -959,7 +979,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
     gap: 10,
-    alignItems: "center",
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  appointmentList: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  appointmentListContent: {
+    width: "100%",
+  },
+  kpiLoader: {
+    height: 27,
+    alignSelf: "flex-start",
+    justifyContent: "center",
   },
   cardTitle: {
     fontSize: 17,

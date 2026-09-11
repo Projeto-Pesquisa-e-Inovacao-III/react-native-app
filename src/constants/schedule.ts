@@ -90,5 +90,5 @@ export function getAppointmentResumes(alunoId: number, page = 0, size = 3) {
 }
 
 export async function getScheduleData() {
-  return api.get('/agendamentos/kpis');
+  return api.get('/historico-agendamento/total-status');
 }
