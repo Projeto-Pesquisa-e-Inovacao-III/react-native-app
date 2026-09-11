@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,10 @@ import {
   UIManager,
 } from 'react-native';
 import { statusProperties } from '../../../src/constants/cardStatus';
-import { Bell } from 'lucide-react-native';
+import { Bell, Calendar as CalendarIcon } from 'lucide-react-native';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import DateRangePickerModal, { type DateRange } from '../../../src/components/modals/DateRangePickerModal';
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import {
@@ -289,6 +292,9 @@ type FilterBarProps = {
   onStatusChange: (v: string) => void;
   hasFilters: boolean;
   onClear: () => void;
+  hasDateFilter?: boolean;
+  activeDateLabel?: string;
+  onClearDate?: () => void;
 };
 
 function FilterBar({
@@ -298,6 +304,9 @@ function FilterBar({
   onStatusChange,
   hasFilters,
   onClear,
+  hasDateFilter,
+  activeDateLabel,
+  onClearDate,
 }: FilterBarProps) {
   return (
     <View style={styles.filterContainer}>
@@ -337,6 +346,18 @@ function FilterBar({
         ))}
       </ScrollView>
 
+      {hasDateFilter && (
+        <View style={styles.dateFilterChipRow}>
+          <View style={styles.dateFilterChip}>
+            <CalendarIcon size={13} color="#f59e0b" />
+            <Text style={styles.dateFilterChipText}>Data: {activeDateLabel}</Text>
+            <TouchableOpacity onPress={onClearDate} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <CloseIcon size={13} color="#f59e0b" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {hasFilters && (
         <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.8}>
           <RefreshIcon size={14} color="#ffffff" />
@@ -371,6 +392,8 @@ export default function CheckScheduleScreen() {
 
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({ start: '', end: '' });
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -427,11 +450,18 @@ export default function CheckScheduleScreen() {
   const loadData = useCallback(
     async (pageNum: number, replace: boolean) => {
       try {
+        const initialDateParam = selectedDateRange.start
+          ? `${selectedDateRange.start}T00:00:00`
+          : undefined;
+        const finalDateParam = selectedDateRange.end
+          ? `${selectedDateRange.end}T23:59:59`
+          : undefined;
+
         const res = await findPersonalRequests(
           pageNum,
           '10',
-          undefined,
-          undefined,
+          initialDateParam,
+          finalDateParam,
           statusFilter || undefined,
           undefined,
           nameFilter || undefined,
@@ -447,7 +477,7 @@ export default function CheckScheduleScreen() {
         // Silenciosamente define lista vazia ou falha sem popup
       }
     },
-    [statusFilter, nameFilter],
+    [statusFilter, nameFilter, selectedDateRange],
   );
 
   const loadKpis = useCallback(async () => {
@@ -463,7 +493,7 @@ export default function CheckScheduleScreen() {
     setLoading(true);
     setPage(0);
     Promise.all([loadData(0, true), loadKpis()]).finally(() => setLoading(false));
-  }, [statusFilter, nameFilter]);
+  }, [statusFilter, nameFilter, selectedDateRange]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -545,13 +575,26 @@ export default function CheckScheduleScreen() {
 
   function handleCardPress(_id: number) {}
 
-  const activeFiltersCount = (nameFilter ? 1 : 0) + (statusFilter ? 1 : 0);
+  const hasDateFilter = !!(selectedDateRange.start && selectedDateRange.end);
+  const activeFiltersCount = (nameFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0);
   const hasFilters = activeFiltersCount > 0;
 
   function clearFilters() {
     setNameFilter('');
     setStatusFilter('');
+    setSelectedDateRange({ start: '', end: '' });
   }
+
+  const activeDateLabel = useMemo(() => {
+    if (!hasDateFilter) return '';
+    try {
+      const s = format(parseISO(`${selectedDateRange.start}T00:00:00`), 'dd/MM/yy', { locale: ptBR });
+      const e = format(parseISO(`${selectedDateRange.end}T00:00:00`), 'dd/MM/yy', { locale: ptBR });
+      return `${s} até ${e}`;
+    } catch {
+      return `${selectedDateRange.start} - ${selectedDateRange.end}`;
+    }
+  }, [hasDateFilter, selectedDateRange]);
 
   const activeStatusLabel = STATUS_OPTIONS.find((s) => s.value === statusFilter)?.label;
 
@@ -619,18 +662,6 @@ export default function CheckScheduleScreen() {
               <View style={styles.titleWrapper}>
                 <Text style={styles.title}>Solicitações de Agendamentos</Text>
               </View>
-              <TouchableOpacity
-                style={styles.bellBtn}
-                onPress={() => setIsNotificationModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Bell size={18} color="#ffffff" />
-                {unreadCount > 0 && (
-                  <View style={styles.bellBadge}>
-                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
             </View>
 
           </View>
@@ -656,24 +687,37 @@ export default function CheckScheduleScreen() {
           )}
 
           {!isPanelOpen && (
-            <TouchableOpacity
-              style={[styles.togglePanelBtn, isPanelOpen && styles.togglePanelBtnActive]}
-              onPress={togglePanel}
-              activeOpacity={0.8}
-            >
-              <SlidersIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
-              <Text style={[styles.togglePanelBtnText, isPanelOpen && styles.togglePanelBtnTextActive]}>
-                Filtros e KPIs
-              </Text>
-              {hasFilters && !isPanelOpen && (
-                <View style={styles.activeFilterBadge}>
-                  <Text style={styles.activeFilterBadgeText}>{activeFiltersCount}</Text>
-                </View>
-              )}
-              <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
-                <ChevronDownIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
-              </Animated.View>
-            </TouchableOpacity>
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.togglePanelBtn, styles.togglePanelBtnFlex, isPanelOpen && styles.togglePanelBtnActive]}
+                onPress={togglePanel}
+                activeOpacity={0.8}
+              >
+                <SlidersIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
+                <Text style={[styles.togglePanelBtnText, isPanelOpen && styles.togglePanelBtnTextActive]}>
+                  Filtros e KPIs
+                </Text>
+                {hasFilters && !isPanelOpen && (
+                  <View style={styles.activeFilterBadge}>
+                    <Text style={styles.activeFilterBadgeText}>{activeFiltersCount}</Text>
+                  </View>
+                )}
+                <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
+                  <ChevronDownIcon size={16} color={isPanelOpen ? '#1a1a1a' : '#ffffff'} />
+                </Animated.View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.calendarToggleBtn,
+                  hasDateFilter && styles.calendarToggleBtnActive,
+                ]}
+                onPress={() => setIsCalendarModalOpen(true)}
+                activeOpacity={0.8}
+              >
+                <CalendarIcon size={18} color={hasDateFilter ? '#ffffff' : '#ffffff'} />
+              </TouchableOpacity>
+            </View>
           )}
 
           <Animated.View
@@ -740,22 +784,41 @@ export default function CheckScheduleScreen() {
                 onStatusChange={setStatusFilter}
                 hasFilters={hasFilters}
                 onClear={clearFilters}
+                hasDateFilter={hasDateFilter}
+                activeDateLabel={activeDateLabel}
+                onClearDate={() => {
+                  setSelectedDateRange({ start: '', end: '' });
+                }}
               />
 
               {isPanelOpen && (
-                <TouchableOpacity
-                  style={[styles.togglePanelBtn, styles.togglePanelBtnActive]}
-                  onPress={togglePanel}
-                  activeOpacity={0.8}
-                >
-                  <SlidersIcon size={16} color="#1a1a1a" />
-                  <Text style={[styles.togglePanelBtnText, styles.togglePanelBtnTextActive]}>
-                    Filtros e KPIs
-                  </Text>
-                  <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
-                    <ChevronDownIcon size={16} color="#1a1a1a" />
-                  </Animated.View>
-                </TouchableOpacity>
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    style={[styles.togglePanelBtn, styles.togglePanelBtnFlex, styles.togglePanelBtnActive]}
+                    onPress={togglePanel}
+                    activeOpacity={0.8}
+                  >
+                    <SlidersIcon size={16} color="#1a1a1a" />
+                    <Text style={[styles.togglePanelBtnText, styles.togglePanelBtnTextActive]}>
+                      Filtros e KPIs
+                    </Text>
+                    <Animated.View style={{ transform: [{ rotate: rotateChevron }] }}>
+                      <ChevronDownIcon size={16} color="#1a1a1a" />
+                    </Animated.View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.calendarToggleBtn,
+                      styles.calendarToggleBtnPanelOpen,
+                      hasDateFilter && styles.calendarToggleBtnActive,
+                    ]}
+                    onPress={() => setIsCalendarModalOpen(true)}
+                    activeOpacity={0.8}
+                  >
+                    <CalendarIcon size={18} color="#1a1a1a" />
+                  </TouchableOpacity>
+                </View>
               )}
 
             </View>
@@ -856,6 +919,15 @@ export default function CheckScheduleScreen() {
         visible={isNotificationModalVisible}
         onClose={() => setIsNotificationModalVisible(false)}
       />
+
+      <DateRangePickerModal
+        visible={isCalendarModalOpen}
+        initialRange={selectedDateRange}
+        onClose={() => setIsCalendarModalOpen(false)}
+        onApply={(range) => {
+          setSelectedDateRange(range);
+        }}
+      />
     </View>
   );
 }
@@ -938,6 +1010,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
 
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
   togglePanelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -950,6 +1028,32 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 8,
     width: '100%',
+  },
+  togglePanelBtnFlex: {
+    flex: 1,
+    width: undefined,
+    height: 42,
+    paddingVertical: 0,
+  },
+  calendarToggleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: '#273c50',
+    borderWidth: 1,
+    borderColor: '#3c5a78',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  calendarToggleBtnPanelOpen: {
+    marginTop: 12,
+    backgroundColor: '#f59e0b',
+    borderColor: '#d97706',
+  },
+  calendarToggleBtnActive: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#d97706',
   },
   togglePanelBtnActive: {
     marginTop: 12,
@@ -1120,6 +1224,27 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: '#1a1a1a',
     fontWeight: '700',
+  },
+
+  dateFilterChipRow: {
+    paddingTop: 8,
+  },
+  dateFilterChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    alignSelf: 'flex-start' as const,
+  },
+  dateFilterChipText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#92400e',
   },
 
   clearBtn: {
