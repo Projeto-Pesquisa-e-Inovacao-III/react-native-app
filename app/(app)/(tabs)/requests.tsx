@@ -143,7 +143,18 @@ function AppointmentCard({
   onAbsence,
   onPress,
 }: CardProps) {
-  const address = `${card.endereco.cep.logradouro}, ${card.endereco.numero} - ${card.endereco.cep.bairro} - ${card.endereco.cep.uf}`;
+  const address = [
+    card.endereco?.cep?.logradouro,
+    card.endereco?.numero,
+    card.endereco?.complemento,
+    card.endereco?.cep?.bairro,
+    card.endereco?.cep?.localidade,
+  ].filter(Boolean).join(', ') || [
+    card.endereco?.cep?.logradouro,
+    card.endereco?.numero,
+    card.endereco?.cep?.bairro,
+    card.endereco?.cep?.uf,
+  ].filter(Boolean).join(' - ') || 'Endereço não informado';
   const isPendingApproval = card.status === 'PENDENTE_PERSONAL_APROVACAO';
   const isApproved = card.status === 'APROVADO';
   const isPendingConclusion =

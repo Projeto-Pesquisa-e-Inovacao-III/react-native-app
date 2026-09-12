@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,7 @@ import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import AiPanelModal from "../../../src/components/modals/AiPanelModal";
 import QRCodeDisplayModal, { type AppointmentForQr } from "../../../src/components/modals/QRCodeDisplayModal";
+import PopupModal, { type PopupAppointment } from "../../../src/components/modals/PopupModal";
 import {
   findUserAppointments,
   appointmentAtCalendar,
@@ -29,7 +30,7 @@ import {
 } from "../../../src/constants/schedule";
 import { getTotalByClassType } from "../../../src/constants/overview";
 import { actualPlan as getActualPlan } from "../../../src/constants/products";
-import { appoitmentsCount } from "../../../src/constants/personal";
+import { appoitmentsCount, getPersonalHours } from "../../../src/constants/personal";
 import { findUserData } from "../../../src/constants/user";
 import type { AnaliseIa } from "../../../src/models/schedule";
 
@@ -58,10 +59,13 @@ type AppointmentItem = {
   descricao?: string;
   analiseIa?: AnaliseIa;
   endereco?: {
+    logradouro?: string;
     bairro?: string;
     cidade?: string;
-    logradouro?: string;
+    uf?: string;
     numero?: string;
+    complemento?: string;
+    postalCode?: string;
   };
 };
 
@@ -192,7 +196,22 @@ function normalizeAppointment(data: unknown): AppointmentItem | null {
     caminhoFoto: typeof item.caminhoFoto === "string" ? item.caminhoFoto : undefined,
     descricao: typeof item.descricao === "string" ? item.descricao : undefined,
     analiseIa: item.analiseIa as AnaliseIa | undefined,
-    endereco: item.endereco as AppointmentItem["endereco"] | undefined,
+    endereco: (() => {
+      const end = item.endereco as Record<string, unknown> | undefined;
+      if (!end) return undefined;
+      const cep = end.cep && typeof end.cep === 'object'
+        ? (end.cep as Record<string, unknown>)
+        : undefined;
+      return {
+        logradouro: String(cep?.logradouro ?? end.logradouro ?? ''),
+        bairro: String(cep?.bairro ?? end.bairro ?? ''),
+        cidade: String(cep?.localidade ?? end.localidade ?? end.cidade ?? ''),
+        uf: String(cep?.uf ?? end.uf ?? ''),
+        numero: String(end.numero ?? ''),
+        complemento: String(end.complemento ?? ''),
+        postalCode: String(cep?.id ?? cep?.cep ?? ''),
+      };
+    })(),
   };
 }
 
@@ -268,9 +287,13 @@ function AppointmentRow({
   onShowQrCode?: (item: AppointmentItem) => void;
 }) {
   const personName = isAluno ? item.personalNome : item.alunoNome;
-  const address = [item.endereco?.bairro, item.endereco?.cidade]
-    .filter(Boolean)
-    .join(", ");
+  const address = [
+    item.endereco?.logradouro,
+    item.endereco?.numero,
+    item.endereco?.complemento,
+    item.endereco?.bairro,
+    item.endereco?.cidade,
+  ].filter(Boolean).join(", ");
   const isPendingConclusion = item.agendamentoStatus === "PENDENTE_PERSONAL_CONCLUIR";
   const isApproved = item.agendamentoStatus === "APROVADO";
 
@@ -372,6 +395,10 @@ export default function OverviewScreen({
   const [selectedAiAppointment, setSelectedAiAppointment] = useState<AppointmentItem | null>(null);
   const [selectedQrAppointment, setSelectedQrAppointment] = useState<AppointmentForQr | null>(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [popupModalVisible, setPopupModalVisible] = useState(false);
+  const [popupDate, setPopupDate] = useState("");
+  const [popupAppointments, setPopupAppointments] = useState<PopupAppointment[]>([]);
+  const [unavailableDates, setUnavailableDates] = useState<string[]>([]);
 
   const appointmentsQuery = useQuery({
     queryKey: ["overview", "appointments"],
@@ -484,10 +511,25 @@ export default function OverviewScreen({
     : appointmentsQuery.data?.length
       ? appointmentsQuery.data
       : calendarAppointmentDetailsQuery.data ?? [];
-  const displayedCalendarEvents = [
-    ...(propsCalendarEvents.length ? propsCalendarEvents : calendarQuery.data ?? []),
-    ...displayedAppointments.map((appointment) => ({ data: appointment.data })),
-  ];
+  // Usa SEMPRE o endpoint /agendamentos/calendario como fonte dos marcadores do
+  // calendário (dots). Esse endpoint é controlado pelo backend e devolve apenas
+  // os agendamentos que devem aparecer no calendário — sem histórico completo.
+  const displayedCalendarEvents = useMemo(() => {
+    if (propsCalendarEvents.length > 0) {
+      return propsCalendarEvents;
+    }
+
+    const source: CalendarEvent[] = calendarQuery.data ?? [];
+
+    const seen = new Set<number>();
+    return source.filter((ev) => {
+      if (ev.agendamentoId !== undefined && ev.agendamentoId !== null) {
+        if (seen.has(ev.agendamentoId)) return false;
+        seen.add(ev.agendamentoId);
+      }
+      return true;
+    });
+  }, [propsCalendarEvents, calendarQuery.data]);
   const actualPlan = propsActualPlan ?? planQuery.data ?? null;
   const classBalance = propsClassBalance ?? classBalanceQuery.data;
   const todayAppointments =
@@ -501,6 +543,54 @@ export default function OverviewScreen({
   const calendarDisabledDays = disabledDays.length
     ? disabledDays
     : disabledDaysQuery.data ?? [];
+
+  // Checa disponibilidade dos próximos 14 dias para bloquear datas sem horário
+  useEffect(() => {
+    let isMounted = true;
+    async function checkUpcomingAvailability() {
+      const pid = personalQuery.data;
+      if (!pid) return;
+
+      const datesToDisable: string[] = [];
+      const base = new Date();
+      const promises = [];
+
+      for (let i = 1; i <= 14; i++) {
+        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dayStr = String(d.getDate()).padStart(2, '0');
+        const isoDate = `${y}-${m}-${dayStr}`;
+
+        const WEEKDAY_PT: Record<number, string> = {
+          0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sabado',
+        };
+        const weekday = WEEKDAY_PT[d.getDay()];
+        if (calendarDisabledDays.includes(weekday)) continue;
+
+        promises.push(
+          getPersonalHours(pid, isoDate, 'PRESENCIAL')
+            .then((res) => {
+              const hours = res.data;
+              if (!Array.isArray(hours) || hours.length === 0) {
+                datesToDisable.push(isoDate);
+              }
+            })
+            .catch(() => {})
+        );
+      }
+
+      await Promise.all(promises);
+      if (isMounted && datesToDisable.length > 0) {
+        setUnavailableDates((prev) => Array.from(new Set([...prev, ...datesToDisable])));
+      }
+    }
+
+    checkUpcomingAvailability();
+    return () => {
+      isMounted = false;
+    };
+  }, [personalQuery.data, calendarDisabledDays]);
   const loading =
     propsLoading ||
     appointmentsQuery.isLoading ||
@@ -511,9 +601,13 @@ export default function OverviewScreen({
       : todayAppointmentsQuery.isLoading || pendingAppointmentsQuery.isLoading);
 
   function handleOpenQr(item: AppointmentItem) {
-    const address = [item.endereco?.logradouro, item.endereco?.numero, item.endereco?.bairro, item.endereco?.cidade]
-      .filter(Boolean)
-      .join(", ");
+    const address = [
+      item.endereco?.logradouro,
+      item.endereco?.numero,
+      item.endereco?.complemento,
+      item.endereco?.bairro,
+      item.endereco?.cidade,
+    ].filter(Boolean).join(", ");
     setSelectedQrAppointment({
       id: item.agendamentoId,
       name: item.personalNome || "Personal Trainer",
@@ -539,6 +633,7 @@ export default function OverviewScreen({
   }
 
   function handleCalendarDayPress(date: string) {
+    setSelectedDate(date);
     const dayAppointments = displayedAppointments.filter(
       (appointment) => appointment.data?.split("T")[0] === date
     );
@@ -546,11 +641,48 @@ export default function OverviewScreen({
     if (dayAppointments.length === 0) {
       if (!isAluno) return;
 
+      // 1. Validação de 24 horas: o aluno só pode marcar aula depois de 24h (a partir de amanhã)
+      const parts = date.split("-").map(Number);
+      if (parts.length === 3) {
+        const clickedDateStart = new Date(parts[0], parts[1] - 1, parts[2]);
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        if (clickedDateStart.getTime() <= todayStart.getTime()) {
+          openError(
+            "Antecedência mínima",
+            "Aulas só podem ser agendadas com pelo menos 24 horas de antecedência. Selecione uma data a partir de amanhã."
+          );
+          return;
+        }
+
+        // 2. Validação de dias da semana em que o personal não atende
+        const WEEKDAY_PT: Record<number, string> = {
+          0: 'domingo',
+          1: 'segunda',
+          2: 'terca',
+          3: 'quarta',
+          4: 'quinta',
+          5: 'sexta',
+          6: 'sabado',
+        };
+        const weekday = WEEKDAY_PT[clickedDateStart.getDay()];
+        if (calendarDisabledDays.includes(weekday)) {
+          openError(
+            "Personal indisponível",
+            "O personal não atende neste dia da semana. Selecione outro dia disponível no calendário."
+          );
+          return;
+        }
+      }
+
+      // 3. Validação de plano ativo
       if (!actualPlan) {
         openError("Erro", "Você precisa ter um plano ativo para agendar uma aula.");
         return;
       }
 
+      // 4. Validação de saldo de aulas
       const hasBalance =
         (classBalance?.saldoPresencial ?? 0) > 0 ||
         (classBalance?.saldoFuncional ?? 0) > 0 ||
@@ -564,27 +696,62 @@ export default function OverviewScreen({
         return;
       }
 
+      // 5. Validação de disponibilidade de horários do personal
+      if (personalQuery.data) {
+        getPersonalHours(personalQuery.data, date, "PRESENCIAL")
+          .then((res) => {
+            const hours = res.data;
+            if (!Array.isArray(hours) || hours.length === 0) {
+              openError(
+                "Sem disponibilidade",
+                "O personal não possui horários disponíveis para esta data. Selecione outro dia no calendário."
+              );
+              return;
+            }
+            setSelectedDate(date);
+            setNewEventVisible(true);
+          })
+          .catch(() => {
+            setSelectedDate(date);
+            setNewEventVisible(true);
+          });
+        return;
+      }
+
       setSelectedDate(date);
       setNewEventVisible(true);
       return;
     }
 
-    const description = dayAppointments
-      .map((appointment) => {
-        const personName = isAluno ? appointment.personalNome : appointment.alunoNome;
-        return [
-          personName || "Sem nome",
-          formatHour(appointment.data) + " - " + formatHour(appointment.datafim),
-          appointment.tipoAula,
-        ].join(" | ");
-      })
-      .join("\n");
+    // Se o dia possuir agendamentos, abre o PopupModal com os detalhes oficiais
+    const mappedAppointments: PopupAppointment[] = dayAppointments.map((appointment) => {
+      const personName = (isAluno ? appointment.personalNome : appointment.alunoNome) || "Personal Trainer";
+      const addr = [
+        appointment.endereco?.logradouro,
+        appointment.endereco?.numero,
+        appointment.endereco?.complemento,
+        appointment.endereco?.bairro,
+        appointment.endereco?.cidade,
+      ]
+        .filter(Boolean)
+        .join(", ") || "Local a combinar";
 
-    setModal({
-      visible: true,
-      title: dayAppointments.length > 1 ? "Agendamentos" : "Agendamento",
-      description: formatDate(date) + "\n\n" + description,
+      return {
+        id: appointment.agendamentoId,
+        agendamentoId: appointment.agendamentoId,
+        name: personName,
+        type: appointment.tipoAula || "Personal",
+        start: appointment.data,
+        end: appointment.datafim || appointment.data,
+        address: addr,
+        status: appointment.agendamentoStatus,
+        photoUrl: appointment.caminhoFoto,
+      };
     });
+
+    setPopupDate(date);
+    setPopupAppointments(mappedAppointments);
+    setPopupModalVisible(true);
   }
 
   function handleModalAction() {
@@ -700,8 +867,10 @@ export default function OverviewScreen({
         ) : null}
 
         <Calendar
+          selectedDate={selectedDate}
           calendarEvents={displayedCalendarEvents}
           disabledDays={calendarDisabledDays}
+          disabledDates={unavailableDates}
           onDayPress={handleCalendarDayPress}
         />
 
@@ -766,6 +935,31 @@ export default function OverviewScreen({
         availableHours={availableHours}
         onClose={() => setNewEventVisible(false)}
         onSubmit={handleScheduleSubmit}
+      />
+
+      {/* PopupModal para visualização de agendamentos do dia */}
+      <PopupModal
+        visible={popupModalVisible}
+        date={popupDate}
+        appointments={popupAppointments}
+        canCreateNewEvent={isAluno}
+        onClose={() => setPopupModalVisible(false)}
+        onNewEvent={() => {
+          setSelectedDate(popupDate);
+          setNewEventVisible(true);
+        }}
+        onShowQrCode={(item) => {
+          setSelectedQrAppointment({
+            id: item.agendamentoId ?? item.id,
+            name: item.name,
+            type: item.type,
+            start: item.start,
+            end: item.end,
+            address: item.address,
+          });
+          setPopupModalVisible(false);
+          setQrModalVisible(true);
+        }}
       />
 
       {/* Modal da Central de Notificações */}

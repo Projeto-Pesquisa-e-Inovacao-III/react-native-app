@@ -10,20 +10,36 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  DEFAULT_PERSONAL,
-  MOCK_ADDRESSES,
-  MOCK_PERSONALS,
-  MOCK_SCHEDULES,
-  type MockAddress,
-  type MockPersonal,
-  type MockSchedule,
-} from "../mocks/newEventMock";
-import { getPersonalList, insertAppointment } from "../constants/schedule";
+import { getPersonalList, insertAppointment, disabledPersonalDays } from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
 import { getUserAddresses, lookupCep } from "../constants/address";
-import { UserAddress } from "../models/address"
 import type { Schedule } from "../models/schedule";
+import SuccessModal from "./modals/SuccessModal";
+import ErrorModal from "./modals/ErrorModal";
+
+export type Personal = {
+  id: number;
+  nome: string;
+  especialidade: string;
+  caminhoFoto?: string;
+};
+
+export type TimeSlot = {
+  startHour: string;
+  endHour: string;
+};
+
+export type SavedAddress = {
+  id: number;
+  label: string;
+  postalCode: string;
+  street: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  number: string;
+  complement: string;
+};
 
 export type NewEventPayload = {
   date: string;
@@ -31,7 +47,7 @@ export type NewEventPayload = {
   endHour: string;
   type: "PRESENCIAL" | "RESIDENCIAL" | "FUNCIONAL";
   location: string;
-  personal: MockPersonal;
+  personal: Personal;
   address: {
     postalCode: string;
     street: string;
@@ -49,9 +65,9 @@ type NewEventProps = {
   onClose: () => void;
   onSubmit?: (payload: NewEventPayload) => void;
   availableHours?: string[];
-  personals?: MockPersonal[];
-  schedules?: MockSchedule[];
-  addresses?: MockAddress[];
+  personals?: Personal[];
+  schedules?: TimeSlot[];
+  addresses?: SavedAddress[];
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";
@@ -86,6 +102,16 @@ function getPeriod(hour: string): TimePeriod {
   return "NOITE";
 }
 
+function isDateAtLeastTomorrow(dateStr: string) {
+  if (!dateStr) return false;
+  const parts = dateStr.split("T")[0].split("-");
+  if (parts.length !== 3) return false;
+  const target = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return target.getTime() > todayStart.getTime();
+}
+
 export default function NewEvent({
   visible,
   initialDate = "",
@@ -96,26 +122,58 @@ export default function NewEvent({
   addresses: propAddresses,
 }: NewEventProps) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [date, setDate] = useState<string>(() => initialDate || getTomorrowDateString());
+  const [date, setDate] = useState<string>(() => {
+    if (initialDate && isDateAtLeastTomorrow(initialDate)) {
+      return initialDate;
+    }
+    return getTomorrowDateString();
+  });
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [errorModal, setErrorModal] = useState<{
+    visible: boolean;
+    title: string;
+    content: string;
+  }>({
+    visible: false,
+    title: "",
+    content: "",
+  });
+  const [savedPayload, setSavedPayload] = useState<NewEventPayload | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      if (initialDate && isDateAtLeastTomorrow(initialDate)) {
+        setDate(initialDate);
+      } else {
+        setDate(getTomorrowDateString());
+      }
+      setStep(1);
+      setError("");
+      setSuccessModalVisible(false);
+      setErrorModal({ visible: false, title: "", content: "" });
+      setSavedPayload(null);
+    }
+  }, [visible, initialDate]);
 
   // Personais
-  const [personalsList, setPersonalsList] = useState<MockPersonal[]>(
+  const [personalsList, setPersonalsList] = useState<Personal[]>(
     propPersonals && propPersonals.length > 0 ? propPersonals : []
   );
   const [loadingPersonals, setLoadingPersonals] = useState(false);
-  const [selectedPersonalId, setSelectedPersonalId] = useState<number>(DEFAULT_PERSONAL.id);
+  const [selectedPersonalId, setSelectedPersonalId] = useState<number | undefined>(undefined);
+  const [disabledWeekdays, setDisabledWeekdays] = useState<string[]>([]);
 
   // Tipo de aula e Horários
   const [type, setType] = useState<NewEventPayload["type"]>("PRESENCIAL");
   const [period, setPeriod] = useState<TimePeriod>("MANHÃ");
   const [startHour, setStartHour] = useState("");
-  const [dynamicSchedules, setDynamicSchedules] = useState<MockSchedule[]>(
+  const [dynamicSchedules, setDynamicSchedules] = useState<TimeSlot[]>(
     propSchedules && propSchedules.length > 0 ? propSchedules : []
   );
   const [loadingHours, setLoadingHours] = useState(false);
 
   // Endereço
-  const [savedAddresses, setSavedAddresses] = useState<MockAddress[]>(
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>(
     propAddresses && propAddresses.length > 0 ? propAddresses : []
   );
   const [loadingAddresses, setLoadingAddresses] = useState(false);
@@ -145,7 +203,7 @@ export default function NewEvent({
         const response = await getPersonalList();
         const rawContent = response.data?.content || response.data;
         if (isMounted && Array.isArray(rawContent) && rawContent.length > 0) {
-          const mapped: MockPersonal[] = rawContent.map((p: any) => ({
+          const mapped: Personal[] = rawContent.map((p: any) => ({
             id: p.id,
             nome: p.nome || p.usuario?.nome || "Personal",
             especialidade: p.especialidade || "Personal Trainer",
@@ -167,6 +225,31 @@ export default function NewEvent({
     };
   }, []);
 
+  // 1b. Carregar dias desabilitados do personal selecionado
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchDisabledDays() {
+      if (!selectedPersonalId) return;
+      try {
+        const res = await disabledPersonalDays(selectedPersonalId);
+        const data = res.data;
+        const list = Array.isArray(data) ? data : data?.content ?? [];
+        const inactive: string[] = Array.from(
+          new Set(
+            list
+              .filter((d: { ativo: boolean; diaSemana: string }) => !d.ativo)
+              .map((d: { ativo: boolean; diaSemana: string }) => d.diaSemana.toLowerCase())
+          )
+        );
+        if (isMounted) setDisabledWeekdays(inactive);
+      } catch {
+        // mantém sem restrição em caso de falha
+      }
+    }
+    fetchDisabledDays();
+    return () => { isMounted = false; };
+  }, [selectedPersonalId]);
+
   // 2. Carregar endereços salvos da API
   useEffect(() => {
     let isMounted = true;
@@ -176,11 +259,12 @@ export default function NewEvent({
         const response = await getUserAddresses();
         const data = response.data;
         if (isMounted && Array.isArray(data) && data.length > 0) {
-          const mapped: MockAddress[] = data.map((addr) => ({
+          const mapped: SavedAddress[] = data.map((addr: any) => ({
             id: addr.id ?? 0,
             label: addr.tipo || "-",
-            postalCode: addr.cep?.cep || addr.cep?.id || "",
+            postalCode: addr.cep?.id || addr.cep?.cep || "",
             street: addr.cep?.logradouro || "",
+            neighborhood: addr.cep?.bairro || "",
             city: addr.cep?.localidade || "",
             state: addr.cep?.uf || "",
             number: addr.numero || "",
@@ -213,7 +297,7 @@ export default function NewEvent({
         const data = response.data;
         if (isMounted) {
           if (Array.isArray(data) && data.length > 0) {
-            const mappedSlots: MockSchedule[] = data.map((slot: any) => ({
+            const mappedSlots: TimeSlot[] = data.map((slot: any) => ({
               startHour: slot.inicio || slot.horaInicio,
               endHour: slot.fim || slot.horaFim,
             }));
@@ -250,7 +334,7 @@ export default function NewEvent({
     return (
       personalsList.find((p) => p.id === selectedPersonalId) ??
       personalsList[0] ??
-      DEFAULT_PERSONAL
+      undefined
     );
   }, [personalsList, selectedPersonalId]);
 
@@ -271,8 +355,19 @@ export default function NewEvent({
   );
 
   // Lista de próximos dias para seleção fácil de data
+  // Mapeia índice do getDay() para o nome PT usado na API (igual ao MonthlyCalendar)
+  const WEEKDAY_PT_NAMES: Record<number, string> = {
+    0: 'domingo',
+    1: 'segunda',
+    2: 'terca',
+    3: 'quarta',
+    4: 'quinta',
+    5: 'sexta',
+    6: 'sabado',
+  };
+
   const upcomingDays = useMemo(() => {
-    const days: { fullDate: string; dayNumber: number; weekDay: string }[] = [];
+    const days: { fullDate: string; dayNumber: number; weekDay: string; isDisabled: boolean }[] = [];
     const base = new Date();
     // Inicia a partir de amanhã devido à regra de 24h de antecedência
     for (let i = 1; i <= 14; i++) {
@@ -281,16 +376,19 @@ export default function NewEvent({
       const month = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
       const weekDay = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+      const weekdayKey = WEEKDAY_PT_NAMES[d.getDay()];
+      const isDisabled = disabledWeekdays.includes(weekdayKey);
       days.push({
         fullDate: `${year}-${month}-${day}`,
         dayNumber: d.getDate(),
         weekDay: weekDay.toUpperCase(),
+        isDisabled,
       });
     }
     return days;
-  }, []);
+  }, [disabledWeekdays]);
 
-  function selectAddress(savedAddress: MockAddress) {
+  function selectAddress(savedAddress: SavedAddress) {
     setSelectedAddressId(savedAddress.id);
     setAddress({
       postalCode: savedAddress.postalCode,
@@ -299,7 +397,7 @@ export default function NewEvent({
       state: savedAddress.state,
       number: savedAddress.number,
       complement: savedAddress.complement,
-      neighborhood: "",
+      neighborhood: savedAddress.neighborhood || "",
     });
   }
 
@@ -336,8 +434,41 @@ export default function NewEvent({
 
   function goToAddress() {
     if (!date || !startHour) {
-      setError("Selecione uma data e um horário disponível.");
+      const msg = "Selecione uma data e um horário disponível para avançar.";
+      setError(msg);
+      setErrorModal({
+        visible: true,
+        title: "Atenção!",
+        content: msg,
+      });
       return;
+    }
+
+    // Validação estrita de 24 horas de antecedência
+    const parts = date.split("-").map(Number);
+    const hourParts = startHour.split(":").map(Number);
+    if (parts.length === 3 && hourParts.length >= 2) {
+      const scheduledDateTime = new Date(
+        parts[0],
+        parts[1] - 1,
+        parts[2],
+        hourParts[0],
+        hourParts[1],
+        0
+      );
+      const now = new Date();
+      const diffHours = (scheduledDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (diffHours < 24) {
+        const msg = "Aulas só podem ser agendadas com pelo menos 24 horas de antecedência.";
+        setError(msg);
+        setErrorModal({
+          visible: true,
+          title: "Antecedência mínima",
+          content: msg,
+        });
+        return;
+      }
     }
 
     setError("");
@@ -352,7 +483,13 @@ export default function NewEvent({
       !address.city ||
       !address.state
     ) {
-      setError("Preencha todos os dados obrigatórios do endereço.");
+      const msg = "Preencha todos os dados obrigatórios do endereço (CEP, logradouro, número, cidade e estado).";
+      setError(msg);
+      setErrorModal({
+        visible: true,
+        title: "Endereço incompleto",
+        content: msg,
+      });
       return;
     }
 
@@ -379,7 +516,7 @@ export default function NewEvent({
           uf: address.state,
         },
       },
-      personalId: Number(selectedPersonal.id),
+      personalId: Number(selectedPersonal?.id ?? 0),
       tipoAulaProdutoContratado: type,
     };
 
@@ -389,22 +526,18 @@ export default function NewEvent({
     try {
       await insertAppointment(apiPayload);
 
-      // Notifica o componente pai para atualizar a tela
-      onSubmit?.({
+      const payload: NewEventPayload = {
         date,
         startHour,
         endHour,
         type,
         location: type,
-        personal: selectedPersonal,
+        personal: selectedPersonal!, // selectedPersonal existe pois validamos acima
         address,
-      });
+      };
 
-      Alert.alert(
-        "Agendamento solicitado!",
-        "Sua solicitação de aula foi enviada com sucesso ao personal trainer.",
-        [{ text: "OK", onPress: onClose }]
-      );
+      setSavedPayload(payload);
+      setSuccessModalVisible(true);
     } catch (err: any) {
       const responseData = err?.response?.data;
       const apiMessage =
@@ -413,9 +546,22 @@ export default function NewEvent({
         responseData?.mensagem ||
         "Não foi possível concluir o agendamento. Verifique se você possui saldo de aulas deste tipo e tente novamente.";
       setError(apiMessage);
+      setErrorModal({
+        visible: true,
+        title: "Não foi possível agendar",
+        content: apiMessage,
+      });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleSuccessClose() {
+    setSuccessModalVisible(false);
+    if (savedPayload) {
+      onSubmit?.(savedPayload);
+    }
+    onClose();
   }
 
   return (
@@ -449,7 +595,7 @@ export default function NewEvent({
               contentContainerStyle={styles.personalRow}
             >
               {personalsList.map((personal) => {
-                const isSelected = selectedPersonal.id === personal.id;
+                const isSelected = selectedPersonal?.id === personal.id;
                 return (
                   <Pressable
                     key={personal.id}
@@ -501,13 +647,19 @@ export default function NewEvent({
                 return (
                   <Pressable
                     key={item.fullDate}
-                    style={[styles.dayCard, isDaySelected && styles.dayCardSelected]}
-                    onPress={() => setDate(item.fullDate)}
+                    style={[
+                      styles.dayCard,
+                      isDaySelected && styles.dayCardSelected,
+                      item.isDisabled && styles.dayCardDisabled,
+                    ]}
+                    onPress={() => !item.isDisabled && setDate(item.fullDate)}
+                    disabled={item.isDisabled}
                   >
                     <Text
                       style={[
                         styles.dayWeekText,
                         isDaySelected && styles.daySelectedText,
+                        item.isDisabled && styles.dayDisabledText,
                       ]}
                     >
                       {item.weekDay}
@@ -516,6 +668,7 @@ export default function NewEvent({
                       style={[
                         styles.dayNumberText,
                         isDaySelected && styles.daySelectedText,
+                        item.isDisabled && styles.dayDisabledText,
                       ]}
                     >
                       {item.dayNumber}
@@ -629,7 +782,7 @@ export default function NewEvent({
           <>
             <View style={styles.summary}>
               <Text style={styles.summaryTitle}>Resumo do agendamento</Text>
-              <Text style={styles.summaryText}>Personal: {selectedPersonal.nome}</Text>
+              <Text style={styles.summaryText}>Personal: {selectedPersonal?.nome ?? '-'}</Text>
               <Text style={styles.summaryText}>Data: {formatDate(date)}</Text>
               <Text style={styles.summaryText}>Horário: {startHour}</Text>
               <Text style={styles.summaryText}>Tipo de aula: {type}</Text>
@@ -777,6 +930,27 @@ export default function NewEvent({
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
+
+      {/* Modal de Sucesso */}
+      <SuccessModal
+        visible={successModalVisible}
+        title="Agendamento solicitado!"
+        content="Sua solicitação de aula foi enviada com sucesso ao personal trainer."
+        useNativeModal={false}
+        onClose={handleSuccessClose}
+      />
+
+      {/* Modal de Erro */}
+      {errorModal.visible && (
+        <ErrorModal
+          visible={errorModal.visible}
+          title={errorModal.title}
+          content={errorModal.content}
+          useNativeModal={false}
+          closeThen={() => setErrorModal({ visible: false, title: "", content: "" })}
+          onClose={() => setErrorModal({ visible: false, title: "", content: "" })}
+        />
+      )}
     </Modal>
   );
 }
@@ -900,6 +1074,13 @@ const styles = StyleSheet.create({
   dayCardSelected: {
     backgroundColor: "#0f567f",
     borderColor: "#0f567f",
+  },
+  dayCardDisabled: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#e2e8f0",
+  },
+  dayDisabledText: {
+    color: "#475569",
   },
   dayWeekText: {
     fontSize: 11,
@@ -1072,7 +1253,7 @@ const styles = StyleSheet.create({
   backText: {
     color: "#0f567f",
     fontWeight: "700",
-    fontSize: 15,
+    fontSize: 16,
   },
   error: {
     color: "#b3393a",
@@ -1087,7 +1268,6 @@ const styles = StyleSheet.create({
   },
   submit: {
     flex: 1,
-    marginTop: 22,
     backgroundColor: "#0f567f",
     borderRadius: 12,
     padding: 14,
