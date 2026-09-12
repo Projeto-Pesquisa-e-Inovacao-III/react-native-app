@@ -76,6 +76,8 @@ export type CheckSchedule = {
       uf: string;
     };
     numero: string;
+    complemento?: string;
+    tipo?: string;
   };
   telefone: {
     ddd: string;

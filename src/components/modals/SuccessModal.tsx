@@ -13,9 +13,16 @@ type Props = {
   title?: string;
   content?: string;
   onClose: () => void;
+  useNativeModal?: boolean;
 };
 
-export default function SuccessModal({ visible, title, content, onClose }: Props) {
+export default function SuccessModal({
+  visible,
+  title,
+  content,
+  onClose,
+  useNativeModal = true,
+}: Props) {
   const scaleAnim = useState(new Animated.Value(0.85))[0];
   const fadeAnim = useState(new Animated.Value(0))[0];
 
@@ -31,30 +38,48 @@ export default function SuccessModal({ visible, title, content, onClose }: Props
     }
   }, [visible]);
 
+  if (!visible) return null;
+
+  const contentElement = (
+    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+      <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
+        {/* Checkmark */}
+        <View style={styles.iconWrapper}>
+          <View style={styles.iconCircle}>
+            <Text style={styles.checkmark}>✓</Text>
+          </View>
+        </View>
+
+        <Text style={styles.title}>{title ?? 'Sucesso!'}</Text>
+        <Text style={styles.content}>{content ?? 'Operação realizada com sucesso.'}</Text>
+
+        <TouchableOpacity style={styles.btn} onPress={onClose}>
+          <Text style={styles.btnText}>Fechar</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </Animated.View>
+  );
+
+  if (!useNativeModal) {
+    return (
+      <View style={[StyleSheet.absoluteFillObject, styles.wrapperZIndex]}>
+        {contentElement}
+      </View>
+    );
+  }
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-        <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
-          {/* Checkmark */}
-          <View style={styles.iconWrapper}>
-            <View style={styles.iconCircle}>
-              <Text style={styles.checkmark}>✓</Text>
-            </View>
-          </View>
-
-          <Text style={styles.title}>{title ?? 'Sucesso!'}</Text>
-          <Text style={styles.content}>{content ?? 'Operação realizada com sucesso.'}</Text>
-
-          <TouchableOpacity style={styles.btn} onPress={onClose}>
-            <Text style={styles.btnText}>Fechar</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </Animated.View>
+      {contentElement}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapperZIndex: {
+    zIndex: 99999,
+    elevation: 99999,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',

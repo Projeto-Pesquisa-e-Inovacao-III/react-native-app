@@ -25,6 +25,34 @@ export function actualPlan() {
   return api.get('/produtos-contratados/ativo');
 }
 
+export type UserPlanItem = {
+  id: number;
+  situacao?: boolean;
+  dataCompra: string;
+  dataExpiracao?: string;
+  saldoAula?: number;
+  produtoExibicao: {
+    id?: number;
+    titulo: string;
+    subtitulo: string;
+    descricao?: string;
+    tipoAula?: string;
+    preco?: number;
+    tipoProduto?: string;
+  };
+};
+
+export type BoughtPlanDetailsResponse = {
+  id: number;
+  nomeComprador: string;
+  emailComprador: string;
+  telefone: string;
+  cpf: string;
+  produtoComprado: string;
+  valorCompra: number;
+  dataCompra: string;
+};
+
 export function getUserPlansHistory(
   pageParam = 0,
   size = '10',
@@ -32,9 +60,9 @@ export function getUserPlansHistory(
   finalDate?: string,
   name?: string,
 ) {
-  return api.get('/produtos-contratados', {
+  return api.get<{ content: UserPlanItem[]; page?: any }>('/produtos-contratados', {
     params: {
-      ...(initialDate && { dataInic: initialDate }),
+      ...(initialDate && { dataInic: initialDate, dataInicio: initialDate }),
       ...(finalDate && { dataFim: finalDate }),
       ...(name && { nomeProduto: name }),
       page: pageParam,
@@ -44,9 +72,10 @@ export function getUserPlansHistory(
 }
 
 export function BoughtPlanDetails(id: number) {
-  return api.get(`/produtos-contratados/detalhado/${id}`);
+  return api.get<BoughtPlanDetailsResponse>(`/produtos-contratados/detalhado/${id}`);
 }
 
 export function verifyNumberOfPackages() {
   return api.get('/produtos-exibicoes/check-limit');
 }
+

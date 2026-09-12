@@ -3,43 +3,72 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity } from "react-native";
 import SmallerButton from "../SmallerButton";
 
 type ErrorModalProps = {
-  closeThen: React.Dispatch<React.SetStateAction<boolean>>;
+  closeThen?: React.Dispatch<React.SetStateAction<boolean>> | ((val: boolean) => void) | (() => void);
   title?: string;
   content?: string;
+  visible?: boolean;
+  onClose?: () => void;
+  useNativeModal?: boolean;
 };
 
-export default function ErrorModal({ closeThen, title, content }: ErrorModalProps) {
+export default function ErrorModal({
+  closeThen,
+  title,
+  content,
+  visible = true,
+  onClose,
+  useNativeModal = true,
+}: ErrorModalProps) {
   const handleClose = () => {
-    closeThen(false);
+    onClose?.();
+    closeThen?.(false as any);
   };
 
-  return (
-    <Modal transparent animationType="fade" visible={true} onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalCard}>
-          <Text style={styles.title}>{title || "Atenção!"}</Text>
-          <Text style={styles.contentModal}>{content || "Ocorreu um erro."}</Text>
+  if (!visible) return null;
 
-          {/* Ícone de Erro SVG nativo equivalente */}
-          <View style={styles.iconContainer}>
-            <View style={styles.svgCircle}>
-              <Text style={styles.svgCross}>✕</Text>
-            </View>
+  const contentElement = (
+    <View style={styles.overlay}>
+      <View style={styles.modalCard}>
+        <Text style={styles.title}>{title || "Atenção!"}</Text>
+        <Text style={styles.contentModal}>{content || "Ocorreu um erro."}</Text>
+
+        {/* Ícone de Erro SVG nativo equivalente */}
+        <View style={styles.iconContainer}>
+          <View style={styles.svgCircle}>
+            <Text style={styles.svgCross}>✕</Text>
           </View>
-
-          <SmallerButton
-            classname={styles.buttonStyle}
-            type="button"
-            title="Fechar"
-            handleButtonClick={handleClose}
-          />
         </View>
+
+        <SmallerButton
+          classname={styles.buttonStyle}
+          type="button"
+          title="Fechar"
+          handleButtonClick={handleClose}
+        />
       </View>
+    </View>
+  );
+
+  if (!useNativeModal) {
+    return (
+      <View style={[StyleSheet.absoluteFillObject, styles.wrapperZIndex]}>
+        {contentElement}
+      </View>
+    );
+  }
+
+  return (
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={handleClose}>
+      {contentElement}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapperZIndex: {
+    zIndex: 99999,
+    elevation: 99999,
+  },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
