@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Banknote, Boxes, Clock, History as HistoryIcon, IdCard, LogOut, User, ChevronRight, Calendar, Bell } from 'lucide-react-native';
+import { Banknote, Boxes, Clock, History as HistoryIcon, IdCard, LogOut, User, ChevronRight, Calendar, Bell, ChartLine } from 'lucide-react-native';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { findUserData } from '../../../src/constants/user';
@@ -102,6 +102,7 @@ export default function MoreRoute() {
             {/* personal e admin */}
             {roles?.includes("personal") && roles?.includes("admin") && (
               <>
+                <OptionItem icon={<ChartLine size={22} color="#192633"/>} title='Dashboard' onClick={() => router.push("/dashboard")}/>
                 <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/schedule")} />
                 <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
                 <OptionItem icon={<Clock size={22} color="#192633" />} title='Ajustar disponibilidade' onClick={() => router.push("/set-availability")} />
