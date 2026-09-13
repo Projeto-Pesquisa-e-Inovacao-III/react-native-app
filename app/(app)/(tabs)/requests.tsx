@@ -40,6 +40,8 @@ import SuccessModal from '../../../src/components/modals/SuccessModal';
 import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeAppointmentModal';
 import QRCodeScannerModal from '../../../src/components/modals/QRCodeScannerModal';
 import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
+import CancelAppointmentModal, { type CancelAppointmentData } from '../../../src/components/modals/CancelAppointmentModal';
+import NewEvent from '../../../src/components/NewEvent';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import {
@@ -126,7 +128,8 @@ type CardProps = {
   isTablet: boolean;
   onAccept: (id: number) => void;
   onDecline: (id: number) => void;
-  onReschedule: (id: number, date: string) => void;
+  onReschedule: (id: number, date: string, type?: string, studentName?: string, studentPhoto?: string) => void;
+  onCancelApproved: (card: CheckSchedule) => void;
   onConclude: (id: number) => void;
   onAbsence: (id: number) => void;
   onPress: (id: number) => void;
@@ -139,6 +142,7 @@ function AppointmentCard({
   onAccept,
   onDecline,
   onReschedule,
+  onCancelApproved,
   onConclude,
   onAbsence,
   onPress,
@@ -229,7 +233,7 @@ function AppointmentCard({
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '')}
+                onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '', card.tipoAula, card.nome, card.foto)}
                 activeOpacity={0.7}
               >
                 <CalendarClockIcon size={22} color="#3b82f6" />
@@ -241,7 +245,7 @@ function AppointmentCard({
             <>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => onDecline(card.agendamentoId)}
+                onPress={() => onCancelApproved(card)}
                 activeOpacity={0.7}
               >
                 <CircleXIcon size={22} color="#ef4444" />
@@ -249,7 +253,7 @@ function AppointmentCard({
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '')}
+                onPress={() => onReschedule(card.agendamentoId, card.dataInicio?.split('T')[0] ?? '', card.tipoAula, card.nome, card.foto)}
                 activeOpacity={0.7}
               >
                 <CalendarClockIcon size={22} color="#3b82f6" />
@@ -380,7 +384,7 @@ function FilterBar({
 }
 
 export default function CheckScheduleScreen() {
-  const { roles } = useAuth();
+  const { user, roles } = useAuth();
   const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
   const isNarrow = width < 360;
@@ -417,6 +421,14 @@ export default function CheckScheduleScreen() {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedId, setSelectedId] = useState<number>(0);
   const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
+  const [rescheduleData, setRescheduleData] = useState<{
+    appointmentId: number;
+    date: string;
+    type?: string;
+    studentName?: string;
+    studentPhoto?: string;
+  } | null>(null);
+  const [cancelAppointment, setCancelAppointment] = useState<CancelAppointmentData | null>(null);
 
   function togglePanel() {
     const nextState = !isPanelOpen;
@@ -571,17 +583,63 @@ export default function CheckScheduleScreen() {
     setSuccessInfo({ title: 'Ausência Registrada', content: 'A ausência foi registrada com sucesso.' });
   }
 
-  function handleReschedule(id: number, _date: string) {
-    Alert.alert('Reagendar', `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`);
-    // Quando implementado, chamar:
-    // const item = appointments.find((r) => r.agendamentoId === id);
-    // scheduleRescheduleNotification({
-    //   studentName: item?.nome || 'Aluno',
-    //   personalName: 'Personal Trainer',
-    //   classType: item?.tipoAula || 'Aula',
-    //   date: novaData,
-    //   time: novoHorario,
-    // });
+  function handleReschedule(id: number, date: string, type?: string, studentName?: string, studentPhoto?: string) {
+    setRescheduleData({
+      appointmentId: id,
+      date: date || new Date().toISOString().split('T')[0],
+      type,
+      studentName,
+      studentPhoto,
+    });
+  }
+
+  function handleOpenCancelApproved(card: CheckSchedule) {
+    const address = [
+      card.endereco?.cep?.logradouro,
+      card.endereco?.numero,
+      card.endereco?.complemento,
+      card.endereco?.cep?.bairro,
+      card.endereco?.cep?.localidade,
+    ].filter(Boolean).join(', ') || [
+      card.endereco?.cep?.logradouro,
+      card.endereco?.numero,
+      card.endereco?.cep?.bairro,
+      card.endereco?.cep?.uf,
+    ].filter(Boolean).join(' - ') || 'Endereço não informado';
+
+    setCancelAppointment({
+      id: card.agendamentoId,
+      agendamentoId: card.agendamentoId,
+      name: card.nome,
+      type: card.tipoAula,
+      start: card.dataInicio,
+      end: card.dataFim,
+      address,
+    });
+  }
+
+  async function handleCancelApprovedConfirm(id: number) {
+    const item = appointments.find((r) => r.agendamentoId === id);
+    try {
+      await refuseAppointment(id);
+      setCancelAppointment(null);
+      await Promise.all([loadData(0, true), loadKpis()]);
+      setSuccessInfo({
+        title: 'Agendamento cancelado',
+        content: 'O agendamento foi cancelado com sucesso.',
+      });
+
+      // Notifica o Aluno que a aula foi cancelada
+      scheduleCancellationNotification({
+        studentName: item?.nome || 'Aluno',
+        personalName: 'Personal Trainer',
+        classType: item?.tipoAula || 'Aula',
+        date: item?.dataInicio ? formatDate(item.dataInicio) : '',
+        time: item?.dataInicio ? formatTime(item.dataInicio) : '',
+      });
+    } catch {
+      Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
+    }
   }
 
   function handleCardPress(_id: number) {}
@@ -854,6 +912,7 @@ export default function CheckScheduleScreen() {
               onAccept={(id) => openModal('accept', id)}
               onDecline={(id) => openModal('decline', id)}
               onReschedule={handleReschedule}
+              onCancelApproved={handleOpenCancelApproved}
               onConclude={(id) => openModal('qr_scanner', id)}
               onAbsence={(id) => openModal('absence', id)}
               onPress={handleCardPress}
@@ -938,6 +997,47 @@ export default function CheckScheduleScreen() {
         onApply={(range) => {
           setSelectedDateRange(range);
         }}
+      />
+
+      {/* Modal de Reagendamento via NewEvent */}
+      <NewEvent
+        key={`reschedule-${rescheduleData?.appointmentId}`}
+        visible={!!rescheduleData}
+        initialDate={rescheduleData?.date}
+        isReschedule={true}
+        rescheduleId={rescheduleData?.appointmentId}
+        initialType={rescheduleData?.type as any}
+        studentName={rescheduleData?.studentName}
+        studentPhoto={rescheduleData?.studentPhoto}
+        personalId={user?.id ? Number(user.id) : undefined}
+        isPersonal={true}
+        onClose={() => setRescheduleData(null)}
+        onSubmit={async () => {
+          const item = appointments.find((r) => r.agendamentoId === rescheduleData?.appointmentId);
+          setRescheduleData(null);
+          await Promise.all([loadData(0, true), loadKpis()]);
+          if (item) {
+            scheduleRescheduleNotification({
+              studentName: item.nome || 'Aluno',
+              personalName: 'Personal Trainer',
+              classType: item.tipoAula || 'Aula',
+              date: item.dataInicio ? formatDate(item.dataInicio) : '',
+              time: item.dataInicio ? formatTime(item.dataInicio) : '',
+            });
+          }
+        }}
+      />
+
+      {/* Modal de Cancelamento de Aprovado (estilo do aluno / web) */}
+      <CancelAppointmentModal
+        visible={!!cancelAppointment}
+        appointment={cancelAppointment}
+        userLabel="Aluno"
+        title="Cancelar agendamento"
+        subtitle="Tem certeza que deseja cancelar este agendamento? Esta ação não pode ser desfeita."
+        confirmText="Cancelar agendamento"
+        onClose={() => setCancelAppointment(null)}
+        onConfirm={handleCancelApprovedConfirm}
       />
     </View>
   );

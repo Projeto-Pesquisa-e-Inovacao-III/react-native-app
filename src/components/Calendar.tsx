@@ -10,6 +10,8 @@ type OverviewCalendarProps = {
   selectedDate?: string | Date | null;
   currentMonth?: Date;
   onMonthChange?: (date: Date) => void;
+  /** Quando true (Personal), todos os dias ficam clicáveis exceto dias da semana bloqueados */
+  allowAllDays?: boolean;
 };
 
 export default function Calendar({
@@ -20,6 +22,7 @@ export default function Calendar({
   selectedDate,
   currentMonth,
   onMonthChange,
+  allowAllDays = false,
 }: OverviewCalendarProps) {
   return (
     <View style={styles.calendarCard}>
@@ -30,6 +33,7 @@ export default function Calendar({
         selectedDate={selectedDate}
         currentMonth={currentMonth}
         onMonthChange={onMonthChange}
+        allowAllDays={allowAllDays}
         onDateSelect={(_date, dateStr) => onDayPress?.(dateStr)}
       />
     </View>

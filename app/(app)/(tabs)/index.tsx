@@ -27,6 +27,8 @@ import {
   findAppointmentById,
   disabledPersonalDays,
   getPersonalList,
+  acceptUserAppointment,
+  refuseAppointment,
 } from "../../../src/constants/schedule";
 import { getTotalByClassType } from "../../../src/constants/overview";
 import { actualPlan as getActualPlan } from "../../../src/constants/products";
@@ -634,12 +636,19 @@ export default function OverviewScreen({
 
   function handleCalendarDayPress(date: string) {
     setSelectedDate(date);
+
+    if (!isAluno) {
+      setPopupDate(date);
+      setPopupAppointments([]);
+      setPopupModalVisible(true);
+      return;
+    }
+
     const dayAppointments = displayedAppointments.filter(
       (appointment) => appointment.data?.split("T")[0] === date
     );
 
     if (dayAppointments.length === 0) {
-      if (!isAluno) return;
 
       // 1. Validação de 24 horas: o aluno só pode marcar aula depois de 24h (a partir de amanhã)
       const parts = date.split("-").map(Number);
@@ -758,6 +767,32 @@ export default function OverviewScreen({
     setModal((previous) => ({ ...previous, visible: false }));
   }
 
+  async function handlePopupAccept(id: number) {
+    try {
+      await acceptUserAppointment(id);
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      setModal({ visible: true, title: "Sucesso", description: "Agendamento aprovado com sucesso!" });
+    } catch {
+      setModal({ visible: true, title: "Erro", description: "Não foi possível aprovar o agendamento." });
+    }
+  }
+
+  async function handlePopupRefuse(id: number) {
+    try {
+      await refuseAppointment(id);
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      setModal({ visible: true, title: "Sucesso", description: "Agendamento recusado/cancelado com sucesso!" });
+    } catch {
+      setModal({ visible: true, title: "Erro", description: "Não foi possível recusar o agendamento." });
+    }
+  }
+
+  function handlePopupReschedule(item: PopupAppointment) {
+    setPopupModalVisible(false);
+    setSelectedDate(item.start?.split("T")[0]);
+    setNewEventVisible(true);
+  }
+
   function handleNewEvent() {
     if (!isAluno) {
       onNewEvent?.();
@@ -870,7 +905,8 @@ export default function OverviewScreen({
           selectedDate={selectedDate}
           calendarEvents={displayedCalendarEvents}
           disabledDays={calendarDisabledDays}
-          disabledDates={unavailableDates}
+          disabledDates={isAluno ? unavailableDates : []}
+          allowAllDays={!isAluno}
           onDayPress={handleCalendarDayPress}
         />
 
@@ -943,23 +979,32 @@ export default function OverviewScreen({
         date={popupDate}
         appointments={popupAppointments}
         canCreateNewEvent={isAluno}
+        isAluno={isAluno}
+        isPersonal={!isAluno}
         onClose={() => setPopupModalVisible(false)}
+        onAccept={handlePopupAccept}
+        onRefuse={handlePopupRefuse}
+        onReschedule={handlePopupReschedule}
         onNewEvent={() => {
           setSelectedDate(popupDate);
           setNewEventVisible(true);
         }}
-        onShowQrCode={(item) => {
-          setSelectedQrAppointment({
-            id: item.agendamentoId ?? item.id,
-            name: item.name,
-            type: item.type,
-            start: item.start,
-            end: item.end,
-            address: item.address,
-          });
-          setPopupModalVisible(false);
-          setQrModalVisible(true);
-        }}
+        onShowQrCode={
+          isAluno
+            ? (item) => {
+                setSelectedQrAppointment({
+                  id: item.agendamentoId ?? item.id,
+                  name: item.name,
+                  type: item.type,
+                  start: item.start,
+                  end: item.end,
+                  address: item.address,
+                });
+                setPopupModalVisible(false);
+                setQrModalVisible(true);
+              }
+            : undefined
+        }
       />
 
       {/* Modal da Central de Notificações */}

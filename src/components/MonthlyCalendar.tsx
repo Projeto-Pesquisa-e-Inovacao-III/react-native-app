@@ -17,6 +17,9 @@ type MonthlyCalendarProps = {
   disabledDays?: string[];
   disabledDates?: string[];
   hasEventOnDate?: (date: Date) => boolean;
+  /** Quando true, apenas dias da semana explicitamente desativados ficam bloqueados.
+   * Use para o Personal: todos os outros dias ficam clicáveis independente de terem eventos. */
+  allowAllDays?: boolean;
 };
 
 const dayLabels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
@@ -87,6 +90,7 @@ export default function MonthlyCalendar({
   disabledDays = [],
   disabledDates = [],
   hasEventOnDate,
+  allowAllDays = false,
 }: MonthlyCalendarProps) {
   const [internalMonth, setInternalMonth] = useState(() => new Date());
   const activeMonth = propMonth ?? internalMonth;
@@ -192,15 +196,21 @@ export default function MonthlyCalendar({
           const isPastOrToday = dayDate.getTime() <= today.getTime();
 
           const weekdayKey = WEEKDAY_PT[value.getDay()];
-          const isRuleDisabled = disabledDays.includes(weekdayKey) || disabledDates.includes(isoKey);
+          // isRuleDisabled: dia da semana desabilitado pelo personal OU data específica bloqueada
+          const isWeekdayDisabled = disabledDays.includes(weekdayKey);
+          const isDateDisabled = disabledDates.includes(isoKey);
+          const isRuleDisabled = isWeekdayDisabled || isDateDisabled;
 
           const dayEvents = eventsByDay.get(isoKey) ?? [];
           const hasEvents = dayEvents.length > 0 || (hasEventOnDate?.(value) ?? false);
 
-          // Regra das 24 horas: dias de hoje ou passados (< 24h) ficam cinzas e não clicáveis,
-          // a menos que já possuam agendamentos para visualização via popup.
-          const is24hDisabled = isPastOrToday && !hasEvents;
-          const isDisabledDay = (isRuleDisabled && !hasEvents) || is24hDisabled;
+          // allowAllDays=true (Personal): qualquer dia que não esteja na lista de dias da semana
+          // bloqueados fica clicável, independente de ter eventos ou ser passado/hoje.
+          // allowAllDays=false (Aluno): regra padrão de 24h e dias sem eventos.
+          const is24hDisabled = allowAllDays ? false : (isPastOrToday && !hasEvents);
+          const isDisabledDay = allowAllDays
+            ? isWeekdayDisabled  // Personal: só bloqueia dia da semana configurado
+            : (isRuleDisabled && !hasEvents) || is24hDisabled;
 
           return (
             <Pressable

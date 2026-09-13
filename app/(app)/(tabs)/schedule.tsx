@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -12,10 +13,12 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  Calendar,
   Check,
   Clock3,
   MapPin,
   Plus,
+  RefreshCw,
   X,
   Bell,
   QrCode,
@@ -30,6 +33,7 @@ import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import QRCodeDisplayModal, { AppointmentForQr } from '../../../src/components/modals/QRCodeDisplayModal';
 import PopupModal, { type PopupAppointment } from '../../../src/components/modals/PopupModal';
+import SuccessModal from '../../../src/components/modals/SuccessModal';
 import {
   acceptUserAppointment,
   appointmentAtCalendar,
@@ -220,7 +224,28 @@ export default function ScheduleScreen() {
   const [popupModalVisible, setPopupModalVisible] = useState(false);
   const [popupDate, setPopupDate] = useState('');
   const [popupAppointments, setPopupAppointments] = useState<PopupAppointment[]>([]);
+  const [rescheduleData, setRescheduleData] = useState<{
+    appointmentId: number;
+    date: string;
+    type?: string;
+  } | null>(null);
+  const [cancelModalAppointment, setCancelModalAppointment] = useState<Appointment | null>(null);
+  const [cancelCountdown, setCancelCountdown] = useState(3);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelSuccessVisible, setCancelSuccessVisible] = useState(false);
+  const cancelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelFadeAnim = useRef(new Animated.Value(0)).current;
+  const cancelScaleAnim = useRef(new Animated.Value(0.9)).current;
   const { scheduleAppointmentNotification, unreadCount } = useNotifications();
+
+  function handleOpenReschedule(appointmentId: number, startIso: string, classType?: string) {
+    setPopupModalVisible(false);
+    setRescheduleData({
+      appointmentId,
+      date: startIso ? startIso.split('T')[0] : '',
+      type: classType,
+    });
+  }
 
   const loadAppointments = useCallback(async () => {
     try {
@@ -449,14 +474,14 @@ export default function ScheduleScreen() {
     return `${year}-${month}-${day}`;
   }, [selectedDate]);
 
-  const filteredAppointments = useMemo(
-    () =>
-      appointments.filter((item) => {
-        const date = new Date(item.start);
-        return isSameDay(date, selectedDate);
-      }),
-    [appointments, selectedDate],
-  );
+  const pendingAppointments = useMemo(() => {
+    return appointments
+      .filter((item) => {
+        const s = String(item.status || '').toUpperCase();
+        return s.includes('PENDENTE');
+      })
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  }, [appointments]);
 
   // Usa SEMPRE os eventos do endpoint /agendamentos/calendario para os dots do calendário.
   // Os appointments completos são usados apenas na lista e popup do dia selecionado.
@@ -473,28 +498,60 @@ export default function ScheduleScreen() {
     }
   }
 
+  function openCancelModal(id: number) {
+    const appt = appointments.find((a) => a.agendamentoId === id);
+    if (!appt) return;
+    setCancelModalAppointment(appt);
+    setCancelCountdown(3);
+    // Animação de entrada
+    cancelFadeAnim.setValue(0);
+    cancelScaleAnim.setValue(0.9);
+    Animated.parallel([
+      Animated.timing(cancelFadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(cancelScaleAnim, { toValue: 1, useNativeDriver: true, damping: 18, stiffness: 280 }),
+    ]).start();
+    // Inicia countdown
+    if (cancelTimerRef.current) clearInterval(cancelTimerRef.current);
+    cancelTimerRef.current = setInterval(() => {
+      setCancelCountdown((prev) => {
+        if (prev <= 1) {
+          if (cancelTimerRef.current) clearInterval(cancelTimerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function closeCancelModal() {
+    Animated.parallel([
+      Animated.timing(cancelFadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(cancelScaleAnim, { toValue: 0.9, duration: 180, useNativeDriver: true }),
+    ]).start(() => {
+      setCancelModalAppointment(null);
+      setCancelCountdown(3);
+      if (cancelTimerRef.current) clearInterval(cancelTimerRef.current);
+    });
+  }
+
   async function handleRefuse(id: number) {
-    Alert.alert(
-      'Cancelar agendamento',
-      'Tem certeza que deseja cancelar esta solicitação?',
-      [
-        { text: 'Voltar', style: 'cancel' },
-        {
-          text: 'Sim, cancelar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await refuseAppointment(id);
-              Alert.alert('Sucesso', 'Agendamento cancelado com sucesso.');
-              await loadAppointments();
-              void queryClient.invalidateQueries({ queryKey: ['overview'] });
-            } catch {
-              Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
-            }
-          },
-        },
-      ]
-    );
+    openCancelModal(id);
+  }
+
+  async function confirmCancelAppointment() {
+    if (!cancelModalAppointment) return;
+    setCancelLoading(true);
+    try {
+      await refuseAppointment(cancelModalAppointment.agendamentoId);
+      closeCancelModal();
+      await loadAppointments();
+      void queryClient.invalidateQueries({ queryKey: ['overview'] });
+      setCancelSuccessVisible(true);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
+    } finally {
+      setCancelLoading(false);
+    }
   }
 
   async function handleNewEventSubmit(payload?: NewEventPayload) {
@@ -572,37 +629,27 @@ export default function ScheduleScreen() {
           </View>
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionHeaderText}>{formatDateLabel(selectedDate)}</Text>
+            <Text style={styles.sectionHeaderText}>Agendamentos pendentes</Text>
+            {pendingAppointments.length > 0 && (
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>{pendingAppointments.length}</Text>
+              </View>
+            )}
           </View>
 
           {isLoadingAppointments ? (
             <View style={styles.emptyState}>
               <ActivityIndicator size="small" color="#19587A" />
             </View>
-          ) : filteredAppointments.length === 0 ? (
+          ) : pendingAppointments.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>Nenhum horário neste dia</Text>
+              <Text style={styles.emptyTitle}>Nenhum agendamento pendente</Text>
               <Text style={styles.emptyDescription}>
-                Use o botão Agendar para adicionar um novo compromisso.
+                Você não possui solicitações ou agendamentos pendentes no momento.
               </Text>
-              <TouchableOpacity
-                style={[styles.emptyScheduleButton, checkingAvailability && { opacity: 0.7 }]}
-                onPress={handleOpenNewEvent}
-                activeOpacity={0.9}
-                disabled={checkingAvailability}
-              >
-                {checkingAvailability ? (
-                  <ActivityIndicator size="small" color="#19587A" />
-                ) : (
-                  <Plus size={16} color="#19587A" />
-                )}
-                <Text style={styles.emptyScheduleButtonText}>
-                  {checkingAvailability ? 'Verificando...' : 'Agendar aula'}
-                </Text>
-              </TouchableOpacity>
             </View>
           ) : (
-            filteredAppointments.map((item) => {
+            pendingAppointments.map((item) => {
               const statusStyle = getStatusStyle(item.status);
               const startDate = new Date(item.start);
               const endDate = new Date(item.end);
@@ -621,6 +668,11 @@ export default function ScheduleScreen() {
                   </View>
 
                   <View style={styles.metaRow}>
+                    <Calendar size={16} color="#667085" />
+                    <Text style={styles.metaText}>{formatDateLabel(startDate)}</Text>
+                  </View>
+
+                  <View style={styles.metaRow}>
                     <Clock3 size={16} color="#667085" />
                     <Text style={styles.metaText}>
                       {formatTimeLabel(startDate)} - {formatTimeLabel(endDate)}
@@ -633,7 +685,7 @@ export default function ScheduleScreen() {
                   </View>
 
                   <View style={styles.actionRow}>
-                    {/* Aluno s\u00f3 age quando o personal enviou pedido ao cliente */}
+                    {/* Aluno só age quando o personal enviou pedido ao cliente */}
                     {item.status === 'PENDENTE_CLIENTE_APROVACAO' && (
                       <>
                         <TouchableOpacity
@@ -644,6 +696,16 @@ export default function ScheduleScreen() {
                           <Check size={16} color="#127B49" />
                           <Text style={[styles.actionText, styles.successText]}>Aceitar</Text>
                         </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.secondaryAction]}
+                          activeOpacity={0.9}
+                          onPress={() => handleOpenReschedule(item.agendamentoId, item.start, item.type)}
+                        >
+                          <RefreshCw size={15} color="#19587A" />
+                          <Text style={[styles.actionText, styles.secondaryText]}>Reagendar</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                           style={[styles.actionButton, styles.dangerAction]}
                           activeOpacity={0.9}
@@ -655,7 +717,60 @@ export default function ScheduleScreen() {
                       </>
                     )}
 
-                    {(item.status === 'APROVADO' || item.status === 'PENDENTE_PERSONAL_CONCLUIR') && (
+                    {(item.status === 'PENDENTE' || item.status === 'PENDENTE_PERSONAL_APROVACAO') && (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.secondaryAction]}
+                          activeOpacity={0.9}
+                          onPress={() => handleOpenReschedule(item.agendamentoId, item.start, item.type)}
+                        >
+                          <RefreshCw size={15} color="#19587A" />
+                          <Text style={[styles.actionText, styles.secondaryText]}>Reagendar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.dangerAction]}
+                          activeOpacity={0.9}
+                          onPress={() => handleRefuse(item.agendamentoId)}
+                        >
+                          <X size={16} color="#B42318" />
+                          <Text style={[styles.actionText, styles.dangerText]}>Cancelar</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+
+                    {item.status === 'APROVADO' && (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.secondaryAction]}
+                          activeOpacity={0.9}
+                          onPress={() => handleOpenReschedule(item.agendamentoId, item.start, item.type)}
+                        >
+                          <RefreshCw size={15} color="#19587A" />
+                          <Text style={[styles.actionText, styles.secondaryText]}>Reagendar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.dangerAction]}
+                          activeOpacity={0.9}
+                          onPress={() => handleRefuse(item.agendamentoId)}
+                        >
+                          <X size={16} color="#B42318" />
+                          <Text style={[styles.actionText, styles.dangerText]}>Cancelar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.secondaryAction]}
+                          activeOpacity={0.9}
+                          onPress={() => setSelectedDetailsAppointment(item)}
+                        >
+                          <ArrowRight size={16} color="#19587A" />
+                          <Text style={[styles.actionText, styles.secondaryText]}>Ver detalhes</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+
+                    {item.status === 'PENDENTE_PERSONAL_CONCLUIR' && (
                       <TouchableOpacity
                         style={[styles.actionButton, styles.secondaryAction]}
                         activeOpacity={0.9}
@@ -821,7 +936,7 @@ export default function ScheduleScreen() {
         onClose={() => setIsNotificationModalVisible(false)}
       />
 
-      {/* PopupModal com agendamentos do dia */}
+      {/* PopupModal com agendamentos do dia ao clicar no calendário */}
       <PopupModal
         visible={popupModalVisible}
         date={popupDate}
@@ -834,6 +949,9 @@ export default function ScheduleScreen() {
         }}
         onAccept={handleAccept}
         onRefuse={handleRefuse}
+        onReschedule={(item) =>
+          handleOpenReschedule(item.agendamentoId ?? item.id, item.start, item.type)
+        }
         onViewDetails={(item) => {
           const appt = appointments.find((a) => a.agendamentoId === item.agendamentoId);
           if (appt) {
@@ -849,6 +967,124 @@ export default function ScheduleScreen() {
           }
         }}
       />
+
+      {/* Modal de Reagendamento */}
+      <NewEvent
+        key={`reschedule-${rescheduleData?.appointmentId}`}
+        visible={!!rescheduleData}
+        initialDate={rescheduleData?.date}
+        isReschedule={true}
+        rescheduleId={rescheduleData?.appointmentId}
+        initialType={rescheduleData?.type as any}
+        onClose={() => setRescheduleData(null)}
+        onSubmit={async () => {
+          setRescheduleData(null);
+          await loadAppointments();
+          void queryClient.invalidateQueries({ queryKey: ['overview'] });
+        }}
+      />
+
+      {/* Modal de Cancelamento */}
+      <Modal
+        transparent
+        animationType="none"
+        visible={!!cancelModalAppointment}
+        onRequestClose={closeCancelModal}
+        statusBarTranslucent
+      >
+        <Animated.View style={[styles.cancelOverlay, { opacity: cancelFadeAnim }]}>
+          <Animated.View style={[styles.cancelCard, { transform: [{ scale: cancelScaleAnim }] }]}>
+            {/* Ícone de aviso */}
+            <View style={styles.cancelIconWrapper}>
+              <View style={styles.cancelIconBg}>
+                <X size={28} color="#B42318" />
+              </View>
+            </View>
+
+            <Text style={styles.cancelTitle}>Cancelar agendamento</Text>
+            <Text style={styles.cancelSubtitle}>Tem certeza que deseja cancelar este agendamento? Esta ação não pode ser desfeita.</Text>
+
+            {/* Detalhes do agendamento */}
+            {cancelModalAppointment && (
+              <View style={styles.cancelInfoBox}>
+                <View style={styles.cancelInfoRow}>
+                  <Text style={styles.cancelInfoLabel}>Personal</Text>
+                  <Text style={styles.cancelInfoValue}>{cancelModalAppointment.name}</Text>
+                </View>
+                <View style={styles.cancelInfoDivider} />
+                <View style={styles.cancelInfoRow}>
+                  <Text style={styles.cancelInfoLabel}>Tipo</Text>
+                  <Text style={styles.cancelInfoValue}>{cancelModalAppointment.type}</Text>
+                </View>
+                <View style={styles.cancelInfoDivider} />
+                <View style={styles.cancelInfoRow}>
+                  <Text style={styles.cancelInfoLabel}>Data</Text>
+                  <Text style={styles.cancelInfoValue}>{formatDateLabel(new Date(cancelModalAppointment.start))}</Text>
+                </View>
+                <View style={styles.cancelInfoDivider} />
+                <View style={styles.cancelInfoRow}>
+                  <Text style={styles.cancelInfoLabel}>Horário</Text>
+                  <Text style={styles.cancelInfoValue}>
+                    {formatTimeLabel(new Date(cancelModalAppointment.start))} - {formatTimeLabel(new Date(cancelModalAppointment.end))}
+                  </Text>
+                </View>
+                <View style={styles.cancelInfoDivider} />
+                <View style={styles.cancelInfoRow}>
+                  <Text style={styles.cancelInfoLabel}>Local</Text>
+                  <Text style={[styles.cancelInfoValue, { flexShrink: 1, textAlign: 'right', maxWidth: '60%' }]}>{cancelModalAppointment.address}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Countdown timer */}
+            {cancelCountdown > 0 && (
+              <View style={styles.cancelCountdownRow}>
+                <View style={styles.cancelCountdownBadge}>
+                  <Text style={styles.cancelCountdownText}>{cancelCountdown}</Text>
+                </View>
+                <Text style={styles.cancelCountdownHint}>Aguarde para confirmar</Text>
+              </View>
+            )}
+
+            {/* Botões */}
+            <View style={styles.cancelActions}>
+              <TouchableOpacity
+                style={styles.cancelBackBtn}
+                onPress={closeCancelModal}
+                activeOpacity={0.8}
+                disabled={cancelLoading}
+              >
+                <Text style={styles.cancelBackText}>Voltar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.cancelConfirmBtn,
+                  (cancelCountdown > 0 || cancelLoading) && styles.cancelConfirmBtnDisabled,
+                ]}
+                onPress={confirmCancelAppointment}
+                activeOpacity={0.85}
+                disabled={cancelCountdown > 0 || cancelLoading}
+              >
+                {cancelLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.cancelConfirmText}>Cancelar agendamento</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      {/* Modal de Sucesso — Cancelamento */}
+      <SuccessModal
+        visible={cancelSuccessVisible}
+        title="Agendamento cancelado"
+        content="O agendamento foi cancelado com sucesso."
+        onClose={() => setCancelSuccessVisible(false)}
+      />
+
     </SafeAreaView>
   );
 }
@@ -917,11 +1153,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#19587A',
     borderRadius: 14,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     gap: 8,
     marginTop: 18,
-    alignSelf: 'center',
-    minWidth: 160,
+    width: '100%',
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -941,10 +1176,26 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginTop: 20,
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   sectionHeaderText: {
     color: '#1F2937',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  pendingBadge: {
+    backgroundColor: '#FFF6D9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  pendingBadgeText: {
+    color: '#8A6300',
+    fontSize: 12,
     fontWeight: '700',
   },
   loadingBox: {
@@ -1261,5 +1512,143 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  // ── Cancel Modal ────────────────────────────────────────────────────────────
+  cancelOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  cancelCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  cancelIconWrapper: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cancelIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FDECEC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: '#FCA5A5',
+  },
+  cancelTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  cancelSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 18,
+  },
+  cancelInfoBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  cancelInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  cancelInfoLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  cancelInfoValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  cancelInfoDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  cancelCountdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    backgroundColor: '#FFF6D9',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  cancelCountdownBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F59E0B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelCountdownText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  cancelCountdownHint: {
+    color: '#8A6300',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  cancelActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBackBtn: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBackText: {
+    color: '#334155',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  cancelConfirmBtn: {
+    flex: 2,
+    backgroundColor: '#B42318',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelConfirmBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  cancelConfirmText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

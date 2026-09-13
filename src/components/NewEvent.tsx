@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -10,12 +11,18 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { getPersonalList, insertAppointment, disabledPersonalDays } from "../constants/schedule";
+import {
+  getPersonalList,
+  insertAppointment,
+  disabledPersonalDays,
+  rescheduleAppointment,
+} from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
 import { getUserAddresses, lookupCep } from "../constants/address";
-import type { Schedule } from "../models/schedule";
+import type { Schedule, ScheduleReschedule } from "../models/schedule";
 import SuccessModal from "./modals/SuccessModal";
 import ErrorModal from "./modals/ErrorModal";
+import { useAuth } from "../contexts/AuthContext";
 
 export type Personal = {
   id: number;
@@ -68,6 +75,13 @@ type NewEventProps = {
   personals?: Personal[];
   schedules?: TimeSlot[];
   addresses?: SavedAddress[];
+  isReschedule?: boolean;
+  rescheduleId?: number | null;
+  initialType?: NewEventPayload["type"];
+  studentName?: string;
+  studentPhoto?: string;
+  personalId?: number | null;
+  isPersonal?: boolean;
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";
@@ -120,7 +134,19 @@ export default function NewEvent({
   personals: propPersonals,
   schedules: propSchedules,
   addresses: propAddresses,
+  isReschedule = false,
+  rescheduleId,
+  initialType,
+  studentName,
+  studentPhoto,
+  personalId: propPersonalId,
+  isPersonal = false,
 }: NewEventProps) {
+  const { user } = useAuth();
+  const effectivePersonalId = isPersonal
+    ? (propPersonalId ?? (user?.id ? Number(user.id) : undefined))
+    : undefined;
+
   const [step, setStep] = useState<1 | 2>(1);
   const [date, setDate] = useState<string>(() => {
     if (initialDate && isDateAtLeastTomorrow(initialDate)) {
@@ -147,24 +173,34 @@ export default function NewEvent({
       } else {
         setDate(getTomorrowDateString());
       }
+      if (initialType) {
+        setType(initialType);
+      }
+      if (effectivePersonalId) {
+        setSelectedPersonalId(effectivePersonalId);
+      }
       setStep(1);
       setError("");
       setSuccessModalVisible(false);
       setErrorModal({ visible: false, title: "", content: "" });
       setSavedPayload(null);
     }
-  }, [visible, initialDate]);
+  }, [visible, initialDate, initialType, effectivePersonalId]);
 
   // Personais
   const [personalsList, setPersonalsList] = useState<Personal[]>(
     propPersonals && propPersonals.length > 0 ? propPersonals : []
   );
   const [loadingPersonals, setLoadingPersonals] = useState(false);
-  const [selectedPersonalId, setSelectedPersonalId] = useState<number | undefined>(undefined);
+  const [selectedPersonalId, setSelectedPersonalId] = useState<number | undefined>(
+    effectivePersonalId
+  );
   const [disabledWeekdays, setDisabledWeekdays] = useState<string[]>([]);
 
   // Tipo de aula e Horários
-  const [type, setType] = useState<NewEventPayload["type"]>("PRESENCIAL");
+  const [type, setType] = useState<NewEventPayload["type"]>(
+    initialType || "PRESENCIAL"
+  );
   const [period, setPeriod] = useState<TimePeriod>("MANHÃ");
   const [startHour, setStartHour] = useState("");
   const [dynamicSchedules, setDynamicSchedules] = useState<TimeSlot[]>(
@@ -198,6 +234,10 @@ export default function NewEvent({
   useEffect(() => {
     let isMounted = true;
     async function fetchPersonals() {
+      if (isPersonal && effectivePersonalId) {
+        setSelectedPersonalId(effectivePersonalId);
+        return;
+      }
       setLoadingPersonals(true);
       try {
         const response = await getPersonalList();
@@ -432,6 +472,96 @@ export default function NewEvent({
     }
   }
 
+  async function handleRescheduleSubmit() {
+    if (!date || !startHour) {
+      const msg = "Selecione uma data e um horário disponível para reagendar.";
+      setError(msg);
+      setErrorModal({
+        visible: true,
+        title: "Atenção!",
+        content: msg,
+      });
+      return;
+    }
+
+    // Validação estrita de 24 horas de antecedência
+    const parts = date.split("-").map(Number);
+    const hourParts = startHour.split(":").map(Number);
+    if (parts.length === 3 && hourParts.length >= 2) {
+      const selectedDateTime = new Date(
+        parts[0],
+        parts[1] - 1,
+        parts[2],
+        hourParts[0],
+        hourParts[1]
+      );
+      const minAllowed = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      if (selectedDateTime.getTime() < minAllowed.getTime()) {
+        const msg = "Aulas só podem ser agendadas ou reagendadas com pelo menos 24 horas de antecedência.";
+        setError(msg);
+        setErrorModal({
+          visible: true,
+          title: "Antecedência mínima",
+          content: msg,
+        });
+        return;
+      }
+    }
+
+    const formattedDateHour = `${date}T${startHour.length === 5 ? startHour + ":00" : startHour}`;
+    const targetPersonalId = isPersonal
+      ? (effectivePersonalId ?? Number(user?.id ?? 0))
+      : Number(selectedPersonal?.id ?? 0);
+    const reschedulePayload: ScheduleReschedule = {
+      idAgendamento: rescheduleId ?? undefined,
+      data: formattedDateHour,
+      descricao: `${date} - ${startHour}`,
+      endereco: null,
+      personalId: targetPersonalId,
+      tipoAulaProdutoContratado: type,
+    };
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await rescheduleAppointment(reschedulePayload);
+      const selectedSchedule = dynamicSchedules.find(
+        (schedule) => schedule.startHour === startHour
+      );
+      const endHour = selectedSchedule?.endHour ?? startHour;
+      setSavedPayload({
+        date,
+        startHour,
+        endHour,
+        type,
+        location: type,
+        personal: selectedPersonal || {
+          id: targetPersonalId,
+          nome: "Personal Trainer",
+          especialidade: "Personal",
+        },
+        address: address,
+      });
+      setSuccessModalVisible(true);
+    } catch (err: any) {
+      const responseData = err?.response?.data;
+      const apiMessage =
+        responseData?.Exception ||
+        responseData?.message ||
+        responseData?.mensagem ||
+        "Não foi possível reagendar a aula. Tente novamente.";
+      setError(apiMessage);
+      setErrorModal({
+        visible: true,
+        title: "Não foi possível reagendar",
+        content: apiMessage,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function goToAddress() {
     if (!date || !startHour) {
       const msg = "Selecione uma data e um horário disponível para avançar.";
@@ -572,8 +702,8 @@ export default function NewEvent({
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Agendar aula</Text>
-            <Text style={styles.stepIndicator}>Etapa {step} de 2</Text>
+            <Text style={styles.title}>{isReschedule ? "Reagendar aula" : "Agendar aula"}</Text>
+            {!isReschedule && <Text style={styles.stepIndicator}>Etapa {step} de 2</Text>}
           </View>
           <Pressable onPress={onClose} hitSlop={12}>
             <Text style={styles.close}>Fechar</Text>
@@ -582,52 +712,79 @@ export default function NewEvent({
 
         {step === 1 ? (
           <>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Personal Trainer</Text>
-              {loadingPersonals ? (
-                <ActivityIndicator size="small" color="#0f567f" />
-              ) : null}
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.personalRow}
-            >
-              {personalsList.map((personal) => {
-                const isSelected = selectedPersonal?.id === personal.id;
-                return (
-                  <Pressable
-                    key={personal.id}
-                    style={[styles.personalCard, isSelected && styles.selectedCard]}
-                    onPress={() => setSelectedPersonalId(personal.id)}
-                  >
-                    <View style={[styles.avatar, isSelected && styles.avatarSelected]}>
-                      <Text
-                        style={[
-                          styles.avatarText,
-                          isSelected && styles.avatarTextSelected,
-                        ]}
-                      >
-                        {personal.nome.slice(0, 1)}
+            {isPersonal ? (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Aluno</Text>
+                </View>
+                <View style={styles.studentCard}>
+                  <View style={styles.studentAvatar}>
+                    {studentPhoto ? (
+                      <Image source={{ uri: studentPhoto }} style={styles.studentAvatarImg} />
+                    ) : (
+                      <Text style={styles.studentAvatarText}>
+                        {studentName ? studentName.charAt(0).toUpperCase() : "A"}
                       </Text>
-                    </View>
-                    <Text
-                      style={[styles.personalName, isSelected && styles.selectedText]}
-                      numberOfLines={1}
-                    >
-                      {personal.nome}
+                    )}
+                  </View>
+                  <View style={styles.studentInfo}>
+                    <Text style={styles.studentNameText} numberOfLines={1}>
+                      {studentName || "Aluno"}
                     </Text>
-                    <Text
-                      style={[styles.personalDetail, isSelected && styles.selectedText]}
-                      numberOfLines={1}
-                    >
-                      {personal.especialidade}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                    <Text style={styles.studentRoleText}>Solicitante da aula</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Personal Trainer</Text>
+                  {loadingPersonals ? (
+                    <ActivityIndicator size="small" color="#0f567f" />
+                  ) : null}
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.personalRow}
+                >
+                  {personalsList.map((personal) => {
+                    const isSelected = selectedPersonal?.id === personal.id;
+                    return (
+                      <Pressable
+                        key={personal.id}
+                        style={[styles.personalCard, isSelected && styles.selectedCard]}
+                        onPress={() => setSelectedPersonalId(personal.id)}
+                      >
+                        <View style={[styles.avatar, isSelected && styles.avatarSelected]}>
+                          <Text
+                            style={[
+                              styles.avatarText,
+                              isSelected && styles.avatarTextSelected,
+                            ]}
+                          >
+                            {personal.nome.slice(0, 1)}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[styles.personalName, isSelected && styles.selectedText]}
+                          numberOfLines={1}
+                        >
+                          {personal.nome}
+                        </Text>
+                        <Text
+                          style={[styles.personalDetail, isSelected && styles.selectedText]}
+                          numberOfLines={1}
+                        >
+                          {personal.especialidade}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
 
             <Text style={styles.sectionTitle}>Data da aula</Text>
             <View style={styles.readonlyDate}>
@@ -771,11 +928,21 @@ export default function NewEvent({
             )}
 
             <Pressable
-              style={[styles.submit, (!date || !startHour) && styles.submitDisabled]}
-              onPress={goToAddress}
-              disabled={!date || !startHour}
+              style={[
+                styles.submit,
+                (!date || !startHour) && styles.submitDisabled,
+                submitting && { opacity: 0.7 },
+              ]}
+              onPress={isReschedule ? handleRescheduleSubmit : goToAddress}
+              disabled={!date || !startHour || submitting}
             >
-              <Text style={styles.submitText}>Avançar para endereço</Text>
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.submitText}>
+                  {isReschedule ? "Reagendar aula" : "Avançar para endereço"}
+                </Text>
+              )}
             </Pressable>
           </>
         ) : (
@@ -934,8 +1101,14 @@ export default function NewEvent({
       {/* Modal de Sucesso */}
       <SuccessModal
         visible={successModalVisible}
-        title="Agendamento solicitado!"
-        content="Sua solicitação de aula foi enviada com sucesso ao personal trainer."
+        title={isReschedule ? "Aula reagendada!" : "Agendamento solicitado!"}
+        content={
+          isReschedule
+            ? (isPersonal
+                ? "Sua solicitação de reagendamento foi enviada com sucesso e está aguardando confirmação do aluno."
+                : "Sua solicitação de reagendamento foi enviada com sucesso e está aguardando confirmação.")
+            : "Sua solicitação de aula foi enviada com sucesso ao personal trainer."
+        }
         useNativeModal={false}
         onClose={handleSuccessClose}
       />
@@ -1281,5 +1454,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 15,
+  },
+  studentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 12,
+    marginBottom: 6,
+  },
+  studentAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#0f567f",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  studentAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  studentAvatarText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 18,
+  },
+  studentInfo: {
+    flex: 1,
+  },
+  studentNameText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  studentRoleText: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
   },
 });
