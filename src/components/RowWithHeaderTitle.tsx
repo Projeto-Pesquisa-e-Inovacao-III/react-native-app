@@ -16,6 +16,7 @@ type RowWithHeaderTitleProps = {
   buttonLabel?: string;
   handleDetailsClick?: (id: number) => void;
   isLoading?: boolean;
+  largerText?: boolean;
 };
 
 function getBorderColor(item?: RowItem): string {
@@ -33,6 +34,7 @@ export default function RowWithHeaderTitle({
   buttonLabel = 'Ver Detalhes',
   handleDetailsClick,
   isLoading = false,
+  largerText = false,
 }: RowWithHeaderTitleProps) {
   const { width } = useWindowDimensions();
   const isWide = width >= 600;
@@ -73,16 +75,18 @@ export default function RowWithHeaderTitle({
             style={[styles.card, { borderLeftColor: borderColor, borderLeftWidth: 6 }]}
           >
             <View style={styles.cardHeader}>
-              <Text style={styles.headerText}>{item.headerTitle}</Text>
+              <Text style={[styles.headerText, largerText && styles.headerTextLarge]}>
+                {item.headerTitle}
+              </Text>
             </View>
 
             <View style={[styles.cardBody, isWide && styles.cardBodyWide]}>
               <View style={[styles.textContainer, isWide && styles.textContainerWide]}>
-                <Text style={styles.title} numberOfLines={2}>
+                <Text style={[styles.title, largerText && styles.titleLarge]} numberOfLines={2}>
                   {item.title}
                 </Text>
                 {typeof item.subtitle === 'string' ? (
-                  <Text style={styles.subtitle} numberOfLines={2}>
+                  <Text style={[styles.subtitle, largerText && styles.subtitleLarge]} numberOfLines={2}>
                     {item.subtitle}
                   </Text>
                 ) : (
@@ -96,7 +100,9 @@ export default function RowWithHeaderTitle({
                   onPress={() => handleDetailsClick?.(item.id)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.detailsButtonText}>{buttonLabel}</Text>
+                  <Text style={[styles.detailsButtonText, largerText && styles.detailsButtonTextLarge]}>
+                    {buttonLabel}
+                  </Text>
                   <ChevronRight size={16} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
@@ -138,6 +144,9 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     textTransform: 'capitalize',
   },
+  headerTextLarge: {
+    fontSize: 14,
+  },
   cardBody: {
     padding: 16,
     flexDirection: 'column',
@@ -164,10 +173,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  titleLarge: {
+    fontSize: 18,
+  },
   subtitle: {
     fontSize: 14,
     color: '#6B7280',
     lineHeight: 20,
+  },
+  subtitleLarge: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   detailsButton: {
     alignSelf: 'flex-start',
@@ -184,6 +200,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  detailsButtonTextLarge: {
+    fontSize: 15,
   },
   skeletonCard: {
     borderLeftWidth: 6,
