@@ -27,6 +27,7 @@ import {
   findUserAppointments,
   appointmentAtCalendar,
   findAppointmentById,
+  findPersonalRequests,
   disabledPersonalDays,
   getPersonalList,
 } from "../../../src/constants/schedule";
@@ -74,6 +75,10 @@ type AppointmentItem = {
 type CalendarEvent = {
   agendamentoId?: number;
   data: string;
+  dataFim?: string;
+  datafim?: string;
+  status?: string;
+  tipoAula?: string;
 };
 
 type DisabledDay = {
@@ -591,15 +596,93 @@ export default function OverviewScreen({
     setModal({ visible: true, title, description });
   }
 
-  function handleCalendarDayPress(date: string) {
+  async function handleCalendarDayPress(date: string) {
     setSelectedDate(date);
-    const dayAppointments = displayedAppointments.filter(
+
+    // 1. Busca agendamentos do dia em displayedAppointments
+    let dayAppointments = displayedAppointments.filter(
       (appointment) => appointment.data?.split("T")[0] === date
     );
 
-    if (dayAppointments.length === 0) {
-      if (!isAluno) return;
+    // 2. Se não encontrou em displayedAppointments, verifica se há eventos no calendário (dots)
+    const calendarEventsForDay = (calendarQuery.data ?? []).filter(
+      (ev: CalendarEvent) => ev.data?.split("T")[0] === date
+    );
 
+    // 3. Se há eventos no calendário para este dia, busca detalhes completos via API
+    if (dayAppointments.length === 0 && calendarEventsForDay.length > 0) {
+      const ids = calendarEventsForDay
+        .map((ev) => ev.agendamentoId)
+        .filter((id): id is number => id !== undefined);
+
+      if (ids.length > 0) {
+        try {
+          const responses = await Promise.all(
+            ids.map(async (id) => {
+              try {
+                const res = await findAppointmentById(id);
+                return normalizeAppointment(res.data);
+              } catch {
+                return null;
+              }
+            })
+          );
+          const valid = responses.filter(
+            (item): item is AppointmentItem => item !== null
+          );
+          if (valid.length > 0) {
+            dayAppointments = valid;
+          }
+        } catch (e) {
+          console.warn("Erro ao buscar detalhes dos agendamentos do dia:", e);
+        }
+      }
+
+      // Fallback: se findAppointmentById não retornou dados completos, usa os dados do dot do calendário
+      if (dayAppointments.length === 0) {
+        dayAppointments = calendarEventsForDay.map((ev) => ({
+          agendamentoId: ev.agendamentoId ?? 0,
+          agendamentoStatus: ev.status ?? "APROVADO",
+          data: ev.data,
+          datafim: ev.dataFim ?? ev.datafim ?? ev.data,
+          personalNome: "Personal Trainer",
+          alunoNome: "Aluno",
+          tipoAula: ev.tipoAula ?? "Presencial",
+        }));
+      }
+    }
+
+    // 4. Se for usuário Personal/Admin e ainda não encontrou agendamentos, tenta findPersonalRequests para a data
+    if (dayAppointments.length === 0 && !isAluno) {
+      try {
+        const startOfDayStr = `${date}T00:00:00`;
+        const endOfDayStr = `${date}T23:59:59`;
+        const res = await findPersonalRequests(0, "10", startOfDayStr, endOfDayStr);
+        const content = res?.data?.content || res?.data || [];
+        if (Array.isArray(content) && content.length > 0) {
+          const mapped = content
+            .map(normalizeAppointment)
+            .filter((item): item is AppointmentItem => item !== null);
+          if (mapped.length > 0) {
+            dayAppointments = mapped;
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar solicitações do personal para a data:", err);
+      }
+    }
+
+    // 5. Se após todas as tentativas NÃO houver agendamentos para este dia:
+    if (dayAppointments.length === 0) {
+      if (!isAluno) {
+        // Usuário diferente de aluno (Personal/Admin): abre o popup para ver o dia (estado vazio com opção de fechar)
+        setPopupDate(date);
+        setPopupAppointments([]);
+        setPopupModalVisible(true);
+        return;
+      }
+
+      // Aluno tentando marcar em dia sem agendamento:
       // 1. Validação de 24 horas: o aluno só pode marcar aula depois de 24h (a partir de amanhã)
       const parts = date.split("-").map(Number);
       if (parts.length === 3) {
@@ -617,13 +700,13 @@ export default function OverviewScreen({
 
         // 2. Validação de dias da semana em que o personal não atende
         const WEEKDAY_PT: Record<number, string> = {
-          0: 'domingo',
-          1: 'segunda',
-          2: 'terca',
-          3: 'quarta',
-          4: 'quinta',
-          5: 'sexta',
-          6: 'sabado',
+          0: "domingo",
+          1: "segunda",
+          2: "terca",
+          3: "quarta",
+          4: "quinta",
+          5: "sexta",
+          6: "sabado",
         };
         const weekday = WEEKDAY_PT[clickedDateStart.getDay()];
         if (calendarDisabledDays.includes(weekday)) {
@@ -682,31 +765,35 @@ export default function OverviewScreen({
       return;
     }
 
-    // Se o dia possuir agendamentos, abre o PopupModal com os detalhes oficiais
-    const mappedAppointments: PopupAppointment[] = dayAppointments.map((appointment) => {
-      const personName = (isAluno ? appointment.personalNome : appointment.alunoNome) || "Personal Trainer";
-      const addr = [
-        appointment.endereco?.logradouro,
-        appointment.endereco?.numero,
-        appointment.endereco?.complemento,
-        appointment.endereco?.bairro,
-        appointment.endereco?.cidade,
-      ]
-        .filter(Boolean)
-        .join(", ") || "Local a combinar";
+    // 6. Se o dia possuir agendamentos, abre o PopupModal com os detalhes oficiais
+    const mappedAppointments: PopupAppointment[] = dayAppointments.map(
+      (appointment) => {
+        const personName =
+          (isAluno ? appointment.personalNome : appointment.alunoNome) ||
+          (isAluno ? "Personal Trainer" : "Aluno");
+        const addr = [
+          appointment.endereco?.logradouro,
+          appointment.endereco?.numero,
+          appointment.endereco?.complemento,
+          appointment.endereco?.bairro,
+          appointment.endereco?.cidade,
+        ]
+          .filter(Boolean)
+          .join(", ") || "Local a combinar";
 
-      return {
-        id: appointment.agendamentoId,
-        agendamentoId: appointment.agendamentoId,
-        name: personName,
-        type: appointment.tipoAula || "Personal",
-        start: appointment.data,
-        end: appointment.datafim || appointment.data,
-        address: addr,
-        status: appointment.agendamentoStatus,
-        photoUrl: appointment.caminhoFoto,
-      };
-    });
+        return {
+          id: appointment.agendamentoId,
+          agendamentoId: appointment.agendamentoId,
+          name: personName,
+          type: appointment.tipoAula || "Personal",
+          start: appointment.data,
+          end: appointment.datafim || appointment.data,
+          address: addr,
+          status: appointment.agendamentoStatus,
+          photoUrl: appointment.caminhoFoto,
+        };
+      }
+    );
 
     setPopupDate(date);
     setPopupAppointments(mappedAppointments);
