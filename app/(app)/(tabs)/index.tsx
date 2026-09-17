@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { Bell, QrCode, Sparkles } from "lucide-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
@@ -21,6 +22,7 @@ import NotificationCenterModal from "../../../src/components/modals/Notification
 import AiPanelModal from "../../../src/components/modals/AiPanelModal";
 import QRCodeDisplayModal, { type AppointmentForQr } from "../../../src/components/modals/QRCodeDisplayModal";
 import PopupModal, { type PopupAppointment } from "../../../src/components/modals/PopupModal";
+import AppointmentCard from "../../../src/components/AppointmentCard";
 import {
   findUserAppointments,
   appointmentAtCalendar,
@@ -287,79 +289,35 @@ function AppointmentRow({
   onShowQrCode?: (item: AppointmentItem) => void;
 }) {
   const personName = isAluno ? item.personalNome : item.alunoNome;
-  const address = [
-    item.endereco?.logradouro,
+  const addressParts = [
     item.endereco?.numero,
-    item.endereco?.complemento,
     item.endereco?.bairro,
     item.endereco?.cidade,
-  ].filter(Boolean).join(", ");
-  const isPendingConclusion = item.agendamentoStatus === "PENDENTE_PERSONAL_CONCLUIR";
-  const isApproved = item.agendamentoStatus === "APROVADO";
+  ].filter(Boolean);
+  const address =
+    addressParts.length > 0
+      ? addressParts.join(", ")
+      : [item.endereco?.logradouro, item.endereco?.bairro, item.endereco?.cidade]
+          .filter(Boolean)
+          .join(", ") || "Endereço não informado";
+
+  const time = `${formatHour(item.data)} - ${formatHour(item.datafim)}`;
 
   return (
-    <View style={styles.appointmentCard}>
-      <View style={styles.rowBetween}>
-        <Text style={styles.status}>{getStatusLabel(item.agendamentoStatus)}</Text>
-        <View style={styles.headerRightActions}>
-          <Text style={styles.typeBadge}>{item.tipoAula}</Text>
-          {item.analiseIa ? (
-            <TouchableOpacity
-              style={styles.sparklesButton}
-              onPress={() => onOpenAi?.(item)}
-              activeOpacity={0.8}
-            >
-              <Sparkles size={16} color="#0f567f" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-      <Text style={styles.appointmentName}>{personName || "Sem nome"}</Text>
-      <Text style={styles.appointmentMeta}>{formatDate(item.data)}</Text>
-      <Text style={styles.appointmentMeta}>
-        {formatHour(item.data) + " - " + formatHour(item.datafim)}
-      </Text>
-      <Text style={styles.appointmentMeta}>
-        {address || "Endereço não informado"}
-      </Text>
-
-      {item.analiseIa ? (
-        <TouchableOpacity
-          style={styles.aiHintBanner}
-          onPress={() => onOpenAi?.(item)}
-          activeOpacity={0.8}
-        >
-          <Sparkles size={14} color="#0f567f" />
-          <Text style={styles.aiHintBannerText}>Ver dica do Treinador IA</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {isAluno && (isPendingConclusion || isApproved) ? (
-        <TouchableOpacity
-          style={[
-            styles.qrCodeButton,
-            isPendingConclusion && styles.qrCodeButtonHighlight,
-          ]}
-          onPress={() => onShowQrCode?.(item)}
-          activeOpacity={0.85}
-        >
-          <QrCode
-            size={16}
-            color={isPendingConclusion ? "#FFFFFF" : "#0f567f"}
-          />
-          <Text
-            style={[
-              styles.qrCodeButtonText,
-              isPendingConclusion && styles.qrCodeButtonTextHighlight,
-            ]}
-          >
-            {isPendingConclusion
-              ? "Apresentar QR Code ao Personal"
-              : "Ver QR Code da Aula"}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+    <AppointmentCard
+      agendamentoId={item.agendamentoId}
+      status={item.agendamentoStatus}
+      name={personName || "Sem nome"}
+      photoUrl={item.caminhoFoto}
+      date={formatDate(item.data)}
+      time={time}
+      type={item.tipoAula || "PRESENCIAL"}
+      address={address}
+      analiseIa={item.analiseIa}
+      isAluno={isAluno}
+      onOpenAi={item.analiseIa && onOpenAi ? () => onOpenAi(item) : undefined}
+      onShowQrCode={onShowQrCode ? () => onShowQrCode(item) : undefined}
+    />
   );
 }
 
@@ -381,6 +339,7 @@ export default function OverviewScreen({
   const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
   const { unreadCount } = useNotifications();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
   const isAluno = !!userRoles?.includes("aluno");
@@ -944,6 +903,13 @@ export default function OverviewScreen({
         appointments={popupAppointments}
         canCreateNewEvent={isAluno}
         onClose={() => setPopupModalVisible(false)}
+        onViewDetails={(item) => {
+          setPopupModalVisible(false);
+          router.push({
+            pathname: "/(app)/(tabs)/schedule-details",
+            params: { id: String(item.agendamentoId ?? item.id) },
+          });
+        }}
         onNewEvent={() => {
           setSelectedDate(popupDate);
           setNewEventVisible(true);

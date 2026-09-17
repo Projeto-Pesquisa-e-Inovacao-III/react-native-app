@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
   CalendarDays,
   Clock3,
@@ -97,6 +98,7 @@ export default function PopupModal({
   onViewDetails,
   onShowQrCode,
 }: PopupModalProps) {
+  const router = useRouter();
   const formattedTitleDate = useMemo(() => formatDateLong(date), [date]);
 
   // Regra de 24 horas: não permite criar novo agendamento para hoje ou datas passadas
@@ -167,7 +169,22 @@ export default function PopupModal({
                 const isClientPending = item.status?.toUpperCase() === 'PENDENTE_CLIENTE_APROVACAO';
 
                 return (
-                  <View key={item.id} style={styles.appointmentCard}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.appointmentCard}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      onClose();
+                      if (onViewDetails) {
+                        onViewDetails(item);
+                      } else {
+                        router.push({
+                          pathname: '/(app)/(tabs)/schedule-details',
+                          params: { id: String(item.agendamentoId ?? item.id) },
+                        });
+                      }
+                    }}
+                  >
                     <View style={styles.cardHeader}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.personalName} numberOfLines={1}>
@@ -233,7 +250,7 @@ export default function PopupModal({
                         ) : null}
                       </View>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}
