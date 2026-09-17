@@ -63,6 +63,13 @@ export default function TabsLayout() {
       <Tabs.Screen name="plans" options={{ title: 'Planos' }} />
       <Tabs.Screen name="users" options={{ title: 'Usuários' }} />
       <Tabs.Screen name="more" options={{ title: 'Mais opções' }} />
+      <Tabs.Screen name="schedule-details" options={{ href: null }} />
+      <Tabs.Screen name="schedule-history" options={{ href: null }} />
+      <Tabs.Screen name="plans-history" options={{ href: null }} />
+      <Tabs.Screen name="plans-history-details" options={{ href: null }} />
+      <Tabs.Screen name="edit-user" options={{ href: null }} />
+      <Tabs.Screen name="edit-anamnesis" options={{ href: null }} />
+      <Tabs.Screen name="set-availability" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -24,10 +24,10 @@ import {
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-import { BoughtPlanDetails, type BoughtPlanDetailsResponse } from '../../src/constants/products';
-import { cpfMask, cellphoneMask } from '../../src/utils/mascara';
-import BottomTabBar, { type TabName } from '../../src/components/BottomTabBar';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { BoughtPlanDetails, type BoughtPlanDetailsResponse } from '../../../src/constants/products';
+import { cpfMask, cellphoneMask } from '../../../src/utils/mascara';
+import BottomTabBar, { type TabName } from '../../../src/components/BottomTabBar';
+import { useAuth } from '../../../src/contexts/AuthContext';
 
 export default function PlansHistoryDetailsScreen() {
   const router = useRouter();

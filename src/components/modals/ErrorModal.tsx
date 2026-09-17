@@ -51,7 +51,7 @@ export default function ErrorModal({
 
   if (!useNativeModal) {
     return (
-      <View style={[StyleSheet.absoluteFillObject, styles.wrapperZIndex]}>
+      <View style={[StyleSheet.absoluteFill, styles.wrapperZIndex]}>
         {contentElement}
       </View>
     );
