@@ -10,10 +10,10 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { getPersonalList, insertAppointment, disabledPersonalDays } from "../constants/schedule";
+import { getPersonalList, insertAppointment, disabledPersonalDays, rescheduleAppointment } from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
 import { getUserAddresses, lookupCep } from "../constants/address";
-import type { Schedule } from "../models/schedule";
+import type { Schedule, ScheduleReschedule } from "../models/schedule";
 import SuccessModal from "./modals/SuccessModal";
 import ErrorModal from "./modals/ErrorModal";
 
@@ -68,6 +68,16 @@ type NewEventProps = {
   personals?: Personal[];
   schedules?: TimeSlot[];
   addresses?: SavedAddress[];
+  isReschedule?: boolean;
+  rescheduleId?: number;
+  appoitmentData?: any;
+  title?: string;
+  buttonTitle?: string;
+  goToNextStep?: boolean;
+  openModalExtern?: () => void;
+  onRescheduleSuccess?: () => void;
+  errorModal?: (title: string, description: string) => void;
+  typeUser?: string[];
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";
@@ -120,9 +130,22 @@ export default function NewEvent({
   personals: propPersonals,
   schedules: propSchedules,
   addresses: propAddresses,
+  isReschedule = false,
+  rescheduleId,
+  appoitmentData,
+  title,
+  buttonTitle,
+  goToNextStep,
+  openModalExtern,
+  onRescheduleSuccess,
+  errorModal: propErrorModal,
+  typeUser,
 }: NewEventProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [date, setDate] = useState<string>(() => {
+    if (appoitmentData?.dataInicio) {
+      return String(appoitmentData.dataInicio).split("T")[0];
+    }
     if (initialDate && isDateAtLeastTomorrow(initialDate)) {
       return initialDate;
     }
@@ -142,18 +165,29 @@ export default function NewEvent({
 
   useEffect(() => {
     if (visible) {
-      if (initialDate && isDateAtLeastTomorrow(initialDate)) {
+      if (isReschedule && appoitmentData?.dataInicio) {
+        setDate(String(appoitmentData.dataInicio).split("T")[0]);
+      } else if (initialDate && isDateAtLeastTomorrow(initialDate)) {
         setDate(initialDate);
       } else {
         setDate(getTomorrowDateString());
       }
+
+      if (isReschedule && appoitmentData?.tipoAula) {
+        setType(appoitmentData.tipoAula as NewEventPayload["type"]);
+      }
+
+      if (isReschedule && appoitmentData?.personal?.id) {
+        setSelectedPersonalId(appoitmentData.personal.id);
+      }
+
       setStep(1);
       setError("");
       setSuccessModalVisible(false);
       setErrorModal({ visible: false, title: "", content: "" });
       setSavedPayload(null);
     }
-  }, [visible, initialDate]);
+  }, [visible, initialDate, isReschedule, appoitmentData]);
 
   // Personais
   const [personalsList, setPersonalsList] = useState<Personal[]>(
@@ -556,6 +590,67 @@ export default function NewEvent({
     }
   }
 
+  async function handleReschedule() {
+    if (!date || !startHour) {
+      const msg = "Selecione uma data e um horário disponível.";
+      setError(msg);
+      if (propErrorModal) {
+        propErrorModal("Erro ao reagendar", msg);
+      } else {
+        setErrorModal({
+          visible: true,
+          title: "Atenção!",
+          content: msg,
+        });
+      }
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const cleanHour = startHour.length === 5 ? `${startHour}:00` : startHour;
+      const formattedDateHour = `${date}T${cleanHour}`;
+      const payload: ScheduleReschedule = {
+        idAgendamento: rescheduleId,
+        data: formattedDateHour,
+        descricao: `${date} - ${startHour}`,
+        endereco: null,
+        personalId: Number(selectedPersonal?.id ?? appoitmentData?.personal?.id ?? 0),
+        tipoAulaProdutoContratado: String(type || appoitmentData?.tipoAula || "PRESENCIAL").toUpperCase(),
+      };
+
+      await rescheduleAppointment(payload);
+      if (openModalExtern) {
+        openModalExtern();
+      } else if (onRescheduleSuccess) {
+        onRescheduleSuccess();
+      } else {
+        setSuccessModalVisible(true);
+      }
+    } catch (err: any) {
+      const responseData = err?.response?.data;
+      const apiMessage =
+        responseData?.Exception ||
+        responseData?.message ||
+        responseData?.mensagem ||
+        "Não foi possível reagendar o horário.";
+      setError(apiMessage);
+      if (propErrorModal) {
+        propErrorModal("Erro ao reagendar", apiMessage);
+      } else {
+        setErrorModal({
+          visible: true,
+          title: "Erro ao reagendar",
+          content: apiMessage,
+        });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleSuccessClose() {
     setSuccessModalVisible(false);
     if (savedPayload) {
@@ -572,8 +667,10 @@ export default function NewEvent({
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Agendar aula</Text>
-            <Text style={styles.stepIndicator}>Etapa {step} de 2</Text>
+            <Text style={styles.title}>{title || (isReschedule ? "Reagendar horário" : "Agendar aula")}</Text>
+            {(!isReschedule || goToNextStep !== false) && (
+              <Text style={styles.stepIndicator}>Etapa {step} de 2</Text>
+            )}
           </View>
           <Pressable onPress={onClose} hitSlop={12}>
             <Text style={styles.close}>Fechar</Text>
@@ -771,11 +868,19 @@ export default function NewEvent({
             )}
 
             <Pressable
-              style={[styles.submit, (!date || !startHour) && styles.submitDisabled]}
-              onPress={goToAddress}
-              disabled={!date || !startHour}
+              style={[styles.submit, (!date || !startHour || submitting) && styles.submitDisabled]}
+              onPress={isReschedule && goToNextStep === false ? handleReschedule : goToAddress}
+              disabled={!date || !startHour || submitting}
             >
-              <Text style={styles.submitText}>Avançar para endereço</Text>
+              {submitting ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.submitText}>
+                  {isReschedule && goToNextStep === false
+                    ? (buttonTitle || "Reagendar")
+                    : (buttonTitle || "Avançar para endereço")}
+                </Text>
+              )}
             </Pressable>
           </>
         ) : (
@@ -915,13 +1020,15 @@ export default function NewEvent({
 
               <Pressable
                 style={[styles.submit, submitting && styles.submitDisabled]}
-                onPress={submit}
+                onPress={isReschedule ? handleReschedule : submit}
                 disabled={submitting}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitText}>Confirmar agendamento</Text>
+                  <Text style={styles.submitText}>
+                    {isReschedule ? "Confirmar reagendamento" : "Confirmar agendamento"}
+                  </Text>
                 )}
               </Pressable>
             </View>

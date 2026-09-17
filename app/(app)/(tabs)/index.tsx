@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { Bell, QrCode, Sparkles } from "lucide-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
@@ -21,10 +22,12 @@ import NotificationCenterModal from "../../../src/components/modals/Notification
 import AiPanelModal from "../../../src/components/modals/AiPanelModal";
 import QRCodeDisplayModal, { type AppointmentForQr } from "../../../src/components/modals/QRCodeDisplayModal";
 import PopupModal, { type PopupAppointment } from "../../../src/components/modals/PopupModal";
+import AppointmentCard from "../../../src/components/AppointmentCard";
 import {
   findUserAppointments,
   appointmentAtCalendar,
   findAppointmentById,
+  findPersonalRequests,
   disabledPersonalDays,
   getPersonalList,
 } from "../../../src/constants/schedule";
@@ -72,6 +75,10 @@ type AppointmentItem = {
 type CalendarEvent = {
   agendamentoId?: number;
   data: string;
+  dataFim?: string;
+  datafim?: string;
+  status?: string;
+  tipoAula?: string;
 };
 
 type DisabledDay = {
@@ -287,79 +294,35 @@ function AppointmentRow({
   onShowQrCode?: (item: AppointmentItem) => void;
 }) {
   const personName = isAluno ? item.personalNome : item.alunoNome;
-  const address = [
-    item.endereco?.logradouro,
+  const addressParts = [
     item.endereco?.numero,
-    item.endereco?.complemento,
     item.endereco?.bairro,
     item.endereco?.cidade,
-  ].filter(Boolean).join(", ");
-  const isPendingConclusion = item.agendamentoStatus === "PENDENTE_PERSONAL_CONCLUIR";
-  const isApproved = item.agendamentoStatus === "APROVADO";
+  ].filter(Boolean);
+  const address =
+    addressParts.length > 0
+      ? addressParts.join(", ")
+      : [item.endereco?.logradouro, item.endereco?.bairro, item.endereco?.cidade]
+          .filter(Boolean)
+          .join(", ") || "Endereço não informado";
+
+  const time = `${formatHour(item.data)} - ${formatHour(item.datafim)}`;
 
   return (
-    <View style={styles.appointmentCard}>
-      <View style={styles.rowBetween}>
-        <Text style={styles.status}>{getStatusLabel(item.agendamentoStatus)}</Text>
-        <View style={styles.headerRightActions}>
-          <Text style={styles.typeBadge}>{item.tipoAula}</Text>
-          {item.analiseIa ? (
-            <TouchableOpacity
-              style={styles.sparklesButton}
-              onPress={() => onOpenAi?.(item)}
-              activeOpacity={0.8}
-            >
-              <Sparkles size={16} color="#0f567f" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-      <Text style={styles.appointmentName}>{personName || "Sem nome"}</Text>
-      <Text style={styles.appointmentMeta}>{formatDate(item.data)}</Text>
-      <Text style={styles.appointmentMeta}>
-        {formatHour(item.data) + " - " + formatHour(item.datafim)}
-      </Text>
-      <Text style={styles.appointmentMeta}>
-        {address || "Endereço não informado"}
-      </Text>
-
-      {item.analiseIa ? (
-        <TouchableOpacity
-          style={styles.aiHintBanner}
-          onPress={() => onOpenAi?.(item)}
-          activeOpacity={0.8}
-        >
-          <Sparkles size={14} color="#0f567f" />
-          <Text style={styles.aiHintBannerText}>Ver dica do Treinador IA</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {isAluno && (isPendingConclusion || isApproved) ? (
-        <TouchableOpacity
-          style={[
-            styles.qrCodeButton,
-            isPendingConclusion && styles.qrCodeButtonHighlight,
-          ]}
-          onPress={() => onShowQrCode?.(item)}
-          activeOpacity={0.85}
-        >
-          <QrCode
-            size={16}
-            color={isPendingConclusion ? "#FFFFFF" : "#0f567f"}
-          />
-          <Text
-            style={[
-              styles.qrCodeButtonText,
-              isPendingConclusion && styles.qrCodeButtonTextHighlight,
-            ]}
-          >
-            {isPendingConclusion
-              ? "Apresentar QR Code ao Personal"
-              : "Ver QR Code da Aula"}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+    <AppointmentCard
+      agendamentoId={item.agendamentoId}
+      status={item.agendamentoStatus}
+      name={personName || "Sem nome"}
+      photoUrl={item.caminhoFoto}
+      date={formatDate(item.data)}
+      time={time}
+      type={item.tipoAula || "PRESENCIAL"}
+      address={address}
+      analiseIa={item.analiseIa}
+      isAluno={isAluno}
+      onOpenAi={item.analiseIa && onOpenAi ? () => onOpenAi(item) : undefined}
+      onShowQrCode={onShowQrCode ? () => onShowQrCode(item) : undefined}
+    />
   );
 }
 
@@ -381,6 +344,7 @@ export default function OverviewScreen({
   const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
   const { unreadCount } = useNotifications();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
   const isAluno = !!userRoles?.includes("aluno");
@@ -632,15 +596,93 @@ export default function OverviewScreen({
     setModal({ visible: true, title, description });
   }
 
-  function handleCalendarDayPress(date: string) {
+  async function handleCalendarDayPress(date: string) {
     setSelectedDate(date);
-    const dayAppointments = displayedAppointments.filter(
+
+    // 1. Busca agendamentos do dia em displayedAppointments
+    let dayAppointments = displayedAppointments.filter(
       (appointment) => appointment.data?.split("T")[0] === date
     );
 
-    if (dayAppointments.length === 0) {
-      if (!isAluno) return;
+    // 2. Se não encontrou em displayedAppointments, verifica se há eventos no calendário (dots)
+    const calendarEventsForDay = (calendarQuery.data ?? []).filter(
+      (ev: CalendarEvent) => ev.data?.split("T")[0] === date
+    );
 
+    // 3. Se há eventos no calendário para este dia, busca detalhes completos via API
+    if (dayAppointments.length === 0 && calendarEventsForDay.length > 0) {
+      const ids = calendarEventsForDay
+        .map((ev) => ev.agendamentoId)
+        .filter((id): id is number => id !== undefined);
+
+      if (ids.length > 0) {
+        try {
+          const responses = await Promise.all(
+            ids.map(async (id) => {
+              try {
+                const res = await findAppointmentById(id);
+                return normalizeAppointment(res.data);
+              } catch {
+                return null;
+              }
+            })
+          );
+          const valid = responses.filter(
+            (item): item is AppointmentItem => item !== null
+          );
+          if (valid.length > 0) {
+            dayAppointments = valid;
+          }
+        } catch (e) {
+          console.warn("Erro ao buscar detalhes dos agendamentos do dia:", e);
+        }
+      }
+
+      // Fallback: se findAppointmentById não retornou dados completos, usa os dados do dot do calendário
+      if (dayAppointments.length === 0) {
+        dayAppointments = calendarEventsForDay.map((ev) => ({
+          agendamentoId: ev.agendamentoId ?? 0,
+          agendamentoStatus: ev.status ?? "APROVADO",
+          data: ev.data,
+          datafim: ev.dataFim ?? ev.datafim ?? ev.data,
+          personalNome: "Personal Trainer",
+          alunoNome: "Aluno",
+          tipoAula: ev.tipoAula ?? "Presencial",
+        }));
+      }
+    }
+
+    // 4. Se for usuário Personal/Admin e ainda não encontrou agendamentos, tenta findPersonalRequests para a data
+    if (dayAppointments.length === 0 && !isAluno) {
+      try {
+        const startOfDayStr = `${date}T00:00:00`;
+        const endOfDayStr = `${date}T23:59:59`;
+        const res = await findPersonalRequests(0, "10", startOfDayStr, endOfDayStr);
+        const content = res?.data?.content || res?.data || [];
+        if (Array.isArray(content) && content.length > 0) {
+          const mapped = content
+            .map(normalizeAppointment)
+            .filter((item): item is AppointmentItem => item !== null);
+          if (mapped.length > 0) {
+            dayAppointments = mapped;
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar solicitações do personal para a data:", err);
+      }
+    }
+
+    // 5. Se após todas as tentativas NÃO houver agendamentos para este dia:
+    if (dayAppointments.length === 0) {
+      if (!isAluno) {
+        // Usuário diferente de aluno (Personal/Admin): abre o popup para ver o dia (estado vazio com opção de fechar)
+        setPopupDate(date);
+        setPopupAppointments([]);
+        setPopupModalVisible(true);
+        return;
+      }
+
+      // Aluno tentando marcar em dia sem agendamento:
       // 1. Validação de 24 horas: o aluno só pode marcar aula depois de 24h (a partir de amanhã)
       const parts = date.split("-").map(Number);
       if (parts.length === 3) {
@@ -658,13 +700,13 @@ export default function OverviewScreen({
 
         // 2. Validação de dias da semana em que o personal não atende
         const WEEKDAY_PT: Record<number, string> = {
-          0: 'domingo',
-          1: 'segunda',
-          2: 'terca',
-          3: 'quarta',
-          4: 'quinta',
-          5: 'sexta',
-          6: 'sabado',
+          0: "domingo",
+          1: "segunda",
+          2: "terca",
+          3: "quarta",
+          4: "quinta",
+          5: "sexta",
+          6: "sabado",
         };
         const weekday = WEEKDAY_PT[clickedDateStart.getDay()];
         if (calendarDisabledDays.includes(weekday)) {
@@ -723,31 +765,35 @@ export default function OverviewScreen({
       return;
     }
 
-    // Se o dia possuir agendamentos, abre o PopupModal com os detalhes oficiais
-    const mappedAppointments: PopupAppointment[] = dayAppointments.map((appointment) => {
-      const personName = (isAluno ? appointment.personalNome : appointment.alunoNome) || "Personal Trainer";
-      const addr = [
-        appointment.endereco?.logradouro,
-        appointment.endereco?.numero,
-        appointment.endereco?.complemento,
-        appointment.endereco?.bairro,
-        appointment.endereco?.cidade,
-      ]
-        .filter(Boolean)
-        .join(", ") || "Local a combinar";
+    // 6. Se o dia possuir agendamentos, abre o PopupModal com os detalhes oficiais
+    const mappedAppointments: PopupAppointment[] = dayAppointments.map(
+      (appointment) => {
+        const personName =
+          (isAluno ? appointment.personalNome : appointment.alunoNome) ||
+          (isAluno ? "Personal Trainer" : "Aluno");
+        const addr = [
+          appointment.endereco?.logradouro,
+          appointment.endereco?.numero,
+          appointment.endereco?.complemento,
+          appointment.endereco?.bairro,
+          appointment.endereco?.cidade,
+        ]
+          .filter(Boolean)
+          .join(", ") || "Local a combinar";
 
-      return {
-        id: appointment.agendamentoId,
-        agendamentoId: appointment.agendamentoId,
-        name: personName,
-        type: appointment.tipoAula || "Personal",
-        start: appointment.data,
-        end: appointment.datafim || appointment.data,
-        address: addr,
-        status: appointment.agendamentoStatus,
-        photoUrl: appointment.caminhoFoto,
-      };
-    });
+        return {
+          id: appointment.agendamentoId,
+          agendamentoId: appointment.agendamentoId,
+          name: personName,
+          type: appointment.tipoAula || "Personal",
+          start: appointment.data,
+          end: appointment.datafim || appointment.data,
+          address: addr,
+          status: appointment.agendamentoStatus,
+          photoUrl: appointment.caminhoFoto,
+        };
+      }
+    );
 
     setPopupDate(date);
     setPopupAppointments(mappedAppointments);
@@ -944,6 +990,13 @@ export default function OverviewScreen({
         appointments={popupAppointments}
         canCreateNewEvent={isAluno}
         onClose={() => setPopupModalVisible(false)}
+        onViewDetails={(item) => {
+          setPopupModalVisible(false);
+          router.push({
+            pathname: "/(app)/(tabs)/schedule-details",
+            params: { id: String(item.agendamentoId ?? item.id) },
+          });
+        }}
         onNewEvent={() => {
           setSelectedDate(popupDate);
           setNewEventVisible(true);

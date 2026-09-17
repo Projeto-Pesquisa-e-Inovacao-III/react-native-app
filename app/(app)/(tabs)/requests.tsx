@@ -41,6 +41,7 @@ import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeApp
 import QRCodeScannerModal from '../../../src/components/modals/QRCodeScannerModal';
 import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
 import { useAuth } from '../../../src/contexts/AuthContext';
+import { useRouter } from 'expo-router';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import {
   CircleCheckIcon,
@@ -380,6 +381,7 @@ function FilterBar({
 }
 
 export default function CheckScheduleScreen() {
+  const router = useRouter();
   const { roles } = useAuth();
   const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -584,7 +586,12 @@ export default function CheckScheduleScreen() {
     // });
   }
 
-  function handleCardPress(_id: number) {}
+  function handleCardPress(id: number) {
+    router.push({
+      pathname: '/(app)/(tabs)/schedule-details',
+      params: { id },
+    });
+  }
 
   const hasDateFilter = !!(selectedDateRange.start && selectedDateRange.end);
   const activeFiltersCount = (nameFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0);

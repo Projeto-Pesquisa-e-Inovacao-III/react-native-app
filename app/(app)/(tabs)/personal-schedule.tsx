@@ -651,6 +651,24 @@ export default function PersonalWeeklyScheduleScreen() {
                 </View>
 
                 {/* Ações */}
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: '#19587A', marginBottom: 10 }]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    const targetId = selectedEvent.agendamentoId;
+                    setSelectedEvent(null);
+                    router.push({
+                      pathname: '/(app)/(tabs)/schedule-details',
+                      params: { id: targetId },
+                    });
+                  }}
+                >
+                  <Text style={styles.actionButtonText}>
+                    Ver detalhes da aula
+                  </Text>
+                  <ArrowUpRight size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+
                 {selectedEvent.status === "PENDENTE_PERSONAL_APROVACAO" && (
                   <TouchableOpacity
                     style={styles.actionButton}

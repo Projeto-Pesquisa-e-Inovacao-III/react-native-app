@@ -125,8 +125,11 @@ export default function ScheduleHistoryRoute() {
     setDateRange({ start: '', end: '' });
   }
 
-  function handleDetailsClick() {
-    Alert.alert('Detalhes do agendamento', 'Essa visualização será disponibilizada em breve.');
+  function handleDetailsClick(id: number) {
+    router.push({
+      pathname: '/(app)/(tabs)/schedule-details',
+      params: { id },
+    });
   }
 
   return (
