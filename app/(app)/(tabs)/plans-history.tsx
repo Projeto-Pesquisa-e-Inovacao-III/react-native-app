@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Search,
   Calendar as CalendarIcon,
@@ -17,26 +17,40 @@ import {
   X,
   RotateCcw,
   Inbox,
-} from 'lucide-react-native';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+} from "lucide-react-native";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-import { getUserPlansHistory, type UserPlanItem } from '../../src/constants/products';
-import RowWithHeaderTitle, { type RowItem } from '../../src/components/RowWithHeaderTitle';
-import PaginatedList, { type PaginationInfo } from '../../src/components/PaginatedList';
-import InputWithIcon from '../../src/components/InputWithIcon';
-import DateRangePickerModal, { type DateRange } from '../../src/components/modals/DateRangePickerModal';
-import BottomTabBar, { type TabName } from '../../src/components/BottomTabBar';
-import { useAuth } from '../../src/contexts/AuthContext';
+import {
+  getUserPlansHistory,
+  type UserPlanItem,
+} from "../../../src/constants/products";
+import RowWithHeaderTitle, {
+  type RowItem,
+} from "../../../src/components/RowWithHeaderTitle";
+import PaginatedList, {
+  type PaginationInfo,
+} from "../../../src/components/PaginatedList";
+import InputWithIcon from "../../../src/components/InputWithIcon";
+import DateRangePickerModal, {
+  type DateRange,
+} from "../../../src/components/modals/DateRangePickerModal";
+import BottomTabBar, {
+  type TabName,
+} from "../../../src/components/BottomTabBar";
+import { useAuth } from "../../../src/contexts/AuthContext";
 
 export default function PlansHistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { roles } = useAuth();
 
-  const [filterSearch, setFilterSearch] = useState<string>('');
-  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({ start: '', end: '' });
+  const [filterSearch, setFilterSearch] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({
+    start: "",
+    end: "",
+  });
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [page, setPage] = useState(0);
 
@@ -59,7 +73,7 @@ export default function PlansHistoryScreen() {
     refetch,
   } = useQuery({
     queryKey: [
-      'user-plans',
+      "user-plans",
       page,
       debouncedSearch,
       selectedDateRange.start,
@@ -68,7 +82,7 @@ export default function PlansHistoryScreen() {
     queryFn: async () => {
       const res = await getUserPlansHistory(
         page,
-        '10',
+        "10",
         hasDateFilter ? selectedDateRange.start : undefined,
         hasDateFilter ? selectedDateRange.end : undefined,
         debouncedSearch.trim() || undefined,
@@ -85,8 +99,8 @@ export default function PlansHistoryScreen() {
   const pagination: PaginationInfo | null = response?.page ?? null;
 
   function clearFilters() {
-    setFilterSearch('');
-    setSelectedDateRange({ start: '', end: '' });
+    setFilterSearch("");
+    setSelectedDateRange({ start: "", end: "" });
     setPage(0);
   }
 
@@ -97,34 +111,34 @@ export default function PlansHistoryScreen() {
 
   function handleDetailsClick(id: number) {
     router.push({
-      pathname: '/plans-history-details',
+      pathname: "/plans-history-details",
       params: { id: String(id) },
     });
   }
 
   function handleTabPress(tab: TabName) {
     switch (tab) {
-      case 'home':
-        router.push('/(app)/(tabs)');
+      case "home":
+        router.push("/(app)/(tabs)");
         break;
-      case 'schedule':
+      case "schedule":
         router.push(
-          roles?.includes('personal') || roles?.includes('admin')
-            ? '/(app)/(tabs)/personal-schedule'
-            : '/(app)/(tabs)/schedule',
+          roles?.includes("personal") || roles?.includes("admin")
+            ? "/(app)/(tabs)/personal-schedule"
+            : "/(app)/(tabs)/schedule",
         );
         break;
-      case 'requests':
-        router.push('/(app)/(tabs)/requests');
+      case "requests":
+        router.push("/(app)/(tabs)/requests");
         break;
-      case 'plans':
-        router.push('/(app)/(tabs)/plans');
+      case "plans":
+        router.push("/(app)/(tabs)/plans");
         break;
-      case 'users':
-        router.push('/(app)/(tabs)/users');
+      case "users":
+        router.push("/(app)/(tabs)/users");
         break;
-      case 'more':
-        router.push('/(app)/(tabs)/more');
+      case "more":
+        router.push("/(app)/(tabs)/more");
         break;
     }
   }
@@ -133,8 +147,12 @@ export default function PlansHistoryScreen() {
     return dataList.map((item) => {
       let formattedDate = item.dataCompra;
       try {
-        const cleanIso = item.dataCompra.includes('T') ? item.dataCompra : `${item.dataCompra}T00:00:00`;
-        formattedDate = format(parseISO(cleanIso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+        const cleanIso = item.dataCompra.includes("T")
+          ? item.dataCompra
+          : `${item.dataCompra}T00:00:00`;
+        formattedDate = format(parseISO(cleanIso), "dd 'de' MMMM 'de' yyyy", {
+          locale: ptBR,
+        });
       } catch {
         // fallback
       }
@@ -142,18 +160,26 @@ export default function PlansHistoryScreen() {
       return {
         id: item.id,
         headerTitle: formattedDate,
-        title: item.produtoExibicao?.titulo || 'Plano',
-        subtitle: item.produtoExibicao?.subtitulo || 'Sem descrição adicional',
+        title: item.produtoExibicao?.titulo || "Plano",
+        subtitle: item.produtoExibicao?.subtitulo || "Sem descrição adicional",
         tipoAula: item.produtoExibicao?.tipoAula,
       };
     });
   }, [dataList]);
 
   const activeDateLabel = useMemo(() => {
-    if (!hasDateFilter) return '';
+    if (!hasDateFilter) return "";
     try {
-      const s = format(parseISO(`${selectedDateRange.start}T00:00:00`), 'dd/MM/yy', { locale: ptBR });
-      const e = format(parseISO(`${selectedDateRange.end}T00:00:00`), 'dd/MM/yy', { locale: ptBR });
+      const s = format(
+        parseISO(`${selectedDateRange.start}T00:00:00`),
+        "dd/MM/yy",
+        { locale: ptBR },
+      );
+      const e = format(
+        parseISO(`${selectedDateRange.end}T00:00:00`),
+        "dd/MM/yy",
+        { locale: ptBR },
+      );
       return `${s} até ${e}`;
     } catch {
       return `${selectedDateRange.start} - ${selectedDateRange.end}`;
@@ -162,7 +188,9 @@ export default function PlansHistoryScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.headerArea, { paddingTop: Math.max(insets.top, 16) }]}>
+      <View
+        style={[styles.headerArea, { paddingTop: Math.max(insets.top, 16) }]}
+      >
         <View style={styles.headerInner}>
           <View style={styles.header}>
             <TouchableOpacity
@@ -196,7 +224,7 @@ export default function PlansHistoryScreen() {
             >
               <CalendarIcon
                 size={20}
-                color={hasDateFilter ? '#FFFFFF' : '#093A5D'}
+                color={hasDateFilter ? "#FFFFFF" : "#093A5D"}
               />
             </TouchableOpacity>
           </View>
@@ -205,10 +233,12 @@ export default function PlansHistoryScreen() {
             <View style={styles.filtersBadgeRow}>
               {hasDateFilter && (
                 <View style={styles.activeFilterChip}>
-                  <Text style={styles.activeFilterChipText}>{activeDateLabel}</Text>
+                  <Text style={styles.activeFilterChipText}>
+                    {activeDateLabel}
+                  </Text>
                   <TouchableOpacity
                     onPress={() => {
-                      setSelectedDateRange({ start: '', end: '' });
+                      setSelectedDateRange({ start: "", end: "" });
                       setPage(0);
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -241,7 +271,7 @@ export default function PlansHistoryScreen() {
           <RefreshControl
             refreshing={isFetching && !isLoading}
             onRefresh={onRefresh}
-            colors={['#093A5D']}
+            colors={["#093A5D"]}
             tintColor="#093A5D"
           />
         }
@@ -269,8 +299,8 @@ export default function PlansHistoryScreen() {
               <Text style={styles.emptyTitle}>Nenhuma compra encontrada</Text>
               <Text style={styles.emptySubtitle}>
                 {hasFilters
-                  ? 'Tente ajustar ou limpar os filtros de busca.'
-                  : 'Você ainda não possui nenhum histórico de planos contratados.'}
+                  ? "Tente ajustar ou limpar os filtros de busca."
+                  : "Você ainda não possui nenhum histórico de planos contratados."}
               </Text>
               {hasFilters && (
                 <TouchableOpacity
@@ -278,7 +308,9 @@ export default function PlansHistoryScreen() {
                   onPress={clearFilters}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.emptyClearButtonText}>Limpar filtros</Text>
+                  <Text style={styles.emptyClearButtonText}>
+                    Limpar filtros
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -293,7 +325,11 @@ export default function PlansHistoryScreen() {
         onApply={handleDateApply}
       />
 
-      <BottomTabBar activeTab="more" onTabPress={handleTabPress} userRoles={roles} />
+      <BottomTabBar
+        activeTab="more"
+        onTabPress={handleTabPress}
+        userRoles={roles}
+      />
     </View>
   );
 }
@@ -301,29 +337,29 @@ export default function PlansHistoryScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
   },
   headerArea: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    shadowColor: '#000',
+    borderBottomColor: "#E5E7EB",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
     zIndex: 10,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerInner: {
     maxWidth: 900,
-    width: '100%',
+    width: "100%",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginBottom: 14,
   },
@@ -331,20 +367,20 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#E2E8F0",
+    justifyContent: "center",
+    alignItems: "center",
   },
   pageTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontWeight: "700",
+    color: "#0F172A",
   },
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
   searchInputWrapper: {
@@ -358,53 +394,53 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
   },
   calendarButtonActive: {
-    backgroundColor: '#093A5D',
-    borderColor: '#093A5D',
+    backgroundColor: "#093A5D",
+    borderColor: "#093A5D",
   },
   filtersBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 10,
   },
   activeFilterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: "#E0E7FF",
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: "#C7D2FE",
   },
   activeFilterChipText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#093A5D',
+    fontWeight: "600",
+    color: "#093A5D",
   },
   clearFiltersButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 20,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: "#FEE2E2",
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: "#FECACA",
   },
   clearFiltersText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#DC2626',
+    fontWeight: "600",
+    color: "#DC2626",
   },
   content: {
     flex: 1,
@@ -412,18 +448,18 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     maxWidth: 900,
-    width: '100%',
-    alignSelf: 'center',
+    width: "100%",
+    alignSelf: "center",
   },
   emptyState: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 32,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 5,
@@ -433,35 +469,35 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontWeight: "700",
+    color: "#1F2937",
     marginBottom: 6,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
+    color: "#6B7280",
+    textAlign: "center",
     lineHeight: 20,
     maxWidth: 280,
   },
   emptyClearButton: {
     marginTop: 18,
-    backgroundColor: '#093A5D',
+    backgroundColor: "#093A5D",
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 8,
   },
   emptyClearButtonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

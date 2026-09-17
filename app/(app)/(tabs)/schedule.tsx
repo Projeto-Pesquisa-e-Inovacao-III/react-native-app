@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import BottomTabBar from '../../../src/components/BottomTabBar';
 import MonthlyCalendar, { type CalendarEvent } from '../../../src/components/MonthlyCalendar';
 import NewEvent, { type NewEventPayload } from '../../../src/components/NewEvent';
@@ -202,6 +203,7 @@ function getStatusStyle(status: AppointmentStatus) {
 }
 
 export default function ScheduleScreen() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const today = useMemo(() => new Date(), []);
   const [selectedDate, setSelectedDate] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
@@ -659,7 +661,12 @@ export default function ScheduleScreen() {
                       <TouchableOpacity
                         style={[styles.actionButton, styles.secondaryAction]}
                         activeOpacity={0.9}
-                        onPress={() => setSelectedDetailsAppointment(item)}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(app)/(tabs)/schedule-details',
+                            params: { id: item.agendamentoId },
+                          })
+                        }
                       >
                         <ArrowRight size={16} color="#19587A" />
                         <Text style={[styles.actionText, styles.secondaryText]}>Ver detalhes</Text>
@@ -670,7 +677,12 @@ export default function ScheduleScreen() {
                       <TouchableOpacity
                         style={[styles.actionButton, styles.secondaryAction]}
                         activeOpacity={0.9}
-                        onPress={() => setSelectedDetailsAppointment(item)}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(app)/(tabs)/schedule-details',
+                            params: { id: item.agendamentoId },
+                          })
+                        }
                       >
                         <ArrowRight size={16} color="#19587A" />
                         <Text style={[styles.actionText, styles.secondaryText]}>Resumo</Text>
@@ -835,11 +847,12 @@ export default function ScheduleScreen() {
         onAccept={handleAccept}
         onRefuse={handleRefuse}
         onViewDetails={(item) => {
-          const appt = appointments.find((a) => a.agendamentoId === item.agendamentoId);
-          if (appt) {
-            setSelectedDetailsAppointment(appt);
-            setPopupModalVisible(false);
-          }
+          setPopupModalVisible(false);
+          const targetId = item.agendamentoId || item.id;
+          router.push({
+            pathname: '/(app)/(tabs)/schedule-details',
+            params: { id: targetId },
+          });
         }}
         onShowQrCode={(item) => {
           const appt = appointments.find((a) => a.agendamentoId === item.agendamentoId);
