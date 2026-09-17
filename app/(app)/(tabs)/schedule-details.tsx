@@ -45,6 +45,7 @@ import type { AbsenceAppointment } from "../../../src/models/schedule";
 
 import UserAvatar from "../../../src/components/UserAvatar";
 import SummaryCard from "../../../src/components/SummaryCard";
+import { GoogleMapEmbed } from "../../../src/components/GoogleMapEmbed";
 import NewEvent from "../../../src/components/NewEvent";
 import TimerModal from "../../../src/components/modals/TimerModal";
 import ConcludeAppointmentModal from "../../../src/components/modals/ConcludeAppointmentModal";
@@ -330,15 +331,22 @@ export default function ScheduleDetailsScreen() {
     }
   }
 
-  function handleGoogleMapsClick() {
-    const addressParts = [
-      appointmentData?.endereco?.cep?.logradouro,
-      appointmentData?.endereco?.cep?.bairro,
-      appointmentData?.endereco?.numero,
-      appointmentData?.endereco?.cep?.uf,
+  const mapQueryAddress = useMemo(() => {
+    const end = appointmentData?.endereco;
+    if (!end) return "";
+    const parts = [
+      end?.cep?.logradouro,
+      end?.numero,
+      end?.cep?.bairro,
+      end?.cep?.uf,
     ].filter(Boolean);
+    return parts.join(" ");
+  }, [appointmentData?.endereco]);
 
-    const encoded = encodeURIComponent(addressParts.join(", "));
+  function handleGoogleMapsClick() {
+    const query = mapQueryAddress || fullAddress;
+    if (!query || query === "Endereço não informado") return;
+    const encoded = encodeURIComponent(query);
     Linking.openURL(
       `https://www.google.com/maps/dir/?api=1&destination=${encoded}`,
     );
@@ -575,20 +583,17 @@ export default function ScheduleDetailsScreen() {
 
               <Text style={styles.addressText}>{fullAddress}</Text>
 
-              {/* Botão de mapa interativo */}
-              <TouchableOpacity
-                style={styles.mapVisualCard}
-                onPress={handleGoogleMapsClick}
-                activeOpacity={0.9}
-              >
-                <MapPin size={28} color="#19587A" />
-                <Text style={styles.mapVisualTitle}>
-                  Ver localização no mapa
-                </Text>
-                <Text style={styles.mapVisualSub}>
-                  Toque para traçar rota no Google Maps
-                </Text>
-              </TouchableOpacity>
+              {/* Mapa interativo Embed */}
+              {isLoadingAppointment ? (
+                <View style={styles.mapLoadingContainer}>
+                  <ActivityIndicator size="small" color="#19587A" />
+                </View>
+              ) : (
+                <GoogleMapEmbed
+                  endereco={mapQueryAddress || fullAddress}
+                  height={320}
+                />
+              )}
             </View>
 
             {/* Resumos anteriores (apenas para Personal e Admin) */}
@@ -1092,25 +1097,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 14,
   },
-  mapVisualCard: {
+  mapLoadingContainer: {
+    height: 320,
     backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
     borderRadius: 8,
-    padding: 24,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-  },
-  mapVisualTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#0F1E2E",
-    marginTop: 4,
-  },
-  mapVisualSub: {
-    fontSize: 13,
-    color: "#64748B",
+    marginTop: 8,
   },
   summariesSection: {
     marginTop: 8,
@@ -1136,6 +1129,7 @@ const styles = StyleSheet.create({
   },
   actionButtonsContainer: {
     marginTop: 8,
+    marginBottom: 30,
   },
   buttonsColumn: {
     gap: 12,
