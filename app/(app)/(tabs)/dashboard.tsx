@@ -1,5 +1,5 @@
 import { Dumbbell, Percent, RotateCcwClock, User } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,10 +10,18 @@ import {
   View,
 } from "react-native";
 import { BASE_URL } from "../../../src/services/api";
+import {
+  getConsultingSessions,
+  getPlansSalesQuantity,
+  getQuantityofActiveStudents,
+  getQuantityofInactiveStudents,
+  getSalesQuantity,
+} from "../../../src/constants/dashboard";
 import MetricCard from "src/components/MetricCard";
 import DashboardChart from "src/components/DashboardChart";
 import { DashboardSeriesPoint } from "src/models/dashboard";
 import { formatNumber } from "src/utils/formatacao";
+import { useQuery } from "@tanstack/react-query";
 
 const MONTH_NAMES = [
   "Janeiro",
@@ -77,51 +85,22 @@ function mapDashboardResponse(response: DashboardApiResponse): DashboardData {
   };
 }
 
-const DASHBOARD_ENDPOINTS = {
-  sales: "/produtos-contratados/ganhos-mes/12",
-  plansSales: "/produtos-contratados/planos-vendidos/30",
-  sessions: "/agendamentos/consultoria-realizadas/12",
-  activeStudents: "/alunos/quantidade-ativos",
-  inactiveStudents: "/produtos-contratados/quantidade-e-percentual-alunos-expirados",
-} as const;
-
-async function getJson<T>(url: string, headers: Record<string, string>) {
-  const response = await fetch(url, {
-    method: "GET",
-    headers,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Nao foi possivel carregar o dashboard (${response.status}).`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
-async function fetchDashboardData(
-  apiBaseUrl: string,
-  headers: Record<string, string> = {},
-): Promise<DashboardData> {
-  const baseUrl = apiBaseUrl.replace(/\/$/, "");
+async function fetchDashboardData(): Promise<DashboardData> {
   const [sessions, sales, plansSales, activeStudents, inactiveStudents] = await Promise.all([
-    getJson<ApiMonthPoint[]>(`${baseUrl}${DASHBOARD_ENDPOINTS.sessions}`, headers),
-    getJson<ApiMonthPoint[]>(`${baseUrl}${DASHBOARD_ENDPOINTS.sales}`, headers),
-    getJson<number>(`${baseUrl}${DASHBOARD_ENDPOINTS.plansSales}`, headers),
-    getJson<{ quantidadeAlunos: number }>(`${baseUrl}${DASHBOARD_ENDPOINTS.activeStudents}`, headers),
-    getJson<{ quantidadeAlunos: number; percentualAlunos: number }>(
-      `${baseUrl}${DASHBOARD_ENDPOINTS.inactiveStudents}`,
-      headers,
-    ),
+    getConsultingSessions(),
+    getSalesQuantity(),
+    getPlansSalesQuantity(),
+    getQuantityofActiveStudents(),
+    getQuantityofInactiveStudents(),
   ]);
 
   return mapDashboardResponse({
-    sessions,
-    sales,
-    plansSales,
-    activeStudents: activeStudents.quantidadeAlunos,
-    inactiveStudents: inactiveStudents.quantidadeAlunos,
-    inactivePercentage: inactiveStudents.percentualAlunos,
+    sessions: sessions.data,
+    sales: sales.data,
+    plansSales: plansSales.data,
+    activeStudents: activeStudents.data.quantidadeAlunos,
+    inactiveStudents: inactiveStudents.data.quantidadeAlunos,
+    inactivePercentage: inactiveStudents.data.percentualAlunos,
   });
 }
 
@@ -138,43 +117,21 @@ export type DashboardProps = {
 export default function Dashboard({
   data,
   apiBaseUrl = BASE_URL,
-  headers,
   loading = false,
   error,
   refreshing = false,
   onRefresh,
 }: DashboardProps) {
-  const [remoteData, setRemoteData] = useState<DashboardData>();
-  const [remoteLoading, setRemoteLoading] = useState(!data && !!apiBaseUrl);
-  const [remoteError, setRemoteError] = useState<string>();
-  const [remoteRefreshing, setRemoteRefreshing] = useState(false);
-  const displayedData = data ?? remoteData;
-
-  const loadDashboard = useCallback(async (isRefresh = false) => {
-    if (!apiBaseUrl) return;
-
-    if (isRefresh) setRemoteRefreshing(true);
-    else setRemoteLoading(true);
-    setRemoteError(undefined);
-
-    try {
-      setRemoteData(await fetchDashboardData(apiBaseUrl, headers));
-    } catch (requestError) {
-      setRemoteError(requestError instanceof Error ? requestError.message : "Nao foi possivel carregar o dashboard.");
-    } finally {
-      setRemoteLoading(false);
-      setRemoteRefreshing(false);
-    }
-  }, [apiBaseUrl, headers]);
-
-  useEffect(() => {
-    if (!data && apiBaseUrl) void Promise.resolve().then(() => loadDashboard());
-  }, [apiBaseUrl, data, loadDashboard]);
-
-  const handleRefresh = onRefresh ?? (apiBaseUrl ? () => void loadDashboard(true) : undefined);
-  const displayedError = error ?? remoteError;
-  const displayedLoading = loading || remoteLoading;
-  const displayedRefreshing = refreshing || remoteRefreshing;
+  const dashboardQuery = useQuery<DashboardData>({
+    queryKey: ["dashboard"],
+    queryFn: fetchDashboardData,
+    enabled: !data && !!apiBaseUrl,
+  });
+  const displayedData = data ?? dashboardQuery.data;
+  const handleRefresh = onRefresh ?? (() => void dashboardQuery.refetch());
+  const displayedError = error ?? (dashboardQuery.error instanceof Error ? dashboardQuery.error.message : undefined);
+  const displayedLoading = loading || dashboardQuery.isLoading;
+  const displayedRefreshing = refreshing || dashboardQuery.isRefetching;
 
   return (
     <ScrollView
