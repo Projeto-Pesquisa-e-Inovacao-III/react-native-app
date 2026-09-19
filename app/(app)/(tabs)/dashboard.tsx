@@ -1,4 +1,4 @@
-import { Dumbbell, Percent, RotateCcwClock, User } from "lucide-react-native";
+import { ArrowLeft, Dumbbell, Percent, RotateCcwClock, User } from "lucide-react-native";
 import React from "react";
 import {
   ActivityIndicator,
@@ -7,8 +7,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getConsultingSessions,
   getPlansSalesQuantity,
@@ -105,6 +108,9 @@ async function fetchDashboardData(): Promise<DashboardData> {
 }
 
 export default function Dashboard() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
   const dashboardQuery = useQuery<DashboardData>({
     queryKey: ["dashboard"],
     queryFn: fetchDashboardData,
@@ -116,27 +122,45 @@ export default function Dashboard() {
   const displayedRefreshing = dashboardQuery.isRefetching;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      refreshControl={<RefreshControl refreshing={displayedRefreshing} onRefresh={handleRefresh} />}
-    >
+    <View style={styles.screen}>
       <FocusAwareStatusBar style="dark" />
-      <View style={styles.heading}>
-        <Text style={styles.headingTitle}>Desempenho</Text>
-        <Text style={styles.headingSubtitle}>Acompanhe suas metricas e resultados.</Text>
-      </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top, 16) + 8,
+            paddingBottom: Math.max(insets.bottom, 16) + 90,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={displayedRefreshing} onRefresh={handleRefresh} />}
+      >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.replace("/(app)/(tabs)/more")}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={18} color="#475569" />
+          <Text style={styles.backText}>Voltar</Text>
+        </TouchableOpacity>
 
-      {displayedError ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{displayedError}</Text>
-          <Pressable onPress={handleRefresh}><Text style={styles.retryText}>Tentar novamente</Text></Pressable>
+        <View style={styles.heading}>
+          <Text style={styles.headingTitle}>Desempenho</Text>
+          <Text style={styles.headingSubtitle}>Acompanhe suas metricas e resultados.</Text>
         </View>
-      ) : null}
 
-      {displayedLoading && !displayedData ? (
-        <View style={styles.loadingBox}><ActivityIndicator color="#0f172a" /><Text style={styles.mutedText}>Carregando dashboard...</Text></View>
-      ) : (
-        <View style={styles.metricsGrid}>
+        {displayedError ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{displayedError}</Text>
+            <Pressable onPress={handleRefresh}><Text style={styles.retryText}>Tentar novamente</Text></Pressable>
+          </View>
+        ) : null}
+
+        {displayedLoading && !displayedData ? (
+          <View style={styles.loadingBox}><ActivityIndicator color="#0f172a" /><Text style={styles.mutedText}>Carregando dashboard...</Text></View>
+        ) : (
+          <View style={styles.metricsGrid}>
             <View style={styles.metricRow}>
               <View style={styles.metricColumn}>
                 <MetricCard title="Alunos com pacotes ativos" value={displayedData ? formatNumber(displayedData.metrics.activeStudents) : "-"} icon={<Dumbbell size={20} color="#192633"/>}/>
@@ -155,9 +179,10 @@ export default function Dashboard() {
             </View>
             <DashboardChart title="Consultorias por mês" legend="Consultorias" type="bar" data={displayedData?.consultingSessions ?? []} />
             <DashboardChart title="Ganhos mensais em reais" legend="Ganhos" type="line" data={displayedData?.monthlySales ?? []} />
-        </View>
-      )}
-    </ScrollView>
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -165,26 +190,43 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#f1f5f9",
-    padding: 8,
-    paddingBottom: 40
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  backText: {
+    color: "#475569",
+    fontSize: 14,
+    fontWeight: "600",
   },
   heading: {
-    paddingTop: 8,
-    paddingBottom: 28
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   headingTitle: {
     color: "#0f172a",
     fontSize: 32,
     fontWeight: "800",
-    marginTop: 4
+    marginTop: 4,
   },
   headingSubtitle: {
     color: "#64748b",
     fontSize: 14,
-    marginTop: 5
+    marginTop: 5,
   },
   metricsGrid: {
-    gap: 12
+    gap: 12,
   },
   metricRow: {
     flexDirection: "row",
@@ -198,11 +240,11 @@ const styles = StyleSheet.create({
     minHeight: 240,
     justifyContent: "center",
     alignItems: "center",
-    gap: 10
+    gap: 10,
   },
   mutedText: {
     color: "#64748b",
-    fontSize: 14
+    fontSize: 14,
   },
   errorBox: {
     backgroundColor: "#fff1f2",
@@ -210,14 +252,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 14,
-    gap: 8
+    gap: 8,
   },
   errorText: {
     color: "#9f1239",
-    fontSize: 14
+    fontSize: 14,
   },
   retryText: {
     color: "#be123c",
-    fontWeight: "800"
+    fontWeight: "800",
   },
 });

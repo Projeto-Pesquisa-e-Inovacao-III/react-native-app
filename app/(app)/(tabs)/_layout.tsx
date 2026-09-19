@@ -89,6 +89,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="edit-user" options={{ href: null }} />
       <Tabs.Screen name="edit-anamnesis" options={{ href: null }} />
       <Tabs.Screen name="set-availability" options={{ href: null }} />
+      <Tabs.Screen name="dashboard" options={{ href: null }} />
     </Tabs>
     </>
   );

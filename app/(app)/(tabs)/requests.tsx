@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -59,16 +60,28 @@ import {
 } from '../../../src/components/icons/ScheduleIcons';
 
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function formatDate(iso?: string) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function formatTime(iso?: string) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
 }
 
 function startOfDay(date: Date) {
@@ -156,6 +169,7 @@ function AppointmentCard({
   const isApproved = card.status === 'APROVADO';
   const isPendingConclusion =
     card.status === 'PENDENTE_PERSONAL_CONCLUIR' &&
+    !!card.dataInicio &&
     startOfDay(new Date()) >= startOfDay(new Date(card.dataInicio));
 
   function openMap() {
@@ -379,6 +393,7 @@ function FilterBar({
 export default function CheckScheduleScreen() {
   const router = useRouter();
   const { roles } = useAuth();
+  const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
   const isNarrow = width < 360;
@@ -475,15 +490,27 @@ export default function CheckScheduleScreen() {
           undefined,
           nameFilter || undefined,
         );
-        const data = res.data;
+        const data = res?.data;
+        const items = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.content)
+          ? data.content
+          : [];
+
         if (replace) {
-          setAppointments(data.content);
+          setAppointments(items);
         } else {
-          setAppointments((prev) => [...prev, ...data.content]);
+          setAppointments((prev) => [...(Array.isArray(prev) ? prev : []), ...items]);
         }
-        setHasMore(data.page.number < data.page.totalPages - 1);
-      } catch {
-        // Silenciosamente define lista vazia ou falha sem popup
+
+        const pageNumber = data?.page?.number ?? data?.number ?? pageNum;
+        const totalPages = data?.page?.totalPages ?? data?.totalPages ?? 1;
+        setHasMore(pageNumber < totalPages - 1);
+      } catch (err) {
+        console.error('Erro ao carregar agendamentos:', err);
+        if (replace) {
+          setAppointments([]);
+        }
       }
     },
     [statusFilter, nameFilter, selectedDateRange],
@@ -492,7 +519,9 @@ export default function CheckScheduleScreen() {
   const loadKpis = useCallback(async () => {
     try {
       const res = await getScheduleData();
-      setKpis(res.data);
+      if (res?.data) {
+        setKpis((prev) => ({ ...prev, ...res.data }));
+      }
     } catch {
       // Ignora erro silenciosamente
     }
@@ -745,19 +774,19 @@ export default function CheckScheduleScreen() {
                 <View style={styles.kpiRowTablet}>
                   <KpiCard
                     title="TOTAL PENDENTE"
-                    value={kpis.totalPendente}
+                    value={kpis?.totalPendente ?? 0}
                     color="#F59E0B"
                     style={styles.kpiCardTablet}
                   />
                   <KpiCard
                     title="RESPONDIDOS"
-                    value={kpis.totalRespondido}
+                    value={kpis?.totalRespondido ?? 0}
                     color="#009664"
                     style={styles.kpiCardTablet}
                   />
                   <KpiCard
                     title="CANCELADOS NO MÊS ATUAL"
-                    value={kpis.totalCanceladoPorMesAtual}
+                    value={kpis?.totalCanceladoPorMesAtual ?? 0}
                     color="#960000"
                     style={styles.kpiCardTablet}
                   />
@@ -767,20 +796,20 @@ export default function CheckScheduleScreen() {
                   <View style={styles.kpiMobileRowTop}>
                     <KpiCard
                       title="TOTAL PENDENTE"
-                      value={kpis.totalPendente}
+                      value={kpis?.totalPendente ?? 0}
                       color="#F59E0B"
                       style={styles.kpiCardHalf}
                     />
                     <KpiCard
                       title="RESPONDIDOS"
-                      value={kpis.totalRespondido}
+                      value={kpis?.totalRespondido ?? 0}
                       color="#009664"
                       style={styles.kpiCardHalf}
                     />
                   </View>
                   <KpiCard
                     title="CANCELADOS NO MÊS ATUAL"
-                    value={kpis.totalCanceladoPorMesAtual}
+                    value={kpis?.totalCanceladoPorMesAtual ?? 0}
                     color="#960000"
                     style={styles.kpiCardFull}
                   />
@@ -843,8 +872,8 @@ export default function CheckScheduleScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={appointments}
-          keyExtractor={(item) => String(item.agendamentoId)}
+          data={appointments ?? []}
+          keyExtractor={(item, index) => String(item?.agendamentoId ?? index)}
           renderItem={({ item }) => (
             <AppointmentCard
               card={item}
@@ -858,7 +887,7 @@ export default function CheckScheduleScreen() {
               onPress={handleCardPress}
             />
           )}
-          contentContainerStyle={appointments.length === 0 ? styles.emptyListContent : styles.listContent}
+          contentContainerStyle={(appointments?.length ?? 0) === 0 ? styles.emptyListContent : styles.listContent}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#192633']} />}
@@ -870,7 +899,12 @@ export default function CheckScheduleScreen() {
       )}
 
       {showScrollTop && (
-        <Animated.View style={[styles.scrollTopBtnContainer, { opacity: fadeScrollTop }]}>
+        <Animated.View
+          style={[
+            styles.scrollTopBtnContainer,
+            { opacity: fadeScrollTop, bottom: Math.max(insets.bottom, 16) + 80 },
+          ]}
+        >
           <TouchableOpacity style={styles.scrollTopBtn} onPress={scrollToTop} activeOpacity={0.85}>
             <ChevronUpIcon size={22} color="#ffffff" />
           </TouchableOpacity>
@@ -899,7 +933,7 @@ export default function CheckScheduleScreen() {
       <QRCodeScannerModal
         visible={activeModal === 'qr_scanner'}
         appointmentId={selectedId}
-        studentName={appointments.find((a) => a.agendamentoId === selectedId)?.nome}
+        studentName={(appointments ?? []).find((a) => a.agendamentoId === selectedId)?.nome}
         onClose={closeModal}
         onSuccess={() => {
           setActiveModal('conclude');

@@ -105,7 +105,7 @@ export default function MoreRoute() {
             {roles?.includes("personal") && roles?.includes("admin") && (
               <>
                 <OptionItem icon={<ChartLine size={22} color="#192633"/>} title='Dashboard' onClick={() => router.push("/dashboard")}/>
-                <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/schedule")} />
+                <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/(app)/(tabs)/personal-schedule")} />
                 <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
                 <OptionItem icon={<Clock size={22} color="#192633" />} title='Ajustar disponibilidade' onClick={() => router.push("/set-availability")} />
                 <OptionItem icon={<User size={22} color="#192633" />} title='Criar personal' onClick={() => router.push("/create-personal")} isLast={true} />

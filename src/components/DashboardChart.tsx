@@ -73,53 +73,55 @@ export default function DashboardChart({ title, data, type, color = "#0f172a" }:
       <View style={styles.chartHeader}>
         <Text style={styles.chartTitle}>{title}</Text>
       </View>
-      <Svg
-        width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        accessibilityLabel={title}
-      >
-        {yTicks.map((ratio) => {
-          const y = top + plotHeight * ratio;
-          return <Line key={ratio} x1={left} x2={width - 12} y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
-        })}
-        {type === "bar"
-          ? points.map((point, index) => (
-              <Rect
-                key={`${point.month}-${point.x}`}
-                x={left + index * barStep + (barStep - barWidth) / 2}
-                y={point.y}
-                width={barWidth}
-                height={Math.max(0, top + plotHeight - point.y)}
-                rx="4"
-                fill={color}
-              />
-            ))
-          : <>
-              <Path d={linePath} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              {points.map((point) => <Circle key={`${point.month}-${point.x}`} cx={point.x} cy={point.y} r="4" fill="#ffffff" stroke={color} strokeWidth="2" />)}
-            </>}
-        {yTicks.map((ratio) => {
-          const y = top + plotHeight * ratio;
-          return (
-            <SvgText key={`y-label-${ratio}`} x="4" y={y + 4} fill="#64748b" fontSize="10">
-              {formatNumber(maxValue * (1 - ratio))}
+      <View pointerEvents="none">
+        <Svg
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          accessibilityLabel={title}
+        >
+          {yTicks.map((ratio) => {
+            const y = top + plotHeight * ratio;
+            return <Line key={ratio} x1={left} x2={width - 12} y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
+          })}
+          {type === "bar"
+            ? points.map((point, index) => (
+                <Rect
+                  key={`${point.month}-${point.x}`}
+                  x={left + index * barStep + (barStep - barWidth) / 2}
+                  y={point.y}
+                  width={barWidth}
+                  height={Math.max(0, top + plotHeight - point.y)}
+                  rx="4"
+                  fill={color}
+                />
+              ))
+            : <>
+                <Path d={linePath} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                {points.map((point) => <Circle key={`${point.month}-${point.x}`} cx={point.x} cy={point.y} r="4" fill="#ffffff" stroke={color} strokeWidth="2" />)}
+              </>}
+          {yTicks.map((ratio) => {
+            const y = top + plotHeight * ratio;
+            return (
+              <SvgText key={`y-label-${ratio}`} x="4" y={y + 4} fill="#64748b" fontSize="10">
+                {formatNumber(maxValue * (1 - ratio))}
+              </SvgText>
+            );
+          })}
+          {labels.map(({ point, index }) => (
+            <SvgText
+              key={`label-${point.month}-${index}`}
+              x={type === "bar" ? left + index * barStep + barStep / 2 : point.x}
+              y={height - 16}
+              fill="#64748b"
+              fontSize="10"
+              textAnchor="middle"
+            >
+              {point.month.slice(0, 3)}
             </SvgText>
-          );
-        })}
-        {labels.map(({ point, index }) => (
-          <SvgText
-            key={`label-${point.month}-${index}`}
-            x={type === "bar" ? left + index * barStep + barStep / 2 : point.x}
-            y={height - 16}
-            fill="#64748b"
-            fontSize="10"
-            textAnchor="middle"
-          >
-            {point.month.slice(0, 3)}
-          </SvgText>
-        ))}
-      </Svg>
+          ))}
+        </Svg>
+      </View>
       <Text style={styles.axisLabel}>Meses</Text>
     </View>
   );
