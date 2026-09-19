@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { BASE_URL } from "../../../src/services/api";
 import {
   getConsultingSessions,
   getPlansSalesQuantity,
@@ -53,14 +52,14 @@ type DashboardApiResponse = {
   inactivePercentage: number;
 };
 
-export type DashboardMetric = {
+type DashboardMetric = {
   activeStudents: number;
   salesLast30Days: number;
   inactiveStudents: number;
   activePackagesPercentage: number;
 };
 
-export type DashboardData = {
+type DashboardData = {
   metrics: DashboardMetric;
   consultingSessions: DashboardSeriesPoint[];
   monthlySales: DashboardSeriesPoint[];
@@ -104,39 +103,21 @@ async function fetchDashboardData(): Promise<DashboardData> {
   });
 }
 
-export type DashboardProps = {
-  data?: DashboardData;
-  apiBaseUrl?: string;
-  headers?: Record<string, string>;
-  loading?: boolean;
-  error?: string;
-  refreshing?: boolean;
-  onRefresh?: () => void;
-};
-
-export default function Dashboard({
-  data,
-  apiBaseUrl = BASE_URL,
-  loading = false,
-  error,
-  refreshing = false,
-  onRefresh,
-}: DashboardProps) {
+export default function Dashboard() {
   const dashboardQuery = useQuery<DashboardData>({
     queryKey: ["dashboard"],
     queryFn: fetchDashboardData,
-    enabled: !data && !!apiBaseUrl,
   });
-  const displayedData = data ?? dashboardQuery.data;
-  const handleRefresh = onRefresh ?? (() => void dashboardQuery.refetch());
-  const displayedError = error ?? (dashboardQuery.error instanceof Error ? dashboardQuery.error.message : undefined);
-  const displayedLoading = loading || dashboardQuery.isLoading;
-  const displayedRefreshing = refreshing || dashboardQuery.isRefetching;
+  const displayedData = dashboardQuery.data;
+  const handleRefresh = () => void dashboardQuery.refetch();
+  const displayedError = dashboardQuery.error instanceof Error ? dashboardQuery.error.message : undefined;
+  const displayedLoading = dashboardQuery.isLoading;
+  const displayedRefreshing = dashboardQuery.isRefetching;
 
   return (
     <ScrollView
       style={styles.screen}
-      refreshControl={handleRefresh ? <RefreshControl refreshing={displayedRefreshing} onRefresh={handleRefresh} /> : undefined}
+      refreshControl={<RefreshControl refreshing={displayedRefreshing} onRefresh={handleRefresh} />}
     >
       <View style={styles.heading}>
         <Text style={styles.headingTitle}>Desempenho</Text>
@@ -146,15 +127,14 @@ export default function Dashboard({
       {displayedError ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{displayedError}</Text>
-          {handleRefresh ? <Pressable onPress={handleRefresh}><Text style={styles.retryText}>Tentar novamente</Text></Pressable> : null}
+          <Pressable onPress={handleRefresh}><Text style={styles.retryText}>Tentar novamente</Text></Pressable>
         </View>
       ) : null}
 
       {displayedLoading && !displayedData ? (
         <View style={styles.loadingBox}><ActivityIndicator color="#0f172a" /><Text style={styles.mutedText}>Carregando dashboard...</Text></View>
       ) : (
-        <>
-          <View style={styles.metricsGrid}>
+        <View style={styles.metricsGrid}>
             <View style={styles.metricRow}>
               <View style={styles.metricColumn}>
                 <MetricCard title="Alunos com pacotes ativos" value={displayedData ? formatNumber(displayedData.metrics.activeStudents) : "-"} icon={<Dumbbell size={20} color="#192633"/>}/>
@@ -173,8 +153,7 @@ export default function Dashboard({
             </View>
             <DashboardChart title="Consultorias por mês" legend="Consultorias" type="bar" data={displayedData?.consultingSessions ?? []} />
             <DashboardChart title="Ganhos mensais em reais" legend="Ganhos" type="line" data={displayedData?.monthlySales ?? []} />
-          </View>
-        </>
+        </View>
       )}
     </ScrollView>
   );
@@ -212,10 +191,6 @@ const styles = StyleSheet.create({
   metricColumn: {
     flex: 1,
     minWidth: 0,
-  },
-  metricCopy: {
-    flex: 1,
-    paddingRight: 8
   },
   loadingBox: {
     minHeight: 240,
