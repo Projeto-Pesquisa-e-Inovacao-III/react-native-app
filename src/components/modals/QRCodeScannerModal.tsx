@@ -215,7 +215,7 @@ export default function QRCodeScannerModal({
           /* Active Camera View */
           <View style={styles.cameraWrapper}>
             <CameraView
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
               facing="back"
               enableTorch={torch}
               barcodeScannerSettings={{
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   statusBadge: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',

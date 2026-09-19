@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import * as Notifications from 'expo-notifications';
 import {
   registerForNotificationsAsync,
   registerForPushNotificationsAsync,
+  subscribeToNotifications,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
@@ -56,7 +56,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     });
 
     // 2. Escuta notificações recebidas (tanto locais quanto push remotas do backend)
-    const subscription = Notifications.addNotificationReceivedListener((notificationEvent) => {
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+
+    subscribeToNotifications((notificationEvent) => {
+      if (!active) return;
+
       const { title, body, data } = notificationEvent.request.content;
       const recipient = (data?.recipient as NotificationRecipient) || 'ambos';
 
@@ -71,10 +76,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       };
 
       setNotifications((prev) => [newItem, ...prev]);
+    }).then((nextSubscription) => {
+      if (active) {
+        subscription = nextSubscription;
+      } else {
+        nextSubscription.remove();
+      }
     });
 
     return () => {
-      subscription.remove();
+      active = false;
+      subscription?.remove();
     };
   }, []);
 

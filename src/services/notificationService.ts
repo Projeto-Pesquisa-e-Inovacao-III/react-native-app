@@ -1,16 +1,44 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 
-// Configura o comportamento de exibição quando a notificação chega com o app aberto (foreground)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+type NotificationsModule = typeof import('expo-notifications');
+type NotificationListener = Parameters<NotificationsModule['addNotificationReceivedListener']>[0];
+type NotificationSubscription = ReturnType<NotificationsModule['addNotificationReceivedListener']>;
+
+const isExpoGo =
+  Platform.OS === 'web' ||
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === 'storeClient';
+
+let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+
+async function getNotificationsModule(): Promise<NotificationsModule | null> {
+  if (isExpoGo) {
+    return null;
+  }
+
+  notificationsModulePromise ??= import('expo-notifications').then((module) => {
+    module.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    return module;
+  });
+
+  return notificationsModulePromise;
+}
+
+export async function subscribeToNotifications(
+  listener: NotificationListener,
+): Promise<NotificationSubscription> {
+  const notifications = await getNotificationsModule();
+  return notifications?.addNotificationReceivedListener(listener) ?? { remove: () => {} };
+}
 
 export type NotificationRecipient = 'aluno' | 'personal' | 'ambos';
 
@@ -35,13 +63,12 @@ export type AppNotificationItem = {
   data?: AppNotificationData;
 };
 
-import Constants from 'expo-constants';
-
 /**
  * Inicializa permissões, canais de notificação e obtém o Expo Push Token do dispositivo.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (Platform.OS === 'web') {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
     return null;
   }
 
@@ -105,7 +132,8 @@ export async function sendLocalNotification({
   data?: AppNotificationData;
   delaySeconds?: number;
 }): Promise<string | null> {
-  if (Platform.OS === 'web') {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
     console.log(`[Web Notification] ${title}: ${body}`);
     return 'web-notif-' + Date.now();
   }
