@@ -16,8 +16,6 @@ import {
   Animated,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { statusProperties } from '../../../src/constants/cardStatus';
 import { Bell, Calendar as CalendarIcon } from 'lucide-react-native';
@@ -59,9 +57,6 @@ import {
   CloseIcon,
 } from '../../../src/components/icons/ScheduleIcons';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso);

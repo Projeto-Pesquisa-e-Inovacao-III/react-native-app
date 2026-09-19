@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Trash2, PlusCircle, XCircle, X } from "lucide-react-native";
 import ErrorModal from "./ErrorModal";
 import type { ProductExhibition } from "../../models/products";

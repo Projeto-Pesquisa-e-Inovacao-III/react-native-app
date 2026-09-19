@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   Platform,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from "@tanstack/react-query";
 import { PackageCard } from "../../../src/components/PackageCard";
 import AddPackagePlan from "../../../src/components/modals/AddPackagePlan";
