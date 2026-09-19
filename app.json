@@ -31,13 +31,6 @@
           "barcodeScannerEnabled": true
         }
       ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#19587A"
-        }
-      ],
       "expo-status-bar"
     ]
   }
