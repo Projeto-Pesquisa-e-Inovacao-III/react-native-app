@@ -1,7 +1,26 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 
-export const BASE_URL = 'http://localhost:8080/api';
+function getApiBaseUrl() {
+  // Production builds never have hostUri — don't let this silently
+  // resolve to garbage in a shipped app. Point it at your real API.
+
+  const debuggerHost =
+    Constants.expoConfig?.hostUri ??       // modern SDKs
+    Constants.expoGoConfig?.debuggerHost;  // Expo Go fallback
+
+  const host = debuggerHost?.split(':')[0];
+
+  if (!host) {
+    console.warn('Could not detect Metro host — falling back to localhost');
+    return 'http://localhost:8080/api';
+  }
+
+  return `http://${host}:8080/api`;
+}
+
+export const BASE_URL = getApiBaseUrl();
+console.log('BASE_URL:', BASE_URL);
 
 const exceptions = ['/login', '/register', '/forgot-password', '/logout'];
 
