@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -16,8 +17,6 @@ import {
   Animated,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { statusProperties } from '../../../src/constants/cardStatus';
 import { Bell, Calendar as CalendarIcon } from 'lucide-react-native';
@@ -26,6 +25,7 @@ import { ptBR } from 'date-fns/locale';
 import DateRangePickerModal, { type DateRange } from '../../../src/components/modals/DateRangePickerModal';
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
+import ScreenHeader from '../../../src/components/ScreenHeader';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -59,20 +59,29 @@ import {
   CloseIcon,
 } from '../../../src/components/icons/ScheduleIcons';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+
+function formatDate(iso?: string) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
 }
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function formatTime(iso?: string) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
 }
 
 function startOfDay(date: Date) {
@@ -160,6 +169,7 @@ function AppointmentCard({
   const isApproved = card.status === 'APROVADO';
   const isPendingConclusion =
     card.status === 'PENDENTE_PERSONAL_CONCLUIR' &&
+    !!card.dataInicio &&
     startOfDay(new Date()) >= startOfDay(new Date(card.dataInicio));
 
   function openMap() {
@@ -383,6 +393,7 @@ function FilterBar({
 export default function CheckScheduleScreen() {
   const router = useRouter();
   const { roles } = useAuth();
+  const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
   const isNarrow = width < 360;
@@ -479,15 +490,27 @@ export default function CheckScheduleScreen() {
           undefined,
           nameFilter || undefined,
         );
-        const data = res.data;
+        const data = res?.data;
+        const items = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.content)
+          ? data.content
+          : [];
+
         if (replace) {
-          setAppointments(data.content);
+          setAppointments(items);
         } else {
-          setAppointments((prev) => [...prev, ...data.content]);
+          setAppointments((prev) => [...(Array.isArray(prev) ? prev : []), ...items]);
         }
-        setHasMore(data.page.number < data.page.totalPages - 1);
-      } catch {
-        // Silenciosamente define lista vazia ou falha sem popup
+
+        const pageNumber = data?.page?.number ?? data?.number ?? pageNum;
+        const totalPages = data?.page?.totalPages ?? data?.totalPages ?? 1;
+        setHasMore(pageNumber < totalPages - 1);
+      } catch (err) {
+        console.error('Erro ao carregar agendamentos:', err);
+        if (replace) {
+          setAppointments([]);
+        }
       }
     },
     [statusFilter, nameFilter, selectedDateRange],
@@ -496,7 +519,9 @@ export default function CheckScheduleScreen() {
   const loadKpis = useCallback(async () => {
     try {
       const res = await getScheduleData();
-      setKpis(res.data);
+      if (res?.data) {
+        setKpis((prev) => ({ ...prev, ...res.data }));
+      }
     } catch {
       // Ignora erro silenciosamente
     }
@@ -673,17 +698,13 @@ export default function CheckScheduleScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <ScreenHeader
+        title="Solicitações"
+        subtitle="Gerencie as solicitações de agendamentos"
+        unreadCount={unreadCount}
+        onBellPress={() => setIsNotificationModalVisible(true)}
+      >
         <View style={[styles.headerInner, isTablet && styles.headerInnerTablet]}>
-          <View style={styles.headerTopBar}>
-            <View style={styles.titleRow}>
-              <View style={styles.titleWrapper}>
-                <Text style={styles.title}>Solicitações de Agendamentos</Text>
-              </View>
-            </View>
-
-          </View>
-
           {!isPanelOpen && hasFilters && (
             <View style={styles.compactFilterSummary}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactFilterChips}>
@@ -753,19 +774,19 @@ export default function CheckScheduleScreen() {
                 <View style={styles.kpiRowTablet}>
                   <KpiCard
                     title="TOTAL PENDENTE"
-                    value={kpis.totalPendente}
+                    value={kpis?.totalPendente ?? 0}
                     color="#F59E0B"
                     style={styles.kpiCardTablet}
                   />
                   <KpiCard
                     title="RESPONDIDOS"
-                    value={kpis.totalRespondido}
+                    value={kpis?.totalRespondido ?? 0}
                     color="#009664"
                     style={styles.kpiCardTablet}
                   />
                   <KpiCard
                     title="CANCELADOS NO MÊS ATUAL"
-                    value={kpis.totalCanceladoPorMesAtual}
+                    value={kpis?.totalCanceladoPorMesAtual ?? 0}
                     color="#960000"
                     style={styles.kpiCardTablet}
                   />
@@ -775,20 +796,20 @@ export default function CheckScheduleScreen() {
                   <View style={styles.kpiMobileRowTop}>
                     <KpiCard
                       title="TOTAL PENDENTE"
-                      value={kpis.totalPendente}
+                      value={kpis?.totalPendente ?? 0}
                       color="#F59E0B"
                       style={styles.kpiCardHalf}
                     />
                     <KpiCard
                       title="RESPONDIDOS"
-                      value={kpis.totalRespondido}
+                      value={kpis?.totalRespondido ?? 0}
                       color="#009664"
                       style={styles.kpiCardHalf}
                     />
                   </View>
                   <KpiCard
                     title="CANCELADOS NO MÊS ATUAL"
-                    value={kpis.totalCanceladoPorMesAtual}
+                    value={kpis?.totalCanceladoPorMesAtual ?? 0}
                     color="#960000"
                     style={styles.kpiCardFull}
                   />
@@ -842,7 +863,7 @@ export default function CheckScheduleScreen() {
             </View>
           </Animated.View>
         </View>
-      </View>
+      </ScreenHeader>
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -851,8 +872,8 @@ export default function CheckScheduleScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={appointments}
-          keyExtractor={(item) => String(item.agendamentoId)}
+          data={appointments ?? []}
+          keyExtractor={(item, index) => String(item?.agendamentoId ?? index)}
           renderItem={({ item }) => (
             <AppointmentCard
               card={item}
@@ -866,7 +887,7 @@ export default function CheckScheduleScreen() {
               onPress={handleCardPress}
             />
           )}
-          contentContainerStyle={appointments.length === 0 ? styles.emptyListContent : styles.listContent}
+          contentContainerStyle={(appointments?.length ?? 0) === 0 ? styles.emptyListContent : styles.listContent}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#192633']} />}
@@ -878,7 +899,12 @@ export default function CheckScheduleScreen() {
       )}
 
       {showScrollTop && (
-        <Animated.View style={[styles.scrollTopBtnContainer, { opacity: fadeScrollTop }]}>
+        <Animated.View
+          style={[
+            styles.scrollTopBtnContainer,
+            { opacity: fadeScrollTop, bottom: Math.max(insets.bottom, 16) + 80 },
+          ]}
+        >
           <TouchableOpacity style={styles.scrollTopBtn} onPress={scrollToTop} activeOpacity={0.85}>
             <ChevronUpIcon size={22} color="#ffffff" />
           </TouchableOpacity>
@@ -907,7 +933,7 @@ export default function CheckScheduleScreen() {
       <QRCodeScannerModal
         visible={activeModal === 'qr_scanner'}
         appointmentId={selectedId}
-        studentName={appointments.find((a) => a.agendamentoId === selectedId)?.nome}
+        studentName={(appointments ?? []).find((a) => a.agendamentoId === selectedId)?.nome}
         onClose={closeModal}
         onSuccess={() => {
           setActiveModal('conclude');
@@ -963,69 +989,12 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
 
-  header: {
-    backgroundColor: '#192633',
-    paddingTop: 50,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#324d67',
-  },
   headerInner: {
     width: '100%',
   },
   headerInnerTablet: {
     maxWidth: 960,
     alignSelf: 'center',
-  },
-
-  headerTopBar: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: 12,
-    marginBottom: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  bellBtn: {
-    position: 'relative',
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: '#273c50',
-    borderWidth: 1,
-    borderColor: '#3c5a78',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bellBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#ef4444',
-    borderRadius: 999,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  bellBadgeText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  titleWrapper: {
-    flex: 1,
-  },
-  title: {
-    fontWeight: '700',
-    fontSize: 22,
-    color: '#ffffff',
-    letterSpacing: -0.3,
   },
 
   toggleRow: {

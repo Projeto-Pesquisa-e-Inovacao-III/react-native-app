@@ -8,8 +8,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MailIcon, LockIcon } from '../../src/components/icons/AuthIcons';
 import InputWithIcon from '../../src/components/InputWithIcon';
@@ -48,6 +48,10 @@ export default function LoginRoute() {
       email: 'fabio.admin@email.com',
       password: 'admin123',
     });
+  }
+
+  function handleAutoFill4() {
+    router.push('/dev-seed');
   }
 
   async function handleSubmit() {
@@ -130,6 +134,14 @@ export default function LoginRoute() {
                     activeOpacity={0.7}
                   >
                     <Text style={styles.btnAutoFillText}>Admin / Personal</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.btnAutoFill}
+                    onPress={handleAutoFill4}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.btnAutoFillText}>Dev-seed</Text>
                   </TouchableOpacity>
                 </View>
               </View>

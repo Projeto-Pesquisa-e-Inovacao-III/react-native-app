@@ -11,10 +11,11 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Bell, QrCode, Sparkles } from "lucide-react-native";
+import { QrCode, Sparkles } from "lucide-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
+import ScreenHeader from "../../../src/components/ScreenHeader";
 import OverviewCardPackageStatus from "../../../src/components/OverviewCardPackageStatus";
 import Calendar from "../../../src/components/Calendar";
 import NewEvent, { type NewEventPayload } from "../../../src/components/NewEvent";
@@ -839,28 +840,12 @@ export default function OverviewScreen({
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>{headerTitle}</Text>
-            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.bellButton}
-            onPress={() => setNotificationModalVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Bell size={22} color="#FFFFFF" />
-            {unreadCount > 0 && (
-              <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
+      <ScreenHeader
+        title={headerTitle}
+        subtitle={headerSubtitle}
+        unreadCount={unreadCount}
+        onBellPress={() => setNotificationModalVisible(true)}
+      >
         {isAluno ? (
           <View style={styles.headerStatsRow}>
             <View style={styles.headerStatCard}>
@@ -902,7 +887,7 @@ export default function OverviewScreen({
             </View>
           </View>
         )}
-      </View>
+      </ScreenHeader>
 
       <ScrollView contentContainerStyle={styles.content}>
         {isAluno ? (
@@ -1057,59 +1042,10 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: 14,
   },
-  header: {
-    backgroundColor: "#192633",
-    width: "100%",
-    paddingHorizontal: 16,
-    paddingTop: 44,
-    paddingBottom: 14,
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  bellButton: {
-    position: "relative",
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  headerBadge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    backgroundColor: "#EF4444",
-    borderRadius: 999,
-    minWidth: 16,
-    height: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  headerBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 27,
-    fontWeight: "700",
-  },
-  headerSubtitle: {
-    color: "#c6d4df",
-    fontSize: 13,
-    marginTop: 4,
-    marginBottom: 12,
-  },
   headerStatsRow: {
     flexDirection: "row",
     gap: 10,
+    marginTop: 12,
   },
   headerStatCard: {
     flex: 1,

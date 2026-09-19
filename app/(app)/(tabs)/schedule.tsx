@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowRight,
   Check,
@@ -31,6 +31,7 @@ import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import QRCodeDisplayModal, { AppointmentForQr } from '../../../src/components/modals/QRCodeDisplayModal';
 import PopupModal, { type PopupAppointment } from '../../../src/components/modals/PopupModal';
+import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
 import {
   acceptUserAppointment,
   appointmentAtCalendar,
@@ -217,7 +218,7 @@ export default function ScheduleScreen() {
   const [selectedDetailsAppointment, setSelectedDetailsAppointment] = useState<Appointment | null>(null);
   const [disabledWeekdays, setDisabledWeekdays] = useState<string[]>([]);
   const [personalId, setPersonalId] = useState<number | null>(null);
-  const [checkingAvailability, setCheckingAvailability] = useState(false);
+
   const [unavailableDates, setUnavailableDates] = useState<string[]>([]);
   const [popupModalVisible, setPopupModalVisible] = useState(false);
   const [popupDate, setPopupDate] = useState('');
@@ -387,8 +388,30 @@ export default function ScheduleScreen() {
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const selDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
 
-    // 1. Validação de 24 horas: o aluno só pode agendar com antecedência mínima de 24h (a partir de amanhã)
+    // Se o aluno não selecionou uma data (está com hoje), avança automaticamente para o
+    // próximo dia disponível (pelo menos amanhã, pulando dias desabilitados do personal)
+    let dateToUse = selDate;
     if (selDate.getTime() <= todayStart.getTime()) {
+      const WEEKDAY_PT_MAP: Record<number, string> = {
+        0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta',
+        4: 'quinta', 5: 'sexta', 6: 'sabado',
+      };
+      // Procura o próximo dia a partir de amanhã que o personal atende (máx 60 dias)
+      const candidate = new Date(todayStart);
+      candidate.setDate(candidate.getDate() + 1);
+      for (let i = 0; i < 60; i++) {
+        const wd = WEEKDAY_PT_MAP[candidate.getDay()];
+        if (!disabledWeekdays.includes(wd)) {
+          dateToUse = new Date(candidate);
+          break;
+        }
+        candidate.setDate(candidate.getDate() + 1);
+      }
+      setSelectedDate(dateToUse);
+    }
+
+    // 1. Validação de 24 horas
+    if (dateToUse.getTime() <= todayStart.getTime()) {
       Alert.alert(
         'Antecedência mínima',
         'Aulas só podem ser agendadas com pelo menos 24 horas de antecedência. Selecione uma data a partir de amanhã.',
@@ -398,15 +421,10 @@ export default function ScheduleScreen() {
 
     // 2. Validação de dias da semana em que o personal não atende
     const WEEKDAY_PT: Record<number, string> = {
-      0: 'domingo',
-      1: 'segunda',
-      2: 'terca',
-      3: 'quarta',
-      4: 'quinta',
-      5: 'sexta',
-      6: 'sabado',
+      0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta',
+      4: 'quinta', 5: 'sexta', 6: 'sabado',
     };
-    const weekday = WEEKDAY_PT[selectedDate.getDay()];
+    const weekday = WEEKDAY_PT[dateToUse.getDay()];
     if (disabledWeekdays.includes(weekday)) {
       Alert.alert(
         'Personal indisponível',
@@ -420,28 +438,9 @@ export default function ScheduleScreen() {
       return;
     }
 
-    // 3. Validação de disponibilidade de horários livres no backend
-    setCheckingAvailability(true);
-    try {
-      const res = await getPersonalHours(personalId, selectedDateISO, 'PRESENCIAL');
-      const hours = res.data;
-      const hasHours = Array.isArray(hours) && hours.length > 0;
-
-      if (!hasHours) {
-        Alert.alert(
-          'Sem disponibilidade',
-          'O personal não possui horários disponíveis para esta data. Selecione outro dia no calendário.',
-        );
-        return;
-      }
-
-      setNewEventVisible(true);
-    } catch {
-      // Em caso de erro na verificação, permite abrir para não bloquear o usuário
-      setNewEventVisible(true);
-    } finally {
-      setCheckingAvailability(false);
-    }
+    // Abre o modal diretamente — o NewEvent gerencia internamente a disponibilidade
+    // e mostra ao aluno quais horários estão disponíveis na data selecionada.
+    setNewEventVisible(true);
   }
 
   const selectedDateISO = useMemo(() => {
@@ -507,6 +506,7 @@ export default function ScheduleScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <FocusAwareStatusBar style="dark" />
       <View style={styles.screenContent}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
@@ -557,19 +557,12 @@ export default function ScheduleScreen() {
             />
 
             <TouchableOpacity
-              style={[styles.primaryButton, checkingAvailability && { opacity: 0.7 }]}
+              style={styles.primaryButton}
               onPress={handleOpenNewEvent}
               activeOpacity={0.9}
-              disabled={checkingAvailability}
             >
-              {checkingAvailability ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Plus size={18} color="#FFFFFF" />
-              )}
-              <Text style={styles.primaryButtonText}>
-                {checkingAvailability ? 'Verificando...' : 'Agendar'}
-              </Text>
+              <Plus size={18} color="#FFFFFF" />
+              <Text style={styles.primaryButtonText}>Agendar</Text>
             </TouchableOpacity>
           </View>
 
@@ -588,19 +581,12 @@ export default function ScheduleScreen() {
                 Use o botão Agendar para adicionar um novo compromisso.
               </Text>
               <TouchableOpacity
-                style={[styles.emptyScheduleButton, checkingAvailability && { opacity: 0.7 }]}
+                style={styles.emptyScheduleButton}
                 onPress={handleOpenNewEvent}
                 activeOpacity={0.9}
-                disabled={checkingAvailability}
               >
-                {checkingAvailability ? (
-                  <ActivityIndicator size="small" color="#19587A" />
-                ) : (
-                  <Plus size={16} color="#19587A" />
-                )}
-                <Text style={styles.emptyScheduleButtonText}>
-                  {checkingAvailability ? 'Verificando...' : 'Agendar aula'}
-                </Text>
+                <Plus size={16} color="#19587A" />
+                <Text style={styles.emptyScheduleButtonText}>Agendar aula</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -730,8 +716,6 @@ export default function ScheduleScreen() {
             })
           )}
         </ScrollView>
-
-        <BottomTabBar activeTab="schedule" onTabPress={() => {}} />
       </View>
 
       {/* Modal de Agendamento real via NewEvent */}

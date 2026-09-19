@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   Platform,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from "@tanstack/react-query";
 import { PackageCard } from "../../../src/components/PackageCard";
 import AddPackagePlan from "../../../src/components/modals/AddPackagePlan";
@@ -17,6 +17,7 @@ import TimerModal from "../../../src/components/modals/TimerModal";
 import SuccessModal from "../../../src/components/modals/SuccessModal";
 import ErrorModal from "../../../src/components/modals/ErrorModal";
 import PagBankModal from "../../../src/components/modals/PagBankModal";
+import FocusAwareStatusBar from "../../../src/components/FocusAwareStatusBar";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import type { ProductExhibition } from "../../../src/models/products";
 import {
@@ -147,6 +148,7 @@ export default function PlansScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <FocusAwareStatusBar style="dark" />
       {/* Cabeçalho */}
       <View style={styles.headerContainer}>
         <View style={styles.headerTop}>
