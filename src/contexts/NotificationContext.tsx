@@ -8,9 +8,7 @@ import {
   notifyAppointmentCancelled,
   notifyAppointmentRescheduled,
   type AppNotificationItem,
-  type NotificationRecipient,
 } from '../services/notificationService';
-import { savePushToken } from '../constants/user';
 
 type NotifParams = {
   studentName?: string;

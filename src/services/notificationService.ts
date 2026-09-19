@@ -64,7 +64,7 @@ export type AppNotificationItem = {
 };
 
 /**
- * Inicializa permissões, canais de notificação e obtém o Expo Push Token do dispositivo.
+ * Push notifications desativadas (removido expo-notifications).
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   const Notifications = await getNotificationsModule();
@@ -111,21 +111,18 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 /**
- * Inicializa permissões e canais de notificação no Android e iOS.
+ * Inicialização de notificações desativada.
  */
 export async function registerForNotificationsAsync(): Promise<boolean> {
-  const token = await registerForPushNotificationsAsync();
-  return !!token;
+  return false;
 }
 
 /**
- * Dispara uma notificação local no dispositivo.
+ * Disparo de notificação nativa desativado.
  */
 export async function sendLocalNotification({
   title,
   body,
-  data,
-  delaySeconds = 0,
 }: {
   title: string;
   body: string;
