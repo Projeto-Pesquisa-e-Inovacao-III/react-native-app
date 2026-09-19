@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowUpRight,
   Calendar,
@@ -27,6 +26,9 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useRouter } from "expo-router";
 import { findPersonalRequests } from "../../../src/constants/schedule";
+import ScreenHeader from "../../../src/components/ScreenHeader";
+import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
+import { useNotifications } from "../../../src/contexts/NotificationContext";
 
 export type PersonalScheduleEvent = {
   agendamentoId: number;
@@ -302,8 +304,83 @@ export default function PersonalWeeklyScheduleScreen() {
     setWeekStart(startOfWeek(new Date()));
   };
 
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const { unreadCount } = useNotifications();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
+      <ScreenHeader
+        title="Agenda do Personal"
+        subtitle="Visão semanal das suas aulas"
+        unreadCount={unreadCount}
+        onBellPress={() => setNotificationModalVisible(true)}
+      >
+        {/* KPIs da semana no header */}
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryHeader}>
+            <Clock3 size={16} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.summaryTitle}>Resumo da semana</Text>
+            <Text style={styles.summaryTotalBadge}>
+              {stats.total} {stats.total === 1 ? 'aula total' : 'aulas no total'}
+            </Text>
+          </View>
+
+          <View style={styles.summaryGrid}>
+            <View style={[styles.summaryStatItem, { backgroundColor: '#E8F7EE' }]}>
+              <Text style={[styles.summaryStatValue, { color: '#1C7C54' }]}>
+                {stats.approved}
+              </Text>
+              <Text style={[styles.summaryStatLabel, { color: '#1C7C54' }]}>
+                Aprovados
+              </Text>
+            </View>
+
+            <View style={[styles.summaryStatItem, { backgroundColor: '#FFF6DA' }]}>
+              <Text style={[styles.summaryStatValue, { color: '#8A6300' }]}>
+                {stats.pending}
+              </Text>
+              <Text style={[styles.summaryStatLabel, { color: '#8A6300' }]}>
+                Pendentes
+              </Text>
+            </View>
+
+            <View style={[styles.summaryStatItem, { backgroundColor: '#EAF2FF' }]}>
+              <Text style={[styles.summaryStatValue, { color: '#1D4ED8' }]}>
+                {stats.completed}
+              </Text>
+              <Text style={[styles.summaryStatLabel, { color: '#1D4ED8' }]}>
+                Concluídos
+              </Text>
+            </View>
+
+            <View style={[styles.summaryStatItem, { backgroundColor: '#FDECEC' }]}>
+              <Text style={[styles.summaryStatValue, { color: '#B42318' }]}>
+                {stats.cancelled}
+              </Text>
+              <Text style={[styles.summaryStatLabel, { color: '#B42318' }]}>
+                Cancelados
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {!isCurrentWeek && (
+          <TouchableOpacity
+            onPress={goToToday}
+            style={styles.todayButton}
+            activeOpacity={0.8}
+          >
+            <RotateCcw size={14} color="#ffffff" />
+            <Text style={styles.todayButtonText}>Hoje</Text>
+          </TouchableOpacity>
+        )}
+      </ScreenHeader>
+
+      <NotificationCenterModal
+        visible={notificationModalVisible}
+        onClose={() => setNotificationModalVisible(false)}
+      />
+
       <View style={styles.screenContent}>
         <ScrollView
           contentContainerStyle={styles.container}
@@ -317,75 +394,6 @@ export default function PersonalWeeklyScheduleScreen() {
             />
           }
         >
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <View style={styles.headerTextGroup}>
-              <Text style={styles.sectionLabel}>Agenda semanal</Text>
-              <Text style={styles.sectionTitle}>Visão do Personal</Text>
-            </View>
-
-            
-
-            {!isCurrentWeek && (
-              <TouchableOpacity
-                onPress={goToToday}
-                style={styles.todayButton}
-                activeOpacity={0.8}
-              >
-                <RotateCcw size={14} color="#1C6AAB" />
-                <Text style={styles.todayButtonText}>Hoje</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-        {/* Resumo da Semana Dinâmico */}
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-              <Clock3 size={18} color="#1C6AAB" />
-              <Text style={styles.summaryTitle}>Resumo da semana</Text>
-              <Text style={styles.summaryTotalBadge}>
-                {stats.total} {stats.total === 1 ? 'aula total' : 'aulas no total'}
-              </Text>
-            </View>
-
-            <View style={styles.summaryGrid}>
-              <View style={[styles.summaryStatItem, { backgroundColor: '#E8F7EE' }]}>
-                <Text style={[styles.summaryStatValue, { color: '#1C7C54' }]}>
-                  {stats.approved}
-                </Text>
-                <Text style={[styles.summaryStatLabel, { color: '#1C7C54' }]}>
-                  Aprovados
-                </Text>
-              </View>
-
-              <View style={[styles.summaryStatItem, { backgroundColor: '#FFF6DA' }]}>
-                <Text style={[styles.summaryStatValue, { color: '#8A6300' }]}>
-                  {stats.pending}
-                </Text>
-                <Text style={[styles.summaryStatLabel, { color: '#8A6300' }]}>
-                  Pendentes
-                </Text>
-              </View>
-
-              <View style={[styles.summaryStatItem, { backgroundColor: '#EAF2FF' }]}>
-                <Text style={[styles.summaryStatValue, { color: '#1D4ED8' }]}>
-                  {stats.completed}
-                </Text>
-                <Text style={[styles.summaryStatLabel, { color: '#1D4ED8' }]}>
-                  Concluídos
-                </Text>
-              </View>
-
-              <View style={[styles.summaryStatItem, { backgroundColor: '#FDECEC' }]}>
-                <Text style={[styles.summaryStatValue, { color: '#B42318' }]}>
-                  {stats.cancelled}
-                </Text>
-                <Text style={[styles.summaryStatLabel, { color: '#B42318' }]}>
-                  Cancelados
-                </Text>
-              </View>
-            </View>
-          </View>
 
           {/* Card da Semana */}
           <View style={styles.calendarCard}>
@@ -697,7 +705,7 @@ export default function PersonalWeeklyScheduleScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -739,13 +747,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#E0F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
+    marginTop: 8,
+    alignSelf: "flex-start",
   },
   todayButtonText: {
-    color: "#1C6AAB",
+    color: "#ffffff",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -926,15 +936,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   summaryCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    shadowColor: "#001F33",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
   },
   summaryHeader: {
     flexDirection: "row",
@@ -943,15 +948,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   summaryTitle: {
-    color: "#0F172A",
-    fontSize: 16,
-    fontWeight: "700",
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    fontWeight: '700',
     flex: 1,
   },
   summaryTotalBadge: {
-    color: "#64748B",
+    color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   summaryGrid: {
     flexDirection: "row",

@@ -50,6 +50,10 @@ export default function LoginRoute() {
     });
   }
 
+  function handleAutoFill4() {
+    router.push('/dev-seed');
+  }
+
   async function handleSubmit() {
     if (!loginInfo.email.trim() || !loginInfo.password.trim()) {
       Alert.alert('Campos obrigatórios', 'Por favor, informe seu email e senha.');
@@ -130,6 +134,14 @@ export default function LoginRoute() {
                     activeOpacity={0.7}
                   >
                     <Text style={styles.btnAutoFillText}>Admin / Personal</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.btnAutoFill}
+                    onPress={handleAutoFill4}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.btnAutoFillText}>Dev-seed</Text>
                   </TouchableOpacity>
                 </View>
               </View>

@@ -24,6 +24,7 @@ import { ptBR } from 'date-fns/locale';
 import DateRangePickerModal, { type DateRange } from '../../../src/components/modals/DateRangePickerModal';
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
+import ScreenHeader from '../../../src/components/ScreenHeader';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -668,17 +669,13 @@ export default function CheckScheduleScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <ScreenHeader
+        title="Solicitações"
+        subtitle="Gerencie as solicitações de agendamentos"
+        unreadCount={unreadCount}
+        onBellPress={() => setIsNotificationModalVisible(true)}
+      >
         <View style={[styles.headerInner, isTablet && styles.headerInnerTablet]}>
-          <View style={styles.headerTopBar}>
-            <View style={styles.titleRow}>
-              <View style={styles.titleWrapper}>
-                <Text style={styles.title}>Solicitações de Agendamentos</Text>
-              </View>
-            </View>
-
-          </View>
-
           {!isPanelOpen && hasFilters && (
             <View style={styles.compactFilterSummary}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactFilterChips}>
@@ -837,7 +834,7 @@ export default function CheckScheduleScreen() {
             </View>
           </Animated.View>
         </View>
-      </View>
+      </ScreenHeader>
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -958,69 +955,12 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
 
-  header: {
-    backgroundColor: '#192633',
-    paddingTop: 50,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#324d67',
-  },
   headerInner: {
     width: '100%',
   },
   headerInnerTablet: {
     maxWidth: 960,
     alignSelf: 'center',
-  },
-
-  headerTopBar: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: 12,
-    marginBottom: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  bellBtn: {
-    position: 'relative',
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: '#273c50',
-    borderWidth: 1,
-    borderColor: '#3c5a78',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bellBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#ef4444',
-    borderRadius: 999,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  bellBadgeText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  titleWrapper: {
-    flex: 1,
-  },
-  title: {
-    fontWeight: '700',
-    fontSize: 22,
-    color: '#ffffff',
-    letterSpacing: -0.3,
   },
 
   toggleRow: {
