@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import UserAvatar from '../../../src/components/UserAvatar';
+import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
 
 export default function MoreRoute() {
   const router = useRouter();
@@ -45,6 +46,7 @@ export default function MoreRoute() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
+      <FocusAwareStatusBar style="light" />
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 40) }]}>
         <View style={styles.profileInfo}>
           <View style={styles.avatarWrapper}>

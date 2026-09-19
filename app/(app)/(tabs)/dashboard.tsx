@@ -18,6 +18,7 @@ import {
 } from "../../../src/constants/dashboard";
 import MetricCard from "src/components/MetricCard";
 import DashboardChart from "src/components/DashboardChart";
+import FocusAwareStatusBar from "src/components/FocusAwareStatusBar";
 import { DashboardSeriesPoint } from "src/models/dashboard";
 import { formatNumber } from "src/utils/formatacao";
 import { useQuery } from "@tanstack/react-query";
@@ -119,6 +120,7 @@ export default function Dashboard() {
       style={styles.screen}
       refreshControl={<RefreshControl refreshing={displayedRefreshing} onRefresh={handleRefresh} />}
     >
+      <FocusAwareStatusBar style="dark" />
       <View style={styles.heading}>
         <Text style={styles.headingTitle}>Desempenho</Text>
         <Text style={styles.headingSubtitle}>Acompanhe suas metricas e resultados.</Text>
@@ -163,7 +165,7 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#f1f5f9",
-    padding: 16,
+    padding: 8,
     paddingBottom: 40
   },
   heading: {

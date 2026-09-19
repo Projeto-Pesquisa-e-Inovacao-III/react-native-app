@@ -1,5 +1,6 @@
 import React from 'react';
 import { Tabs, useRouter, usePathname } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import BottomTabBar, { TabName } from '../../../src/components/BottomTabBar';
 import { useAuth } from '../../../src/contexts/AuthContext';
 
@@ -7,6 +8,22 @@ export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const { roles } = useAuth();
+
+  const isDarkHeader = (() => {
+    if (pathname.includes('/personal-schedule')) return true;
+    if (pathname.includes('/requests')) return true;
+    if (pathname.endsWith('/more') || pathname.includes('/more/')) return true;
+    if (
+      pathname === '/' ||
+      pathname === '/(app)/(tabs)' ||
+      pathname === '/(app)/(tabs)/' ||
+      pathname.endsWith('/tabs') ||
+      pathname.endsWith('/(tabs)/index')
+    ) {
+      return true;
+    }
+    return false;
+  })();
 
   const getActiveTab = (): TabName => {
     if (pathname.includes('/schedule') || pathname.includes('/personal-schedule')) return 'schedule';
@@ -46,16 +63,18 @@ export default function TabsLayout() {
   };
 
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      tabBar={() => (
-        <BottomTabBar
-          activeTab={getActiveTab()}
-          onTabPress={handleTabPress}
-          userRoles={roles}
-        />
-      )}
-    >
+    <>
+      <StatusBar style={isDarkHeader ? 'light' : 'dark'} animated />
+      <Tabs
+        screenOptions={{ headerShown: false }}
+        tabBar={() => (
+          <BottomTabBar
+            activeTab={getActiveTab()}
+            onTabPress={handleTabPress}
+            userRoles={roles}
+          />
+        )}
+      >
       <Tabs.Screen name="index" options={{ title: 'Início' }} />
       <Tabs.Screen name="schedule" options={{ title: 'Agenda' }} />
       <Tabs.Screen name="personal-schedule" options={{ title: 'Agenda Personal', href: null }} />
@@ -71,5 +90,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="edit-anamnesis" options={{ href: null }} />
       <Tabs.Screen name="set-availability" options={{ href: null }} />
     </Tabs>
+    </>
   );
 }

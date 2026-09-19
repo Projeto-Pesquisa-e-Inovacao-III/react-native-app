@@ -31,6 +31,7 @@ import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import QRCodeDisplayModal, { AppointmentForQr } from '../../../src/components/modals/QRCodeDisplayModal';
 import PopupModal, { type PopupAppointment } from '../../../src/components/modals/PopupModal';
+import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
 import {
   acceptUserAppointment,
   appointmentAtCalendar,
@@ -507,6 +508,7 @@ export default function ScheduleScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <FocusAwareStatusBar style="dark" />
       <View style={styles.screenContent}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>

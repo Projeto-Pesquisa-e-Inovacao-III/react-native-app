@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell } from 'lucide-react-native';
+import FocusAwareStatusBar from './FocusAwareStatusBar';
 
 type Props = {
   title: string;
@@ -30,6 +31,7 @@ export default function ScreenHeader({
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <FocusAwareStatusBar style="light" />
       {/* Linha título + sino */}
       <View style={styles.topRow}>
         <View style={{ flex: 1 }}>

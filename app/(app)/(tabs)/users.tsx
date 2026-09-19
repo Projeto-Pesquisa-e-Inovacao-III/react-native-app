@@ -18,6 +18,7 @@ import InputWithIcon from '../../../src/components/InputWithIcon';
 import Select from '../../../src/components/Select';
 import PaginatedList, { type PaginationInfo } from '../../../src/components/PaginatedList';
 import UsersTable from '../../../src/components/UsersTable';
+import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
 import type { StudentItem } from '../../../src/models/students';
 
 type PaginatedResult = {
@@ -115,11 +116,12 @@ export default function UsersRoute() {
 
   return (
     <View style={styles.screen}>
+      <FocusAwareStatusBar style="dark" />
       <ScrollView
         contentContainerStyle={[
           styles.container,
           {
-            paddingTop: Math.max(insets.top, 24),
+            paddingTop: insets.top + 16,
             paddingBottom: Math.max(insets.bottom, 24) + 80,
           },
         ]}

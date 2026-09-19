@@ -17,6 +17,7 @@ import TimerModal from "../../../src/components/modals/TimerModal";
 import SuccessModal from "../../../src/components/modals/SuccessModal";
 import ErrorModal from "../../../src/components/modals/ErrorModal";
 import PagBankModal from "../../../src/components/modals/PagBankModal";
+import FocusAwareStatusBar from "../../../src/components/FocusAwareStatusBar";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import type { ProductExhibition } from "../../../src/models/products";
 import {
@@ -147,6 +148,7 @@ export default function PlansScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <FocusAwareStatusBar style="dark" />
       {/* Cabeçalho */}
       <View style={styles.headerContainer}>
         <View style={styles.headerTop}>
