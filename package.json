@@ -50,7 +50,7 @@
   },
   "private": true,
   "engines": {
-    "node": ">=20.19.0 <21"
+    "node": ">=20.19.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.4",
