@@ -26,6 +26,7 @@ export default function TabsLayout() {
   })();
 
   const getActiveTab = (): TabName => {
+    if (pathname.includes('/schedule-history') || pathname.includes('/plans-history')) return 'more';
     if (pathname.includes('/schedule') || pathname.includes('/personal-schedule')) return 'schedule';
     if (pathname.includes('/requests')) return 'requests';
     if (pathname.includes('/plans')) return 'plans';
