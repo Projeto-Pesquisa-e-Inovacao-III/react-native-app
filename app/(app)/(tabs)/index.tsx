@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { QrCode, Sparkles } from "lucide-react-native";
+import VoiceRecorderButton from "../../../src/components/VoiceRecorderButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
@@ -1027,6 +1028,9 @@ export default function OverviewScreen({
           setSelectedQrAppointment(null);
         }}
       />
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
     </View>
   );
 }

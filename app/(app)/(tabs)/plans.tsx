@@ -18,6 +18,7 @@ import SuccessModal from "../../../src/components/modals/SuccessModal";
 import ErrorModal from "../../../src/components/modals/ErrorModal";
 import PagBankModal from "../../../src/components/modals/PagBankModal";
 import FocusAwareStatusBar from "../../../src/components/FocusAwareStatusBar";
+import VoiceRecorderButton from "../../../src/components/VoiceRecorderButton";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import type { ProductExhibition } from "../../../src/models/products";
 import {
@@ -289,6 +290,9 @@ export default function PlansScreen() {
 
       {/* 6. Modal de Carregamento / PagBank */}
       {openModal === "loadingPagBank" && <PagBankModal />}
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
     </SafeAreaView>
   );
 }

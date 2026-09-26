@@ -19,6 +19,7 @@ import Select from '../../../src/components/Select';
 import PaginatedList, { type PaginationInfo } from '../../../src/components/PaginatedList';
 import UsersTable from '../../../src/components/UsersTable';
 import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
+import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
 import type { StudentItem } from '../../../src/models/students';
 
 type PaginatedResult = {
@@ -186,6 +187,9 @@ export default function UsersRoute() {
           />
         </PaginatedList>
       </ScrollView>
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
     </View>
   );
 }

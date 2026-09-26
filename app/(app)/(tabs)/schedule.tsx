@@ -25,6 +25,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import BottomTabBar from '../../../src/components/BottomTabBar';
+import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
 import MonthlyCalendar, { type CalendarEvent } from '../../../src/components/MonthlyCalendar';
 import NewEvent, { type NewEventPayload } from '../../../src/components/NewEvent';
 import { useNotifications } from '../../../src/contexts/NotificationContext';
@@ -846,6 +847,9 @@ export default function ScheduleScreen() {
           }
         }}
       />
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
     </SafeAreaView>
   );
 }
