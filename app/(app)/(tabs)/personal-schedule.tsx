@@ -29,6 +29,7 @@ import { findPersonalRequests } from "../../../src/constants/schedule";
 import ScreenHeader from "../../../src/components/ScreenHeader";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
+import VoiceRecorderButton from "../../../src/components/VoiceRecorderButton";
 
 export type PersonalScheduleEvent = {
   agendamentoId: number;
@@ -705,6 +706,9 @@ export default function PersonalWeeklyScheduleScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
     </View>
   );
 }

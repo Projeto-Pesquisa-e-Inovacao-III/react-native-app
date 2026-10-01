@@ -31,7 +31,13 @@
           "barcodeScannerEnabled": true
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Permita o acesso ao microfone para gravar áudio e agendar aulas com IA."
+        }
+      ]
     ]
   }
 }

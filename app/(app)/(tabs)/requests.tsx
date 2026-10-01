@@ -26,6 +26,7 @@ import DateRangePickerModal, { type DateRange } from '../../../src/components/mo
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import ScreenHeader from '../../../src/components/ScreenHeader';
+import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -972,6 +973,9 @@ export default function CheckScheduleScreen() {
           setSelectedDateRange(range);
         }}
       />
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
     </View>
   );
 }
