@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,19 +12,25 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic, X, Sparkles, RefreshCw } from 'lucide-react-native';
 import {
-  AudioModule,
   RecordingPresets,
+  requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
+  useAudioStream,
 } from 'expo-audio';
 
 const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
 
-function dbToNormalized(db: number | undefined): number {
-  if (db == null) return 0;
-  const clamped = Math.max(-60, Math.min(0, db));
-  return (clamped + 60) / 60;
+function rmsFromBuffer(buffer: ArrayBuffer): number {
+  const samples = new Float32Array(buffer);
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) {
+    sum += samples[i] * samples[i];
+  }
+  const rms = Math.sqrt(sum / samples.length);
+  return Math.min(1, Math.pow(rms * 4, 0.5));
 }
 
 type WaveformBarProps = {
@@ -37,13 +44,13 @@ function WaveformBar({ baseHeight, isActive, normalizedVolume }: WaveformBarProp
 
   useEffect(() => {
     if (isActive) {
-      const scale = 0.3 + normalizedVolume * 1.4;
+      const scale = 0.15 + normalizedVolume * 1.55;
       Animated.spring(animVal, {
         toValue: scale,
         useNativeDriver: true,
-        damping: 6,
-        stiffness: 160,
-        mass: 0.6,
+        damping: 5,
+        stiffness: 180,
+        mass: 0.5,
       }).start();
     } else {
       Animated.spring(animVal, {
@@ -82,22 +89,27 @@ export default function AiVoiceScreen() {
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(audioRecorder, 80);
   const isRecording = recorderState.isRecording;
-  const metering = recorderState.metering;
+
+  const [normalizedVolume, setNormalizedVolume] = useState(0);
+  const { stream } = useAudioStream({
+    channels: 1,
+    sampleRate: 16000,
+    encoding: 'float32',
+    onBuffer: (buffer) => {
+      if (!buffer?.data) return;
+      setNormalizedVolume(rmsFromBuffer(buffer.data));
+    },
+  });
 
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
-
-  const normalizedVolume = useMemo(() => {
-    if (!isRecording) return 0;
-    return dbToNormalized(metering);
-  }, [isRecording, metering]);
 
   const startRecording = useCallback(async () => {
     try {
       setTranscriptionText(null);
       setIsTranscribing(false);
 
-      const status = await AudioModule.requestRecordingPermissionsAsync();
+      const status = await requestRecordingPermissionsAsync();
       if (!status.granted) {
         Alert.alert(
           'Permissão negada',
@@ -107,21 +119,28 @@ export default function AiVoiceScreen() {
         return;
       }
 
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: true,
-      });
+      if (Platform.OS === 'ios') {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+        });
+      }
+
+      await stream.start();
 
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
-    } catch (error) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error('Erro ao iniciar gravação:', error);
-      Alert.alert('Erro', 'Não foi possível iniciar a gravação de áudio.');
+      Alert.alert('Erro ao gravar', message || 'Não foi possível iniciar a gravação de áudio.');
     }
-  }, [audioRecorder, router]);
+  }, [audioRecorder, stream, router]);
 
   const stopRecording = useCallback(async () => {
     try {
+      stream.stop();
+      setNormalizedVolume(0);
       await audioRecorder.stop();
       setIsTranscribing(true);
 
@@ -133,23 +152,29 @@ export default function AiVoiceScreen() {
       console.error('Erro ao finalizar gravação:', error);
       setIsTranscribing(false);
     }
-  }, [audioRecorder]);
+  }, [audioRecorder, stream]);
+
+  const startRecordingRef = useRef(startRecording);
+  useEffect(() => {
+    startRecordingRef.current = startRecording;
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      startRecording();
-    }, 400);
+      startRecordingRef.current();
+    }, 600);
 
     return () => {
       clearTimeout(timer);
       try {
+        stream.stop();
         if (audioRecorder.isRecording) {
           audioRecorder.stop();
         }
       } catch {
       }
     };
-  }, []);
+  }, [audioRecorder, stream]);
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 24), paddingBottom: Math.max(insets.bottom, 24) }]}>
