@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
-  Easing,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,7 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, Square, X, Sparkles, RefreshCw } from 'lucide-react-native';
+import { Mic, X, Sparkles, RefreshCw } from 'lucide-react-native';
 import {
   AudioModule,
   RecordingPresets,
@@ -19,71 +18,81 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 
+const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
+const BAR_PHASE_OFFSETS = [0, 180, 90, 270, 45, 135, 315];
+
+function dbToNormalized(db: number | undefined): number {
+  if (db == null) return 0;
+  const clamped = Math.max(-60, Math.min(0, db));
+  return (clamped + 60) / 60;
+}
+
+type WaveformBarProps = {
+  baseHeight: number;
+  phaseOffset: number;
+  isActive: boolean;
+  normalizedVolume: number;
+};
+
+function WaveformBar({ baseHeight, phaseOffset, isActive, normalizedVolume }: WaveformBarProps) {
+  const animVal = useRef(new Animated.Value(0.12)).current;
+
+  useEffect(() => {
+    if (isActive) {
+      const scale = 0.3 + normalizedVolume * 1.4;
+      Animated.spring(animVal, {
+        toValue: scale,
+        useNativeDriver: true,
+        damping: 6,
+        stiffness: 160,
+        mass: 0.6,
+      }).start();
+    } else {
+      Animated.spring(animVal, {
+        toValue: 0.12,
+        useNativeDriver: true,
+        damping: 10,
+        stiffness: 80,
+      }).start();
+    }
+  }, [isActive, normalizedVolume]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.waveBar,
+        {
+          height: baseHeight,
+          backgroundColor: '#0A3D62',
+          transform: [{ scaleY: animVal }],
+          opacity: isActive ? 1 : 0.25,
+        },
+      ]}
+    />
+  );
+}
+
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+};
+
 export default function AiVoiceScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(audioRecorder);
+  const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
+  const recorderState = useAudioRecorderState(audioRecorder, 80);
   const isRecording = recorderState.isRecording;
+  const metering = recorderState.metering;
 
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
-  const [hasStartedOnce, setHasStartedOnce] = useState(false);
 
-  const pulseAnim1 = useRef(new Animated.Value(1)).current;
-  const pulseAnim2 = useRef(new Animated.Value(1)).current;
-  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
-
-  const startPulse = useCallback(() => {
-    pulseLoop.current = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseAnim1, {
-            toValue: 1.35,
-            duration: 900,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim1, {
-            toValue: 1,
-            duration: 900,
-            easing: Easing.in(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(pulseAnim2, {
-            toValue: 1.6,
-            duration: 1200,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim2, {
-            toValue: 1,
-            duration: 1200,
-            easing: Easing.in(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-    pulseLoop.current.start();
-  }, [pulseAnim1, pulseAnim2]);
-
-  const stopPulse = useCallback(() => {
-    pulseLoop.current?.stop();
-    Animated.timing(pulseAnim1, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-    Animated.timing(pulseAnim2, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [pulseAnim1, pulseAnim2]);
+  const normalizedVolume = useMemo(() => {
+    if (!isRecording) return 0;
+    return dbToNormalized(metering);
+  }, [isRecording, metering]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -107,18 +116,15 @@ export default function AiVoiceScreen() {
 
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
-      setHasStartedOnce(true);
-      startPulse();
     } catch (error) {
       console.error('Erro ao iniciar gravação:', error);
       Alert.alert('Erro', 'Não foi possível iniciar a gravação de áudio.');
     }
-  }, [audioRecorder, router, startPulse]);
+  }, [audioRecorder, router]);
 
   const stopRecording = useCallback(async () => {
     try {
       await audioRecorder.stop();
-      stopPulse();
       setIsTranscribing(true);
 
       setTimeout(() => {
@@ -127,10 +133,9 @@ export default function AiVoiceScreen() {
       }, 1500);
     } catch (error) {
       console.error('Erro ao finalizar gravação:', error);
-      stopPulse();
       setIsTranscribing(false);
     }
-  }, [audioRecorder, stopPulse]);
+  }, [audioRecorder]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -139,7 +144,6 @@ export default function AiVoiceScreen() {
 
     return () => {
       clearTimeout(timer);
-      stopPulse();
       try {
         if (audioRecorder.isRecording) {
           audioRecorder.stop();
@@ -190,23 +194,21 @@ export default function AiVoiceScreen() {
             : 'Toque no microfone para iniciar a gravação.'}
         </Text>
 
-        <View style={styles.micArea}>
-          {isRecording && (
-            <>
-              <Animated.View
-                style={[
-                  styles.pulseRing,
-                  { transform: [{ scale: pulseAnim2 }], opacity: 0.18 },
-                ]}
+        <View style={styles.waveformArea}>
+          <View style={styles.waveformSide}>
+            {BAR_BASE_HEIGHTS.map((h, i) => (
+              <WaveformBar
+                key={`left-${i}`}
+                baseHeight={h}
+                phaseOffset={BAR_PHASE_OFFSETS[i]}
+                isActive={isRecording}
+                normalizedVolume={normalizedVolume}
+                colorStart="#00A8E8"
+                colorEnd="#6366F1"
+                side="left"
               />
-              <Animated.View
-                style={[
-                  styles.pulseRing,
-                  { transform: [{ scale: pulseAnim1 }], opacity: 0.28 },
-                ]}
-              />
-            </>
-          )}
+            ))}
+          </View>
 
           <TouchableOpacity
             style={[
@@ -217,15 +219,30 @@ export default function AiVoiceScreen() {
             onPress={isRecording ? stopRecording : startRecording}
             activeOpacity={0.85}
             disabled={isTranscribing}
+            accessibilityLabel={isRecording ? 'Parar gravação' : 'Iniciar gravação'}
+            accessibilityRole="button"
           >
-            {isRecording ? (
-              <Square color="#FFFFFF" size={32} fill="#FFFFFF" />
-            ) : isTranscribing ? (
-              <RefreshCw color="#FFFFFF" size={32} />
+            {isTranscribing ? (
+              <RefreshCw color="#FFFFFF" size={28} />
             ) : (
-              <Mic color="#FFFFFF" size={38} strokeWidth={2.2} />
+              <Mic color="#FFFFFF" size={32} strokeWidth={2.2} />
             )}
           </TouchableOpacity>
+
+          <View style={styles.waveformSide}>
+            {BAR_BASE_HEIGHTS.map((h, i) => (
+              <WaveformBar
+                key={`right-${i}`}
+                baseHeight={h}
+                phaseOffset={BAR_PHASE_OFFSETS[i]}
+                isActive={isRecording}
+                normalizedVolume={normalizedVolume}
+                colorStart="#6366F1"
+                colorEnd="#00A8E8"
+                side="right"
+              />
+            ))}
+          </View>
         </View>
 
         {transcriptionText && (
@@ -243,7 +260,7 @@ export default function AiVoiceScreen() {
             onPress={stopRecording}
             activeOpacity={0.8}
           >
-            <Square color="#FFFFFF" size={18} fill="#FFFFFF" />
+            <View style={styles.stopSquare} />
             <Text style={styles.stopActionText}>Parar e transcrever</Text>
           </TouchableOpacity>
         ) : transcriptionText ? (
@@ -317,7 +334,7 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 20,
   },
   aiTag: {
     flexDirection: 'row',
@@ -350,25 +367,27 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     marginBottom: 36,
   },
-  micArea: {
-    width: 180,
-    height: 180,
+  waveformArea: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    marginBottom: 28,
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 120,
     height: 120,
-    borderRadius: 60,
-    backgroundColor: '#0A3D62',
+    marginBottom: 32,
+    gap: 16,
+  },
+  waveformSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  waveBar: {
+    width: 5,
+    borderRadius: 3,
   },
   micCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#0A3D62',
     alignItems: 'center',
     justifyContent: 'center',
@@ -379,7 +398,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   micCircleRecording: {
-    backgroundColor: '#EF4444',
+    backgroundColor: '#0A3D62',
   },
   micCircleTranscribing: {
     backgroundColor: '#64748B',
@@ -419,7 +438,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
     backgroundColor: '#EF4444',
     paddingVertical: 15,
     borderRadius: 28,
@@ -428,6 +447,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
+  },
+  stopSquare: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
   },
   stopActionText: {
     color: '#FFFFFF',
