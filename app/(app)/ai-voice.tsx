@@ -19,7 +19,6 @@ import {
 } from 'expo-audio';
 
 const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
-const BAR_PHASE_OFFSETS = [0, 180, 90, 270, 45, 135, 315];
 
 function dbToNormalized(db: number | undefined): number {
   if (db == null) return 0;
@@ -29,12 +28,11 @@ function dbToNormalized(db: number | undefined): number {
 
 type WaveformBarProps = {
   baseHeight: number;
-  phaseOffset: number;
   isActive: boolean;
   normalizedVolume: number;
 };
 
-function WaveformBar({ baseHeight, phaseOffset, isActive, normalizedVolume }: WaveformBarProps) {
+function WaveformBar({ baseHeight, isActive, normalizedVolume }: WaveformBarProps) {
   const animVal = useRef(new Animated.Value(0.12)).current;
 
   useEffect(() => {
@@ -171,7 +169,7 @@ export default function AiVoiceScreen() {
       <View style={styles.content}>
         <View style={styles.aiTag}>
           <Sparkles color="#00A8E8" size={16} />
-          <Text style={styles.aiTagText}>IA Voice Assistant</Text>
+          <Text style={styles.aiTagText}>Agendamento por voz!</Text>
         </View>
 
         <Text style={styles.title}>
@@ -200,12 +198,8 @@ export default function AiVoiceScreen() {
               <WaveformBar
                 key={`left-${i}`}
                 baseHeight={h}
-                phaseOffset={BAR_PHASE_OFFSETS[i]}
                 isActive={isRecording}
                 normalizedVolume={normalizedVolume}
-                colorStart="#00A8E8"
-                colorEnd="#6366F1"
-                side="left"
               />
             ))}
           </View>
@@ -234,12 +228,8 @@ export default function AiVoiceScreen() {
               <WaveformBar
                 key={`right-${i}`}
                 baseHeight={h}
-                phaseOffset={BAR_PHASE_OFFSETS[i]}
                 isActive={isRecording}
                 normalizedVolume={normalizedVolume}
-                colorStart="#6366F1"
-                colorEnd="#00A8E8"
-                side="right"
               />
             ))}
           </View>

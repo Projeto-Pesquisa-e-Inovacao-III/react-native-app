@@ -1,17 +1,45 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic } from 'lucide-react-native';
 
 export default function VoiceRecorderButton() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const bottomOffset = 60 + Math.max(insets.bottom, 0) + 16;
+
+  const [isLabelVisible, setIsLabelVisible] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start(() => {
+        setIsLabelVisible(false);
+      });
+    }, 4000);
+
+    return () => clearTimeout(timer);
+  }, [fadeAnim]);
 
   const handlePress = () => {
     router.push('/(app)/ai-voice');
   };
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={[styles.container, { bottom: bottomOffset }]} pointerEvents="box-none">
       <TouchableOpacity
         style={styles.touchableWrapper}
         onPress={handlePress}
@@ -19,9 +47,32 @@ export default function VoiceRecorderButton() {
         accessibilityLabel="Agendar aula com IA"
         accessibilityRole="button"
       >
-        <View style={styles.labelPill}>
-          <Text style={styles.labelText}>Agendar aula com IA</Text>
-        </View>
+        {isLabelVisible && (
+          <Animated.View
+            style={[
+              styles.labelPill,
+              {
+                opacity: fadeAnim,
+                transform: [
+                  {
+                    translateX: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [12, 0],
+                    }),
+                  },
+                  {
+                    scale: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.85, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.labelText}>Agendar aula com IA</Text>
+          </Animated.View>
+        )}
 
         <View style={styles.micButton}>
           <Mic color="#FFFFFF" size={26} strokeWidth={2.2} />
@@ -37,7 +88,6 @@ export default function VoiceRecorderButton() {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 80,
     right: 16,
     zIndex: 200,
     elevation: 6,
