@@ -117,7 +117,8 @@ export default function MoreRoute() {
             {/* apenas admin */}
             {roles?.includes("admin") && !roles?.includes("personal") && (
               <>
-                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} isLast={true} />
+                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
+                <OptionItem icon={<User size={22} color="#192633" />} title='Criar personal' onClick={() => router.push("/create-personal")} isLast={true} />
               </>
             )}
           </View>
