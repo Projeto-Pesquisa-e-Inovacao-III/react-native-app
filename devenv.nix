@@ -13,8 +13,12 @@
 
   android = {
     enable = true;
-    platforms.version = [ "37" ];
-    buildTools.version = [ "37.0.0" ];
+    platforms.version = [ "34" "35" "36" ];
+    buildTools.version = [ "34.0.0" "35.0.0" "36.0.0" ];
+    ndk = {
+      enable = true;
+      version = [ "27.1.12297006" ];
+    };
   };
 
   packages = with pkgs; [
