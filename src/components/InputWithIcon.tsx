@@ -27,6 +27,8 @@ type Props = {
   maxLength?: number;
   onSubmitEditing?: () => void;
   returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send';
+  onBlur?: () => void;
+  onFocus?: () => void;
 };
 
 export default function InputWithIcon({
@@ -46,6 +48,8 @@ export default function InputWithIcon({
   maxLength,
   onSubmitEditing,
   returnKeyType,
+  onBlur,
+  onFocus,
 }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -85,8 +89,14 @@ export default function InputWithIcon({
           autoCorrect={false}
           editable={!disabled}
           maxLength={maxLength}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={() => {
+            setIsFocused(true);
+            onFocus?.();
+          }}
+          onBlur={() => {
+            setIsFocused(false);
+            onBlur?.();
+          }}
           onSubmitEditing={onSubmitEditing}
           returnKeyType={returnKeyType}
         />

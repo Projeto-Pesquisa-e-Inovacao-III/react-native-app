@@ -9,6 +9,7 @@ export default function TabsLayout() {
   const { roles } = useAuth();
 
   const getActiveTab = (): TabName => {
+    if (pathname.includes('/schedule-history') || pathname.includes('/plans-history') || pathname.includes('/create-personal')) return 'more';
     if (pathname.includes('/schedule') || pathname.includes('/personal-schedule')) return 'schedule';
     if (pathname.includes('/requests')) return 'requests';
     if (pathname.includes('/plans')) return 'plans';
@@ -70,6 +71,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="edit-user" options={{ href: null }} />
       <Tabs.Screen name="edit-anamnesis" options={{ href: null }} />
       <Tabs.Screen name="set-availability" options={{ href: null }} />
+      <Tabs.Screen name="create-personal" options={{ href: null }} />
+      <Tabs.Screen name="dashboard" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -25,6 +25,10 @@ type SelectProps = {
   selectPlaceholder?: string;
   showSelectAll?: boolean;
   style?: object;
+  label?: string;
+  icon?: React.ReactNode;
+  hasError?: boolean;
+  errorMessage?: string;
 };
 
 export default function Select({
@@ -37,6 +41,10 @@ export default function Select({
   selectPlaceholder = 'Selecione',
   showSelectAll = true,
   style,
+  label,
+  icon,
+  hasError = false,
+  errorMessage,
 }: SelectProps) {
   const isOpen = openSelectId === id;
   const selectedOption = values.find((opt) => opt.value === selectStatusValue);
@@ -49,22 +57,34 @@ export default function Select({
 
   return (
     <View style={[styles.container, style]}>
+      {label && <Text style={styles.label}>{label}</Text>}
+
       <TouchableOpacity
-        style={styles.trigger}
+        style={[
+          styles.trigger,
+          hasError && styles.triggerError,
+        ]}
         onPress={() => setOpenSelectId(isOpen ? null : id)}
         activeOpacity={0.8}
       >
-        <Text
-          style={[
-            styles.triggerText,
-            !selectedOption && styles.placeholderText,
-          ]}
-          numberOfLines={1}
-        >
-          {displayText}
-        </Text>
+        <View style={styles.triggerLeft}>
+          {icon && <View style={styles.iconLeft}>{icon}</View>}
+          <Text
+            style={[
+              styles.triggerText,
+              !selectedOption && styles.placeholderText,
+            ]}
+            numberOfLines={1}
+          >
+            {displayText}
+          </Text>
+        </View>
         <ChevronDown size={18} color="#4B5563" />
       </TouchableOpacity>
+
+      {hasError && errorMessage ? (
+        <Text style={styles.errorText}>{errorMessage}</Text>
+      ) : null}
 
       <Modal
         visible={isOpen}
@@ -136,6 +156,12 @@ const styles = StyleSheet.create({
   container: {
     minWidth: 150,
   },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
+  },
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -147,6 +173,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 48,
     gap: 8,
+  },
+  triggerError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  triggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  iconLeft: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
   },
   triggerText: {
     fontSize: 14,
