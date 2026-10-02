@@ -1,16 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import * as Notifications from 'expo-notifications';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import {
-  registerForNotificationsAsync,
-  registerForPushNotificationsAsync,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
   notifyAppointmentRescheduled,
   type AppNotificationItem,
-  type NotificationRecipient,
 } from '../services/notificationService';
-import { savePushToken } from '../constants/user';
 
 type NotifParams = {
   studentName?: string;
@@ -41,42 +36,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
-  const [pushToken, setPushToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    // 1. Registra e obtém o Expo Push Token do aparelho
-    registerForPushNotificationsAsync().then((token) => {
-      if (token) {
-        setPushToken(token);
-        // Tenta enviar o token para o backend (quando o endpoint estiver pronto)
-        savePushToken(token).catch(() => {
-          // Backend ainda não implementou o endpoint, falha silenciosa
-        });
-      }
-    });
-
-    // 2. Escuta notificações recebidas (tanto locais quanto push remotas do backend)
-    const subscription = Notifications.addNotificationReceivedListener((notificationEvent) => {
-      const { title, body, data } = notificationEvent.request.content;
-      const recipient = (data?.recipient as NotificationRecipient) || 'ambos';
-
-      const newItem: AppNotificationItem = {
-        id: notificationEvent.request.identifier || String(Date.now()),
-        title: title || 'Notificação',
-        body: body || '',
-        recipient,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        read: false,
-        data: data as any,
-      };
-
-      setNotifications((prev) => [newItem, ...prev]);
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
+  const [pushToken] = useState<string | null>(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

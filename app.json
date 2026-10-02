@@ -31,14 +31,13 @@
           "barcodeScannerEnabled": true
         }
       ],
+      "expo-status-bar",
       [
-        "expo-notifications",
+        "expo-audio",
         {
-          "icon": "./assets/icon.png",
-          "color": "#19587A"
+          "microphonePermission": "Permita o acesso ao microfone para gravar áudio e agendar aulas com IA."
         }
-      ],
-      "expo-status-bar"
+      ]
     ]
   }
 }

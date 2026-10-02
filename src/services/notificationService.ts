@@ -1,17 +1,3 @@
-import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-
-// Configura o comportamento de exibição quando a notificação chega com o app aberto (foreground)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
 export type NotificationRecipient = 'aluno' | 'personal' | 'ambos';
 
 export type AppNotificationData = {
@@ -35,103 +21,33 @@ export type AppNotificationItem = {
   data?: AppNotificationData;
 };
 
-import Constants from 'expo-constants';
-
 /**
- * Inicializa permissões, canais de notificação e obtém o Expo Push Token do dispositivo.
+ * Push notifications desativadas (removido expo-notifications).
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    return null;
-  }
-
-  try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('agendamentos', {
-        name: 'Agendamentos e Aulas',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#19587A',
-        sound: 'default',
-      });
-    }
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      return null;
-    }
-
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
-
-    const pushTokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
-
-    return pushTokenData.data;
-  } catch (error) {
-    console.warn('Não foi possível obter Expo Push Token:', error);
-    return null;
-  }
+  return null;
 }
 
 /**
- * Inicializa permissões e canais de notificação no Android e iOS.
+ * Inicialização de notificações desativada.
  */
 export async function registerForNotificationsAsync(): Promise<boolean> {
-  const token = await registerForPushNotificationsAsync();
-  return !!token;
+  return false;
 }
 
 /**
- * Dispara uma notificação local no dispositivo.
+ * Disparo de notificação nativa desativado.
  */
 export async function sendLocalNotification({
   title,
   body,
-  data,
-  delaySeconds = 0,
 }: {
   title: string;
   body: string;
   data?: AppNotificationData;
   delaySeconds?: number;
 }): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    console.log(`[Web Notification] ${title}: ${body}`);
-    return 'web-notif-' + Date.now();
-  }
-
-  try {
-    const identifier = await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        sound: 'default',
-        data: data || {},
-      },
-      trigger:
-        delaySeconds > 0
-          ? {
-              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-              seconds: delaySeconds,
-            }
-          : null,
-    });
-
-    return identifier;
-  } catch (error) {
-    console.warn('Erro ao disparar notificação local:', error);
-    return null;
-  }
+  return null;
 }
 
 /**

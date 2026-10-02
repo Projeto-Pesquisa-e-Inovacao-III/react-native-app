@@ -2,7 +2,6 @@ import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Stack, Redirect } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -20,12 +19,20 @@ export default function AppLayout() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+    <View style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(edit-user)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="ai-voice"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            headerShown: false,
+          }}
+        />
       </Stack>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -37,3 +44,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

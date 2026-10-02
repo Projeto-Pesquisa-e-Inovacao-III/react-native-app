@@ -429,7 +429,10 @@ export default function ScheduleDetailsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 90 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -546,7 +549,7 @@ export default function ScheduleDetailsScreen() {
             </View>
 
             {/* Card de Dica de IA (quando disponível) */}
-            {(isPersonal || isAdmin) &&
+            {/* {(isPersonal || isAdmin) &&
               appointmentData?.status === "APROVADO" && (
                 <TouchableOpacity
                   style={styles.aiBannerCard}
@@ -565,7 +568,7 @@ export default function ScheduleDetailsScreen() {
                     </Text>
                   </View>
                 </TouchableOpacity>
-              )}
+              )} */}
 
             {/* Card de Endereço Completo */}
             <View style={styles.card}>

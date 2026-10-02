@@ -8,6 +8,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import UserAvatar from '../../../src/components/UserAvatar';
+import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
+import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
 
 export default function MoreRoute() {
   const router = useRouter();
@@ -44,7 +46,9 @@ export default function MoreRoute() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
+    <View style={styles.screen}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
+        <FocusAwareStatusBar style="light" />
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 40) }]}>
         <View style={styles.profileInfo}>
           <View style={styles.avatarWrapper}>
@@ -103,7 +107,7 @@ export default function MoreRoute() {
             {roles?.includes("personal") && roles?.includes("admin") && (
               <>
                 <OptionItem icon={<ChartLine size={22} color="#192633"/>} title='Dashboard' onClick={() => router.push("/dashboard")}/>
-                <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/schedule")} />
+                <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/(app)/(tabs)/personal-schedule")} />
                 <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
                 <OptionItem icon={<Clock size={22} color="#192633" />} title='Ajustar disponibilidade' onClick={() => router.push("/set-availability")} />
                 <OptionItem icon={<User size={22} color="#192633" />} title='Criar personal' onClick={() => router.push("/create-personal")} isLast={true} />
@@ -133,15 +137,23 @@ export default function MoreRoute() {
         </View>
       </View>
 
-      <NotificationCenterModal
-        visible={isNotificationModalOpen}
-        onClose={() => setIsNotificationModalOpen(false)}
-      />
-    </ScrollView>
+        <NotificationCenterModal
+          visible={isNotificationModalOpen}
+          onClose={() => setIsNotificationModalOpen(false)}
+        />
+      </ScrollView>
+
+      {/* Botão de gravação de áudio para agendamento com IA */}
+      <VoiceRecorderButton />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
