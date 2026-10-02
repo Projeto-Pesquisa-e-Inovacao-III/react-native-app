@@ -8,7 +8,7 @@ import { BASE_URL } from '../../src/services/api';
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
-  useWebSocket({ url: BASE_URL });
+  useWebSocket({ url: BASE_URL, isAuthenticated });
 
   if (isLoading) {
     return (

@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 
 interface UseWebSocketOptions {
   url: string;
+  isAuthenticated: boolean;
   onMessage?: (data: unknown) => void;
 }
 
@@ -10,7 +11,11 @@ function toWebSocketUrl(url: string) {
   return url.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://');
 }
 
-export const useWebSocket = ({ url, onMessage }: UseWebSocketOptions) => {
+function joinPath(base: string, suffix: string) {
+  return `${base.replace(/\/+$/, '')}/${suffix.replace(/^\/+/, '')}`;
+}
+
+export const useWebSocket = ({ url, isAuthenticated, onMessage }: UseWebSocketOptions) => {
   const ws = useRef<WebSocket | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const onMessageRef = useRef(onMessage);
@@ -29,10 +34,16 @@ export const useWebSocket = ({ url, onMessage }: UseWebSocketOptions) => {
   }, []);
 
   const connect = useCallback(() => {
+    if (!isAuthenticated) {
+      disconnect();
+      return;
+    }
+
     const readyState = ws.current?.readyState;
     if (readyState === WebSocket.CONNECTING || readyState === WebSocket.OPEN) return;
 
-    const socket = new WebSocket(toWebSocketUrl(url + '/ws'));
+    const endpoint = joinPath(url, '/ws/websocket');
+    const socket = new WebSocket(toWebSocketUrl(endpoint));
 
     socket.onopen = () => {
       console.log('WebSocket connection established.');
@@ -61,15 +72,15 @@ export const useWebSocket = ({ url, onMessage }: UseWebSocketOptions) => {
     };
 
     ws.current = socket;
-  }, [url]);
+  }, [disconnect, isAuthenticated, url]);
 
   useEffect(() => {
-    // 1. Establish connection if app opens directly into active state
-    if (AppState.currentState === 'active') {
+    if (isAuthenticated && AppState.currentState === 'active') {
       connect();
+    } else if (!isAuthenticated) {
+      disconnect();
     }
 
-    // 2. Listen for transition events between background and foreground
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       const isComingFromBackground =
         appState.current.match(/inactive|background/) && nextAppState === 'active';
@@ -88,7 +99,7 @@ export const useWebSocket = ({ url, onMessage }: UseWebSocketOptions) => {
       subscription.remove();
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [connect, disconnect, isAuthenticated]);
 
   const sendMessage = useCallback((payload: object) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
