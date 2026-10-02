@@ -27,8 +27,7 @@ import InputWithIcon from '../../../src/components/InputWithIcon';
 import Select from '../../../src/components/Select';
 import SuccessModal from '../../../src/components/modals/SuccessModal';
 import ErrorModal from '../../../src/components/modals/ErrorModal';
-import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
-import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
+import { StatusBar } from 'expo-status-bar';
 import { cellphoneMask, crefMask, dateMask } from '../../../src/utils/mascara';
 import { validateEmail } from '../../../src/utils/validacao';
 import { createPersonal } from '../../../src/constants/admin';
@@ -245,7 +244,7 @@ export default function CreatePersonalScreen() {
 
   return (
     <View style={styles.screen}>
-      <FocusAwareStatusBar style="dark" />
+      <StatusBar style="dark" />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -449,9 +448,6 @@ export default function CreatePersonalScreen() {
         onClose={() => setModalState({ type: null, title: '', content: '' })}
         closeThen={() => setModalState({ type: null, title: '', content: '' })}
       />
-
-      {/* Botão de gravação de áudio com IA */}
-      <VoiceRecorderButton />
     </View>
   );
 }
