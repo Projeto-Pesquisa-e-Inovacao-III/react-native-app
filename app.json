@@ -1,23 +1,29 @@
 {
   "expo": {
     "name": "react-native-app",
-    "slug": "react-native-app",
+    "slug": "csf",
     "scheme": "react-native-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.csf.react"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.reactnativeapp"
+      "package": "com.csf.react",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,6 +38,13 @@
         }
       ],
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5f87e7f5-c41e-4941-a12e-08b97ae5a82e"
+      }
+    },
+    "owner": "phillieuss-team"
   }
 }

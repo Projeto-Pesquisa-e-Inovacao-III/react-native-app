@@ -55,3 +55,7 @@ devenv.local.yaml
 
 # pre-commit
 .pre-commit-config.yaml
+
+# envs
+react-native-app-*.json
+google-services.json
