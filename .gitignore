@@ -18,6 +18,9 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+.android
+
+local.properties
 
 # Metro
 .metro-health-check*
@@ -41,3 +44,18 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Devenv
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
+
+# envs
+react-native-app-*.json
+google-services.json

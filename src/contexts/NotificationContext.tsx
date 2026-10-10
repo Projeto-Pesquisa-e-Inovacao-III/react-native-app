@@ -1,5 +1,8 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
+  registerForNotificationsAsync,
+  registerForPushNotificationsAsync,
+  subscribeToNotifications,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
@@ -36,7 +39,54 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
-  const [pushToken] = useState<string | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 1. Registra e obtém o Expo Push Token do aparelho
+    registerForPushNotificationsAsync().then((token) => {
+      if (token) {
+        setPushToken(token);
+        // Tenta enviar o token para o backend (quando o endpoint estiver pronto)
+        savePushToken(token).catch(() => {
+          // Backend ainda não implementou o endpoint, falha silenciosa
+        });
+      }
+    });
+
+    // 2. Escuta notificações recebidas (tanto locais quanto push remotas do backend)
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+
+    subscribeToNotifications((notificationEvent) => {
+      if (!active) return;
+
+      const { title, body, data } = notificationEvent.request.content;
+      const recipient = (data?.recipient as NotificationRecipient) || 'ambos';
+
+      const newItem: AppNotificationItem = {
+        id: notificationEvent.request.identifier || String(Date.now()),
+        title: title || 'Notificação',
+        body: body || '',
+        recipient,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        read: false,
+        data: data as any,
+      };
+
+      setNotifications((prev) => [newItem, ...prev]);
+    }).then((nextSubscription) => {
+      if (active) {
+        subscription = nextSubscription;
+      } else {
+        nextSubscription.remove();
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
