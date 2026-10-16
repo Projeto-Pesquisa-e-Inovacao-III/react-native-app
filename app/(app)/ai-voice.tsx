@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,26 +11,9 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Mic, X, Sparkles, RefreshCw } from "lucide-react-native";
 import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-  useAudioStream,
-} from "expo-audio";
-
-const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
-
-function rmsFromBuffer(buffer: ArrayBuffer): number {
-  const samples = new Float32Array(buffer);
-  if (samples.length === 0) return 0;
-  let sum = 0;
-  for (let i = 0; i < samples.length; i++) {
-    sum += samples[i] * samples[i];
-  }
-  const rms = Math.sqrt(sum / samples.length);
-  return Math.min(1, Math.pow(rms * 4, 0.5));
-}
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 
 type WaveformBarProps = {
   baseHeight: number;
@@ -81,154 +63,104 @@ function WaveformBar({
   );
 }
 
-const RECORDING_OPTIONS = {
-  ...RecordingPresets.HIGH_QUALITY,
-  isMeteringEnabled: true,
-};
+const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
 
-// ─── Versão Web: simula o fluxo sem APIs nativas de áudio ───────────────────
-function AiVoiceScreenWeb() {
+export default function AiVoiceScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [transcriptionText, setTranscriptionText] = useState<string | null>(
-    null,
-  );
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
 
-  const volumeInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const startRecording = useCallback(() => {
-    setTranscriptionText(null);
-    setIsTranscribing(false);
+  useSpeechRecognitionEvent('start', () => {
     setIsRecording(true);
-    // Simula variação de volume para animar a waveform
-    volumeInterval.current = setInterval(() => {
-      setNormalizedVolume(Math.random() * 0.8 + 0.1);
-    }, 120);
-  }, []);
+    setIsProcessing(false);
+  });
 
-  const stopRecording = useCallback(() => {
+  useSpeechRecognitionEvent('end', () => {
     setIsRecording(false);
-    setNormalizedVolume(0);
-    if (volumeInterval.current) clearInterval(volumeInterval.current);
-    setIsTranscribing(true);
-    setTimeout(() => {
-      setIsTranscribing(false);
-      setTranscriptionText(
-        "Gostaria de agendar uma aula presencial com meu personal...",
-      );
-    }, 1500);
-  }, []);
-
-  const startRecordingRef = useRef(startRecording);
-  useEffect(() => {
-    startRecordingRef.current = startRecording;
+    setIsProcessing(false);
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      startRecordingRef.current();
-    }, 600);
-    return () => {
-      clearTimeout(timer);
-      if (volumeInterval.current) clearInterval(volumeInterval.current);
+  useSpeechRecognitionEvent('result', (event) => {
+    const best = event.results[0]?.transcript;
+    if (best) {
+      setTranscriptionText(best);
+      if (event.isFinal) {
+        setIsProcessing(false);
+      }
+    }
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    setIsProcessing(false);
+    setIsRecording(false);
+
+    const messages: Record<string, string> = {
+      'not-allowed': 'Permissão de microfone/fala não concedida.',
+      'no-speech': 'Nenhuma fala detectada. Tente novamente.',
+      'network': 'Falha na rede. Verifique sua conexão.',
+      'service-not-allowed': 'Serviço de reconhecimento indisponível.',
+      'audio-capture': 'Erro na captura de áudio.',
+      'language-not-supported': 'Idioma pt-BR não suportado neste dispositivo.',
     };
-  }, []);
 
-  return (
-    <AiVoiceUI
-      insets={insets}
-      router={router}
-      isRecording={isRecording}
-      isTranscribing={isTranscribing}
-      transcriptionText={transcriptionText}
-      normalizedVolume={normalizedVolume}
-      onStart={startRecording}
-      onStop={stopRecording}
-    />
-  );
-}
+    const message = messages[event.error] ?? 'Erro desconhecido ao transcrever áudio.';
+    console.error('Speech recognition error:', event.error, event.message);
 
-// ─── Versão Native: usa expo-audio ───────────────────────────────────────────
-function AiVoiceScreenNative() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-
-  const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
-  const recorderState = useAudioRecorderState(audioRecorder, 80);
-  const isRecording = recorderState.isRecording;
-
-  const [normalizedVolume, setNormalizedVolume] = useState(0);
-  const { stream } = useAudioStream({
-    channels: 1,
-    sampleRate: 16000,
-    encoding: "float32",
-    onBuffer: (buffer) => {
-      if (!buffer?.data) return;
-      setNormalizedVolume(rmsFromBuffer(buffer.data));
-    },
+    if (event.error === 'not-allowed') {
+      Alert.alert('Permissão negada', message, [{ text: 'OK', onPress: () => router.back() }]);
+    } else if (event.error !== 'no-speech') {
+      Alert.alert('Erro', message);
+    }
   });
 
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [transcriptionText, setTranscriptionText] = useState<string | null>(
-    null,
-  );
+  useSpeechRecognitionEvent('nomatch', () => {
+    setIsProcessing(false);
+    setTranscriptionText(null);
+  });
+
+  useSpeechRecognitionEvent('volumechange', (event) => {
+    const vol = Math.max(0, Math.min(1, (event.value + 2) / 12));
+    setNormalizedVolume(vol);
+  });
 
   const startRecording = useCallback(async () => {
-    try {
-      setTranscriptionText(null);
-      setIsTranscribing(false);
+    setTranscriptionText(null);
+    setIsProcessing(false);
+    setIsRecording(false);
 
-      const status = await requestRecordingPermissionsAsync();
-      if (!status.granted) {
-        Alert.alert(
-          "Permissão negada",
-          "Permita o acesso ao microfone nas configurações do dispositivo para gravar seu agendamento.",
-          [{ text: "OK", onPress: () => router.back() }],
-        );
-        return;
-      }
-
-      if (Platform.OS === "ios") {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          allowsRecording: true,
-        });
-      }
-
-      await stream.start();
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("Erro ao iniciar gravação:", error);
+    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!result.granted) {
       Alert.alert(
-        "Erro ao gravar",
-        message || "Não foi possível iniciar a gravação de áudio.",
+        'Permissão negada',
+        'Permita o acesso ao microfone e reconhecimento de fala nas configurações do dispositivo para gravar e transcrever seu agendamento.',
+        [{ text: 'OK', onPress: () => router.back() }]
       );
+      return;
     }
-  }, [audioRecorder, stream, router]);
 
-  const stopRecording = useCallback(async () => {
-    try {
-      stream.stop();
-      setNormalizedVolume(0);
-      await audioRecorder.stop();
-      setIsTranscribing(true);
-      setTimeout(() => {
-        setIsTranscribing(false);
-        setTranscriptionText(
-          "Gostaria de agendar uma aula presencial com meu personal...",
-        );
-      }, 1500);
-    } catch (error) {
-      console.error("Erro ao finalizar gravação:", error);
-      setIsTranscribing(false);
-    }
-  }, [audioRecorder, stream]);
+    ExpoSpeechRecognitionModule.start({
+      lang: 'pt-BR',
+      interimResults: true,
+      continuous: false,
+      androidIntentOptions: {
+        EXTRA_LANGUAGE_MODEL: 'web_search',
+      },
+      iosVoiceProcessingEnabled: true,
+      volumeChangeEventOptions: {
+        enabled: true,
+        intervalMillis: 100,
+      },
+    });
+  }, [router]);
+
+  const stopRecording = useCallback(() => {
+    setIsProcessing(true);
+    ExpoSpeechRecognitionModule.stop();
+  }, []);
 
   const startRecordingRef = useRef(startRecording);
   useEffect(() => {
@@ -241,14 +173,9 @@ function AiVoiceScreenNative() {
     }, 600);
     return () => {
       clearTimeout(timer);
-      try {
-        stream.stop();
-        if (audioRecorder.isRecording) {
-          audioRecorder.stop();
-        }
-      } catch {}
+      ExpoSpeechRecognitionModule.abort();
     };
-  }, [audioRecorder, stream]);
+  }, [startRecording]);
 
   return (
     <AiVoiceUI
@@ -323,8 +250,8 @@ function AiVoiceUI({
         </View>
 
         <Text style={styles.title}>
-          {isTranscribing
-            ? "Transcrevendo áudio..."
+          {isProcessing
+            ? 'Transcrevendo áudio...'
             : isRecording
               ? "Ouvindo você..."
               : transcriptionText
@@ -333,8 +260,8 @@ function AiVoiceUI({
         </Text>
 
         <Text style={styles.subtitle}>
-          {isTranscribing
-            ? "Nossa inteligência artificial está processando sua fala."
+          {isProcessing
+            ? 'Nossa inteligência artificial está processando sua fala.'
             : isRecording
               ? "Fale livremente o que deseja agendar (ex: dia, horário ou modalidade)."
               : transcriptionText
@@ -358,17 +285,15 @@ function AiVoiceUI({
             style={[
               styles.micCircle,
               isRecording && styles.micCircleRecording,
-              isTranscribing && styles.micCircleTranscribing,
+              isProcessing && styles.micCircleTranscribing,
             ]}
             onPress={isRecording ? onStop : onStart}
             activeOpacity={0.85}
-            disabled={isTranscribing}
-            accessibilityLabel={
-              isRecording ? "Parar gravação" : "Iniciar gravação"
-            }
+            disabled={isProcessing}
+            accessibilityLabel={isRecording ? 'Parar gravação' : 'Iniciar gravação'}
             accessibilityRole="button"
           >
-            {isTranscribing ? (
+            {isProcessing ? (
               <RefreshCw color="#FFFFFF" size={28} />
             ) : (
               <Mic color="#FFFFFF" size={32} strokeWidth={2.2} />
