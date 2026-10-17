@@ -111,3 +111,32 @@ export type PaginatedResponse<T> = {
     totalPages: number;
   };
 };
+
+export type ExperimentalSchedule = {
+  nomeAluno: string;
+  sexo?: string;
+  emailAluno: string;
+  cpfAluno: string;
+  dataNascimento: string; // ISO date string: "YYYY-MM-DD"
+  ddd: string;
+  numero: string;
+  pais: string;
+  agendamentoDTO: {
+    data: string; // ISO datetime: "YYYY-MM-DDTHH:MM:SS"
+    descricao: string;
+    novoEndereco: {
+      numero: string;
+      complemento: string;
+      tipo: string;
+      cep: {
+        id: string;
+        logradouro: string;
+        bairro: string;
+        localidade: string;
+        uf: string;
+      };
+    };
+    personalId: number;
+    tipoAulaProdutoContratado: string;
+  };
+};

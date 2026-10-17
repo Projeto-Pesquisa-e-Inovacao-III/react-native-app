@@ -1,6 +1,7 @@
 import { api } from '../services/api';
 import type {
   AbsenceAppointment,
+  ExperimentalSchedule,
   Schedule,
   ScheduleReschedule,
   CheckSchedule,
@@ -8,6 +9,10 @@ import type {
 
 export function insertAppointment(data: Schedule) {
   return api.post('/agendamentos', data);
+}
+
+export function insertExperimentalAppointment(data: ExperimentalSchedule) {
+  return api.post('/agendamentos-experimentais', data);
 }
 
 export function rescheduleAppointment(data: ScheduleReschedule) {
