@@ -494,35 +494,6 @@ export default function NewExperimentalEvent({
     }
   }
 
-  // ── Autofill para Desenvolvimento/Testes ──────────────────────────────────
-  function handleAutoFillJuliana() {
-    setStudent({
-      nome: "Juliana Barbosa Lima",
-      sexo: "F",
-      email: "juliana.barbosa@email.com",
-      cpf: "19100000000",
-      dataNascimento: "22/11/2025",
-      ddd: "11",
-      numero: "987654321",
-      pais: "Brasil",
-    });
-    setDate("2026-10-15");
-    setStartHour("14:30");
-    setDescricao("Aula experimental de pilates");
-    setClassType("PRESENCIAL");
-    setAddress({
-      postalCode: "01310100",
-      street: "Avenida Paulista",
-      number: "789",
-      complement: "Conjunto 42",
-      unidade: "Torre A",
-      tipo: "Comercial",
-      neighborhood: "Bela Vista",
-      city: "São Paulo",
-      state: "SP",
-    });
-    setFieldErrors({});
-  }
 
   function handleAutoFillStudent() {
     setStudent({
@@ -570,7 +541,8 @@ export default function NewExperimentalEvent({
   }
 
   function handleAutoFillAll() {
-    handleAutoFillJuliana();
+    handleAutoFillStudent();
+    handleAutoFillAddress();
   }
 
   function goToStep3() {
@@ -700,15 +672,6 @@ export default function NewExperimentalEvent({
             <View style={styles.devSection}>
               <Text style={styles.devLabel}>Atalhos de Teste:</Text>
               <View style={styles.devButtonsRow}>
-                <TouchableOpacity
-                  style={[styles.btnAutoFill, styles.btnAutoFillPrimary]}
-                  onPress={handleAutoFillJuliana}
-                  activeOpacity={0.7}
-                >
-                  <Sparkles size={12} color="#0369a1" />
-                  <Text style={[styles.btnAutoFillText, styles.btnAutoFillPrimaryText]}>Exemplo Juliana</Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity
                   style={styles.btnAutoFill}
                   onPress={handleAutoFillStudent}
@@ -1061,7 +1024,6 @@ export default function NewExperimentalEvent({
                         ) : null}
                       </View>
                       <View style={styles.experimentalBadge}>
-                        <Sparkles size={11} color="#0284c7" />
                         <Text style={styles.experimentalBadgeText}>Experimental</Text>
                       </View>
                     </View>
