@@ -1,5 +1,7 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import { Client, IFrame, IMessage } from '@stomp/stompjs';
+import { BASE_URL, getAuthToken, triggerUnauthorized } from './api';
 
 interface UseWebSocketOptions {
   url: string;
@@ -15,70 +17,149 @@ function joinPath(base: string, suffix: string) {
   return `${base.replace(/\/+$/, '')}/${suffix.replace(/^\/+/, '')}`;
 }
 
+const notificationDestination = '/user/queue/notifications';
+const reconnectDelay = 5000;
+const heartbeatInterval = 10000;
+
+function isAuthenticationError(frame: IFrame) {
+  const errorText = `${frame.headers.message ?? ''} ${frame.body}`.toLowerCase();
+  return /auth|unauthor|forbidden|invalid token|expired|jwt|401|403/.test(errorText);
+}
+
+function deliverMessage(message: IMessage, onMessage: ((data: unknown) => void) | undefined) {
+  if (!onMessage) {
+    console.log('[WebSocket] Notification received, but no message handler is registered');
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(message.body);
+    onMessage(parsed);
+    console.log('[WebSocket] Notification received:', parsed);
+  } catch {
+    onMessage(message.body);
+    console.log('[WebSocket] Notification received as text:', message.body);
+  }
+}
+
 export const useWebSocket = ({ url, isAuthenticated, onMessage }: UseWebSocketOptions) => {
-  const ws = useRef<WebSocket | null>(null);
+  const clientRef = useRef<Client | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const onMessageRef = useRef(onMessage);
+  const deactivationRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
 
-  const disconnect = useCallback(() => {
-    if (ws.current) {
-     ws.current.onclose = null;
-      ws.current.onerror = null;
-      ws.current.close();
-      ws.current = null;
-    }
-  }, []);
-
-  const connect = useCallback(() => {
-    if (!isAuthenticated) {
-      disconnect();
+  const disconnect = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) {
+      await deactivationRef.current;
       return;
     }
 
-    const readyState = ws.current?.readyState;
-    if (readyState === WebSocket.CONNECTING || readyState === WebSocket.OPEN) return;
+    clientRef.current = null;
+    console.log('[WebSocket] Deactivating STOMP client');
+    const deactivation = client.deactivate({ force: true });
+    deactivationRef.current = deactivation;
+    await deactivation;
+    if (deactivationRef.current === deactivation) {
+      deactivationRef.current = null;
+    }
+  }, []);
 
-    const endpoint = joinPath(url, '/ws/websocket');
-    const socket = new WebSocket(toWebSocketUrl(endpoint));
+  const createClient = useCallback(() => {
+    const endpoint = joinPath(url || BASE_URL, '/ws-native');
+    const client = new Client({
+      brokerURL: toWebSocketUrl(endpoint),
+      reconnectDelay,
+      maxReconnectDelay: 30000,
+      connectionTimeout: 8000,
+      heartbeatIncoming: heartbeatInterval,
+      heartbeatOutgoing: heartbeatInterval,
+      forceBinaryWSFrames: true,
+      appendMissingNULLonIncoming: true,
+    });
 
-    socket.onopen = () => {
-      console.log('WebSocket connection established.');
+    client.beforeConnect = async () => {
+      const token = await getAuthToken();
+      if (!token) {
+        console.log('[WebSocket] Connection skipped: no auth token found');
+        client.reconnectDelay = 0;
+        await client.deactivate({ force: true });
+        return;
+      }
+
+      client.connectHeaders = {
+        Authorization: `Bearer ${token}`,
+      };
+      console.log('[WebSocket] Connecting to STOMP endpoint');
     };
 
-    socket.onmessage = (event) => {
-      if (onMessageRef.current) {
-        try {
-          const parsed = JSON.parse(event.data);
-          onMessageRef.current(parsed);
-        } catch {
-          onMessageRef.current(event.data);
-        }
+    client.onConnect = (frame) => {
+      console.log('[WebSocket] STOMP CONNECTED:', frame.headers.session ?? '(no session id)');
+      client.subscribe(
+        notificationDestination,
+        (message) => deliverMessage(message, onMessageRef.current),
+        { ack: 'auto' },
+      );
+      console.log('[WebSocket] Subscribed to:', notificationDestination);
+    };
+
+    client.onStompError = (frame) => {
+      console.error('[WebSocket] STOMP ERROR:', {
+        message: frame.headers.message,
+        body: frame.body,
+      });
+      if (isAuthenticationError(frame)) {
+        client.reconnectDelay = 0;
+        triggerUnauthorized();
+        void client.deactivate({ force: true });
       }
     };
 
-    socket.onerror = (error) => {
-      console.error('WebSocket encountered error:', error);
+    client.onWebSocketError = (event) => {
+      console.error('[WebSocket] WebSocket error:', event);
     };
 
-    socket.onclose = (event) => {
-      console.log('WebSocket closed:', event.reason);
-      if (ws.current === socket) {
-        ws.current = null;
-      }
+    client.onWebSocketClose = (event) => {
+      console.log('[WebSocket] WebSocket close:', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
     };
 
-    ws.current = socket;
-  }, [disconnect, isAuthenticated, url]);
+    if (__DEV__) {
+      client.debug = (message) => {
+        const redactedMessage = message.replace(/(authorization:\s*bearer\s+)\S+/gi, '$1[REDACTED]');
+        console.log('[WebSocket][STOMP]', redactedMessage);
+      };
+    }
+
+    clientRef.current = client;
+    return client;
+  }, [url]);
+
+  const connect = useCallback(async () => {
+    if (!isAuthenticated || AppState.currentState !== 'active') return;
+
+    await deactivationRef.current;
+    if (clientRef.current?.active) return;
+
+    const client = clientRef.current ?? createClient();
+    if (!client.active) {
+      console.log('[WebSocket] Activating STOMP client');
+      client.activate();
+    }
+  }, [createClient, isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated && AppState.currentState === 'active') {
-      connect();
+      void connect();
     } else if (!isAuthenticated) {
-      disconnect();
+      void disconnect();
     }
 
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
@@ -87,9 +168,9 @@ export const useWebSocket = ({ url, isAuthenticated, onMessage }: UseWebSocketOp
       const isGoingToBackground = nextAppState.match(/inactive|background/);
 
       if (isComingFromBackground) {
-        connect();
+        void connect();
       } else if (isGoingToBackground) {
-        disconnect();
+        void disconnect();
       }
 
       appState.current = nextAppState;
@@ -97,15 +178,7 @@ export const useWebSocket = ({ url, isAuthenticated, onMessage }: UseWebSocketOp
 
     return () => {
       subscription.remove();
-      disconnect();
+      void disconnect();
     };
   }, [connect, disconnect, isAuthenticated]);
-
-  const sendMessage = useCallback((payload: object) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify(payload));
-    }
-  }, []);
-
-  return { sendMessage };
 };

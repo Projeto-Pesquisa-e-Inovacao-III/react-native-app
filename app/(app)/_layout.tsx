@@ -8,7 +8,7 @@ import { BASE_URL } from '../../src/services/api';
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
-  useWebSocket({ url: BASE_URL, isAuthenticated });
+  useWebSocket({ url: BASE_URL });
 
   if (isLoading) {
     return (
@@ -26,7 +26,8 @@ export default function AppLayout() {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(edit-user)" options={{ headerShown: false }} />
+        <Stack.Screen name="plans-history" options={{ headerShown: false }} />
+        <Stack.Screen name="plans-history-details" options={{ headerShown: false }} />
       </Stack>
     </SafeAreaView>
   );

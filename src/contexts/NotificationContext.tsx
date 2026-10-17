@@ -1,14 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  registerForNotificationsAsync,
   registerForPushNotificationsAsync,
   subscribeToNotifications,
+  storePushToken,
+  getStoredPushToken,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
   notifyAppointmentRescheduled,
+  type AppNotificationData,
   type AppNotificationItem,
+  type NotificationRecipient,
 } from '../services/notificationService';
+import { BASE_URL } from '../services/api';
+import { useWebSocket } from '../services/webSocketService';
+import { useAuth } from './AuthContext';
+import { savePushToken } from '../constants/user';
 
 type NotifParams = {
   studentName?: string;
@@ -40,20 +47,85 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
   const [pushToken, setPushToken] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
+
+  const handleWebSocketMessage = useCallback((data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+
+    const payload = data as {
+      title?: unknown;
+      message?: unknown;
+      type?: unknown;
+      createdAt?: unknown;
+    };
+    const title = typeof payload.title === 'string' ? payload.title : 'Notificação';
+    const body = typeof payload.message === 'string' ? payload.message : '';
+    const type: AppNotificationData['type'] =
+      payload.type === 'APPOINTMENT_SCHEDULED' ||
+      payload.type === 'APPOINTMENT_APPROVED' ||
+      payload.type === 'APPOINTMENT_CANCELLED' ||
+      payload.type === 'APPOINTMENT_RESCHEDULED'
+        ? payload.type
+        : 'GENERAL';
+    const timestamp = payload.createdAt ? new Date(String(payload.createdAt)) : new Date();
+
+    setNotifications((prev) => [
+      {
+        id: `ws-${Date.now()}`,
+        title,
+        body,
+        recipient: 'ambos',
+        timestamp: timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        read: false,
+        data: { recipient: 'ambos', type },
+      },
+      ...prev,
+    ]);
+  }, []);
+
+  useWebSocket({
+    url: BASE_URL,
+    isAuthenticated,
+    onMessage: handleWebSocketMessage,
+  });
 
   useEffect(() => {
-    // 1. Registra e obtém o Expo Push Token do aparelho
-    registerForPushNotificationsAsync().then((token) => {
-      if (token) {
-        setPushToken(token);
-        // Tenta enviar o token para o backend (quando o endpoint estiver pronto)
-        savePushToken(token).catch(() => {
-          // Backend ainda não implementou o endpoint, falha silenciosa
-        });
-      }
-    });
+    let active = true;
 
-    // 2. Escuta notificações recebidas (tanto locais quanto push remotas do backend)
+    if (!isAuthenticated) {
+      setPushToken(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    registerForPushNotificationsAsync()
+      .then(async (token) => {
+        if (!token || !active) {
+          return;
+        }
+
+        setPushToken(token);
+
+        const currentStoredToken = await getStoredPushToken();
+        if (currentStoredToken === token) {
+          return;
+        }
+
+        await savePushToken(token);
+        await storePushToken(token);
+      })
+      .catch((error) => {
+        console.warn('Erro ao registrar push token no backend:', error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    // Escuta notificações recebidas (locais e push remotas do backend)
     let active = true;
     let subscription: { remove: () => void } | null = null;
 

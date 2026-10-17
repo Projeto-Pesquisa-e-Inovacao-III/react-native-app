@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type NotificationsModule = typeof import('expo-notifications');
 type NotificationListener = Parameters<NotificationsModule['addNotificationReceivedListener']>[0];
@@ -11,6 +12,7 @@ const isExpoGo =
   Constants.executionEnvironment === 'storeClient';
 
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+const PUSH_TOKEN_STORAGE_KEY = 'expo_push_token';
 
 async function getNotificationsModule(): Promise<NotificationsModule | null> {
   if (isExpoGo) {
@@ -103,11 +105,25 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       projectId ? { projectId } : undefined
     );
 
+    console.log('Expo Push Token:', pushTokenData.data);
+
     return pushTokenData.data;
   } catch (error) {
     console.warn('Não foi possível obter Expo Push Token:', error);
     return null;
   }
+}
+
+export async function getStoredPushToken(): Promise<string | null> {
+  return AsyncStorage.getItem(PUSH_TOKEN_STORAGE_KEY);
+}
+
+export async function storePushToken(token: string): Promise<void> {
+  await AsyncStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token);
+}
+
+export async function clearStoredPushToken(): Promise<void> {
+  await AsyncStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
 }
 
 /**
@@ -123,6 +139,8 @@ export async function registerForNotificationsAsync(): Promise<boolean> {
 export async function sendLocalNotification({
   title,
   body,
+  data,
+  delaySeconds = 0,
 }: {
   title: string;
   body: string;

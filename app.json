@@ -37,6 +37,7 @@
           "barcodeScannerEnabled": true
         }
       ],
+      "expo-notifications",
       "expo-status-bar"
     ],
     "extra": {
