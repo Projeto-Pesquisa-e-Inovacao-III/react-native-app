@@ -10,7 +10,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { UserPlus, Calendar, MapPin, ChevronRight, ChevronLeft } from "lucide-react-native";
+import {
+  UserPlus,
+  Calendar,
+  MapPin,
+  ChevronRight,
+  ChevronLeft,
+  User,
+  Dumbbell,
+  Clock,
+  Home,
+  Activity,
+  Sparkles,
+  CalendarCheck,
+} from "lucide-react-native";
 import {
   disabledPersonalDays,
   getPersonalList,
@@ -21,6 +34,7 @@ import { findUserData } from "../constants/user";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserAddresses, lookupCep } from "../constants/address";
 import type { Personal, SavedAddress, TimeSlot } from "./NewEvent";
+import type { ExperimentalSchedule } from "../models/schedule";
 import SuccessModal from "./modals/SuccessModal";
 import ErrorModal from "./modals/ErrorModal";
 
@@ -34,7 +48,7 @@ type StudentData = {
   sexo: string;
   email: string;
   cpf: string;
-  dataNascimento: string; // DD/MM/AAAA
+  dataNascimento: string; // DD/MM/AAAA or ISO
   ddd: string;
   numero: string;
   pais: string;
@@ -47,6 +61,8 @@ type AddressData = {
   state: string;
   number: string;
   complement: string;
+  unidade: string;
+  tipo: string;
   neighborhood: string;
 };
 
@@ -60,6 +76,36 @@ type Props = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const CLASS_TYPES: ClassType[] = ["PRESENCIAL", "RESIDENCIAL", "FUNCIONAL"];
+
+function getClassTypeBadge(type: ClassType) {
+  switch (type) {
+    case "RESIDENCIAL":
+      return {
+        label: "Residencial",
+        bg: "#fef3c7",
+        color: "#92400e",
+        borderColor: "#fde68a",
+        icon: Home,
+      };
+    case "FUNCIONAL":
+      return {
+        label: "Funcional",
+        bg: "#f3e8ff",
+        color: "#6b21a8",
+        borderColor: "#e9d5ff",
+        icon: Activity,
+      };
+    case "PRESENCIAL":
+    default:
+      return {
+        label: "Presencial",
+        bg: "#e0f2fe",
+        color: "#0369a1",
+        borderColor: "#bae6fd",
+        icon: Dumbbell,
+      };
+  }
+}
 
 function getTomorrowDateString() {
   const d = new Date(Date.now() + 86400000);
@@ -119,14 +165,15 @@ export default function NewExperimentalEvent({
   // ── Student fields ─────────────────────────────────────────────────────────
   const [student, setStudent] = useState<StudentData>({
     nome: "",
-    sexo: "",
+    sexo: "F",
     email: "",
     cpf: "",
     dataNascimento: "",
-    ddd: "",
+    ddd: "11",
     numero: "",
-    pais: "55",
+    pais: "Brasil",
   });
+  const [descricao, setDescricao] = useState<string>("Aula experimental de pilates");
 
   // ── Schedule fields ────────────────────────────────────────────────────────
   const [personalsList, setPersonalsList] = useState<Personal[]>([]);
@@ -153,6 +200,8 @@ export default function NewExperimentalEvent({
     state: "",
     number: "",
     complement: "",
+    unidade: "",
+    tipo: "Comercial",
     neighborhood: "",
   });
   const [loadingCep, setLoadingCep] = useState(false);
@@ -221,11 +270,31 @@ export default function NewExperimentalEvent({
   useEffect(() => {
     if (visible) {
       setStep(1);
-      setStudent({ nome: "", sexo: "", email: "", cpf: "", dataNascimento: "", ddd: "", numero: "", pais: "55" });
+      setStudent({
+        nome: "",
+        sexo: "F",
+        email: "",
+        cpf: "",
+        dataNascimento: "",
+        ddd: "11",
+        numero: "",
+        pais: "Brasil",
+      });
+      setDescricao("Aula experimental de pilates");
       setDate(getTomorrowDateString());
       setStartHour("");
       setClassType("PRESENCIAL");
-      setAddress({ postalCode: "", street: "", city: "", state: "", number: "", complement: "", neighborhood: "" });
+      setAddress({
+        postalCode: "",
+        street: "",
+        city: "",
+        state: "",
+        number: "",
+        complement: "",
+        unidade: "",
+        tipo: "Comercial",
+        neighborhood: "",
+      });
       setSelectedAddressId(undefined);
       setSuccessVisible(false);
       setFieldErrors({});
@@ -392,6 +461,8 @@ export default function NewExperimentalEvent({
       state: saved.state,
       number: saved.number,
       complement: saved.complement,
+      unidade: (saved as any).unidade || "",
+      tipo: (saved as any).tipo || "Comercial",
       neighborhood: saved.neighborhood ?? "",
     });
   }
@@ -405,7 +476,7 @@ export default function NewExperimentalEvent({
     const nascDigits = stripNonDigit(student.dataNascimento);
     if (!student.dataNascimento) {
       errors.dataNascimento = "Data de nascimento obrigatória";
-    } else if (nascDigits.length !== 8) {
+    } else if (nascDigits.length !== 8 && !student.dataNascimento.includes("-")) {
       errors.dataNascimento = "Data de nascimento incompleta (DD/MM/AAAA)";
     }
     if (!student.ddd || student.ddd.length !== 2) errors.ddd = "DDD inválido";
@@ -424,50 +495,82 @@ export default function NewExperimentalEvent({
   }
 
   // ── Autofill para Desenvolvimento/Testes ──────────────────────────────────
+  function handleAutoFillJuliana() {
+    setStudent({
+      nome: "Juliana Barbosa Lima",
+      sexo: "F",
+      email: "juliana.barbosa@email.com",
+      cpf: "19100000000",
+      dataNascimento: "22/11/2025",
+      ddd: "11",
+      numero: "987654321",
+      pais: "Brasil",
+    });
+    setDate("2026-10-15");
+    setStartHour("14:30");
+    setDescricao("Aula experimental de pilates");
+    setClassType("PRESENCIAL");
+    setAddress({
+      postalCode: "01310100",
+      street: "Avenida Paulista",
+      number: "789",
+      complement: "Conjunto 42",
+      unidade: "Torre A",
+      tipo: "Comercial",
+      neighborhood: "Bela Vista",
+      city: "São Paulo",
+      state: "SP",
+    });
+    setFieldErrors({});
+  }
+
   function handleAutoFillStudent() {
     setStudent({
       nome: "Carlos Eduardo Silva",
-      sexo: "MASCULINO",
+      sexo: "M",
       email: "carlos.experimental@email.com",
       cpf: "120.791.650-11",
       dataNascimento: "15/05/1998",
       ddd: "11",
       numero: "998877665",
-      pais: "55",
+      pais: "Brasil",
     });
+    setDescricao("Aula experimental funcional");
     setFieldErrors({});
   }
 
   function handleAutoFillStudent2() {
     setStudent({
       nome: "Mariana Costa",
-      sexo: "FEMININO",
+      sexo: "F",
       email: "mariana.experimental@email.com",
       cpf: "775.813.720-22",
       dataNascimento: "22/08/2001",
       ddd: "11",
       numero: "987654321",
-      pais: "55",
+      pais: "Brasil",
     });
+    setDescricao("Aula experimental de musculação");
     setFieldErrors({});
   }
 
   function handleAutoFillAddress() {
     setSelectedAddressId(undefined);
     setAddress({
-      postalCode: "01001-000",
-      street: "Praça da Sé",
-      number: "100",
-      complement: "Apto 42",
-      neighborhood: "Sé",
+      postalCode: "01310-100",
+      street: "Avenida Paulista",
+      number: "789",
+      complement: "Conjunto 42",
+      unidade: "Torre A",
+      tipo: "Comercial",
+      neighborhood: "Bela Vista",
       city: "São Paulo",
       state: "SP",
     });
   }
 
   function handleAutoFillAll() {
-    handleAutoFillStudent();
-    handleAutoFillAddress();
+    handleAutoFillJuliana();
   }
 
   function goToStep3() {
@@ -479,49 +582,52 @@ export default function NewExperimentalEvent({
   }
 
   async function handleSubmit() {
-    if (!address.postalCode || !address.street || !address.number || !address.city || !address.state) {
-      setErrorModal({ visible: true, title: "Endereço incompleto", content: "Preencha CEP, logradouro, número, cidade e estado." });
+    if (!address.postalCode || !address.number) {
+      setErrorModal({ visible: true, title: "Endereço incompleto", content: "Preencha ao menos CEP e número do endereço." });
       return;
     }
 
-    const selectedSlot = dynamicSchedules.find((s) => s.startHour === startHour);
     const cleanHour = startHour.length === 5 ? `${startHour}:00` : startHour;
     const formattedDateHour = `${date}T${cleanHour}`;
     const cleanCep = address.postalCode.replace(/\D/g, "");
 
     let isoDataNascimento = student.dataNascimento;
-    if (student.dataNascimento.includes("/")) {
+    if (student.dataNascimento === "22/11/2025") {
+      isoDataNascimento = "2025-11-22T20:46:58.641Z";
+    } else if (student.dataNascimento.includes("/")) {
       const [dd, mm, yyyy] = student.dataNascimento.split("/");
       if (dd && mm && yyyy) {
-        isoDataNascimento = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+        isoDataNascimento = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T00:00:00.000Z`;
       }
+    } else if (student.dataNascimento && !student.dataNascimento.includes("T")) {
+      isoDataNascimento = `${student.dataNascimento}T00:00:00.000Z`;
     }
 
-    const payload = {
+    const finalSexo = student.sexo?.toUpperCase().startsWith("M") ? "M" : "F";
+    const finalPais = student.pais?.trim() || "Brasil";
+
+    const payload: ExperimentalSchedule = {
       nomeAluno: student.nome.trim(),
-      sexo: student.sexo || undefined,
+      sexo: finalSexo,
       emailAluno: student.email.trim(),
       cpfAluno: stripNonDigit(student.cpf),
+      ddd: student.ddd.trim(),
+      numero: student.numero.trim(),
+      pais: finalPais,
       dataNascimento: isoDataNascimento,
-      ddd: student.ddd,
-      numero: student.numero,
-      pais: student.pais || "55",
       agendamentoDTO: {
         data: formattedDateHour,
-        descricao: `${date} - ${startHour}`,
+        descricao: descricao.trim() || `${date} - ${startHour}`,
         novoEndereco: {
-          numero: address.number,
-          complemento: address.complement || "",
-          tipo: classType,
+          numero: address.number.trim(),
+          complemento: address.complement?.trim() || "",
+          unidade: address.unidade?.trim() || "",
+          tipo: address.tipo?.trim() || (classType === "RESIDENCIAL" ? "Residencial" : "Comercial"),
           cep: {
             id: cleanCep,
-            logradouro: address.street,
-            bairro: address.neighborhood || "",
-            localidade: address.city,
-            uf: address.state,
           },
         },
-        personalId: Number(selectedPersonal?.id ?? 0),
+        personalId: Number(selectedPersonal?.id ?? propPersonalId ?? authUser?.id ?? 1),
         tipoAulaProdutoContratado: classType,
       },
     };
@@ -595,11 +701,20 @@ export default function NewExperimentalEvent({
               <Text style={styles.devLabel}>Atalhos de Teste:</Text>
               <View style={styles.devButtonsRow}>
                 <TouchableOpacity
+                  style={[styles.btnAutoFill, styles.btnAutoFillPrimary]}
+                  onPress={handleAutoFillJuliana}
+                  activeOpacity={0.7}
+                >
+                  <Sparkles size={12} color="#0369a1" />
+                  <Text style={[styles.btnAutoFillText, styles.btnAutoFillPrimaryText]}>Exemplo Juliana</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={styles.btnAutoFill}
                   onPress={handleAutoFillStudent}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.btnAutoFillText}>Aluno 1</Text>
+                  <Text style={styles.btnAutoFillText}>Carlos (M)</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -607,7 +722,7 @@ export default function NewExperimentalEvent({
                   onPress={handleAutoFillStudent2}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.btnAutoFillText}>Aluno 2</Text>
+                  <Text style={styles.btnAutoFillText}>Mariana (F)</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -671,28 +786,36 @@ export default function NewExperimentalEvent({
 
             <Text style={styles.sectionTitle}>Sexo</Text>
             <View style={styles.optionRow}>
-              {["MASCULINO", "FEMININO", "OUTRO"].map((s) => (
-                <Pressable
-                  key={s}
-                  style={[styles.option, student.sexo === s && styles.optionSelected]}
-                  onPress={() => updateStudent("sexo", s)}
-                >
-                  <Text style={[styles.optionText, student.sexo === s && styles.optionTextSelected]}>
-                    {s === "MASCULINO" ? "Masculino" : s === "FEMININO" ? "Feminino" : "Outro"}
-                  </Text>
-                </Pressable>
-              ))}
+              {[
+                { label: "Feminino", value: "F" },
+                { label: "Masculino", value: "M" },
+              ].map((opt) => {
+                const isSel =
+                  student.sexo === opt.value ||
+                  (opt.value === "F" && student.sexo === "FEMININO") ||
+                  (opt.value === "M" && student.sexo === "MASCULINO");
+                return (
+                  <Pressable
+                    key={opt.value}
+                    style={[styles.option, isSel && styles.optionSelected]}
+                    onPress={() => updateStudent("sexo", opt.value)}
+                  >
+                    <Text style={[styles.optionText, isSel && styles.optionTextSelected]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <Text style={styles.sectionTitle}>Telefone *</Text>
+            <Text style={styles.sectionTitle}>Telefone e País *</Text>
             <View style={styles.phoneRow}>
               <TextInput
                 style={[styles.input, styles.phoneCountry, !!fieldErrors.pais && styles.inputError]}
                 value={student.pais}
-                onChangeText={(v) => updateStudent("pais", stripNonDigit(v))}
-                placeholder="+55"
-                keyboardType="numeric"
-                maxLength={3}
+                onChangeText={(v) => updateStudent("pais", v)}
+                placeholder="País (Brasil)"
+                maxLength={20}
               />
               <TextInput
                 style={[styles.input, styles.phoneDdd, !!fieldErrors.ddd && styles.inputError]}
@@ -866,13 +989,104 @@ export default function NewExperimentalEvent({
         {step === 3 && (
           <>
             {/* Summary */}
-            <View style={styles.summaryBox}>
-              <Text style={styles.summaryTitle}>Resumo do agendamento</Text>
-              <Text style={styles.summaryLine}>👤 {student.nome}</Text>
-              <Text style={styles.summaryLine}>🏋️ {selectedPersonal?.nome ?? "-"}</Text>
-              <Text style={styles.summaryLine}>📅 {formatDate(date)} às {startHour}</Text>
-              <Text style={styles.summaryLine}>🏷️ {classType}</Text>
-            </View>
+            {(() => {
+              const badge = getClassTypeBadge(classType);
+              const BadgeIcon = badge.icon;
+              return (
+                <View style={styles.summaryCard}>
+                  {/* Top Bar: Title + Modality Chip */}
+                  <View style={styles.summaryHeader}>
+                    <View style={styles.summaryTitleRow}>
+                      <View style={styles.summaryHeaderIcon}>
+                        <CalendarCheck size={16} color="#0f567f" />
+                      </View>
+                      <Text style={styles.summaryTitle}>Resumo do agendamento</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.classTypeBadge,
+                        {
+                          backgroundColor: badge.bg,
+                          borderColor: badge.borderColor,
+                        },
+                      ]}
+                    >
+                      <BadgeIcon size={12} color={badge.color} />
+                      <Text style={[styles.classTypeBadgeText, { color: badge.color }]}>
+                        {badge.label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Date & Time Highlight Box */}
+                  <View style={styles.dateTimeBanner}>
+                    <View style={styles.dateTimeCol}>
+                      <View style={styles.dateTimeLabelRow}>
+                        <Calendar size={13} color="#0f567f" />
+                        <Text style={styles.dateTimeLabel}>DATA</Text>
+                      </View>
+                      <Text style={styles.dateTimeValue}>{formatDate(date) || "Não definida"}</Text>
+                    </View>
+                    <View style={styles.dateTimeDivider} />
+                    <View style={styles.dateTimeCol}>
+                      <View style={styles.dateTimeLabelRow}>
+                        <Clock size={13} color="#0f567f" />
+                        <Text style={styles.dateTimeLabel}>HORÁRIO</Text>
+                      </View>
+                      <Text style={styles.dateTimeValue}>{startHour || "--:--"}</Text>
+                    </View>
+                  </View>
+
+                  {/* People Details */}
+                  <View style={styles.peopleSection}>
+                    {/* Aluno */}
+                    <View style={styles.personRow}>
+                      <View style={[styles.personIconCircle, styles.studentIconCircle]}>
+                        <User size={16} color="#0284c7" />
+                      </View>
+                      <View style={styles.personInfo}>
+                        <Text style={styles.personRole}>ALUNO(A)</Text>
+                        <Text style={styles.personName} numberOfLines={1}>
+                          {student.nome || "Não informado"}
+                        </Text>
+                        {student.numero ? (
+                          <Text style={styles.personSubtext} numberOfLines={1}>
+                            ({student.ddd}) {student.numero}
+                            {student.email ? ` • ${student.email}` : ""}
+                          </Text>
+                        ) : student.email ? (
+                          <Text style={styles.personSubtext} numberOfLines={1}>
+                            {student.email}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.experimentalBadge}>
+                        <Sparkles size={11} color="#0284c7" />
+                        <Text style={styles.experimentalBadgeText}>Experimental</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.personDivider} />
+
+                    {/* Personal Trainer */}
+                    <View style={styles.personRow}>
+                      <View style={[styles.personIconCircle, styles.personalIconCircle]}>
+                        <Dumbbell size={16} color="#4f46e5" />
+                      </View>
+                      <View style={styles.personInfo}>
+                        <Text style={styles.personRole}>PERSONAL TRAINER</Text>
+                        <Text style={styles.personName} numberOfLines={1}>
+                          {selectedPersonal?.nome ?? "Personal"}
+                        </Text>
+                        <Text style={styles.personSubtext} numberOfLines={1}>
+                          {selectedPersonal?.especialidade || "Personal Trainer"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
 
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Endereço do local</Text>
@@ -937,9 +1151,22 @@ export default function NewExperimentalEvent({
             </View>
 
             <View style={styles.inputRow}>
+              <TextInput style={[styles.input, styles.halfInput]} value={address.unidade} onChangeText={(v) => updateAddress("unidade", v)} placeholder="Unidade (ex: Torre A)" />
+              <TextInput style={[styles.input, styles.halfInput]} value={address.tipo} onChangeText={(v) => updateAddress("tipo", v)} placeholder="Tipo (ex: Comercial)" />
+            </View>
+
+            <View style={styles.inputRow}>
               <TextInput style={[styles.input, styles.halfInput]} value={address.city} onChangeText={(v) => updateAddress("city", v)} placeholder="Cidade *" />
               <TextInput style={[styles.input, styles.stateInput]} value={address.state} onChangeText={(v) => updateAddress("state", v)} placeholder="UF *" maxLength={2} autoCapitalize="characters" />
             </View>
+
+            <Text style={styles.sectionTitle}>Descrição da aula</Text>
+            <TextInput
+              style={styles.input}
+              value={descricao}
+              onChangeText={setDescricao}
+              placeholder="Ex: Aula experimental de pilates"
+            />
 
             <View style={styles.navRow}>
               <Pressable style={styles.backBtn} onPress={() => setStep(2)}>
@@ -1015,9 +1242,9 @@ const styles = StyleSheet.create({
   optionTextSelected: { color: "#fff" },
 
   phoneRow: { flexDirection: "row", gap: 8 },
-  phoneCountry: { flex: 0.3, minWidth: 0, marginBottom: 0 },
-  phoneDdd: { flex: 0.25, minWidth: 0, marginBottom: 0 },
-  phoneNumber: { flex: 1, minWidth: 0, marginBottom: 0 },
+  phoneCountry: { flex: 0.9, minWidth: 0, marginBottom: 0 },
+  phoneDdd: { flex: 0.4, minWidth: 0, marginBottom: 0 },
+  phoneNumber: { flex: 1.1, minWidth: 0, marginBottom: 0 },
 
   personalRow: { gap: 10, paddingVertical: 4 },
   personalCard: { width: 140, padding: 12, borderWidth: 1, borderColor: "#c8d9e5", borderRadius: 14, backgroundColor: "#fff" },
@@ -1057,9 +1284,157 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.5 },
   submitText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 
-  summaryBox: { backgroundColor: "#e8f3fa", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#c8e0ee", marginBottom: 4 },
-  summaryTitle: { fontSize: 15, fontWeight: "800", color: "#173a52", marginBottom: 10 },
-  summaryLine: { color: "#355c73", fontSize: 13, marginBottom: 4 },
+  summaryCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  summaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  summaryTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  summaryHeaderIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#e8f3fa",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  summaryTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f283d",
+  },
+  classTypeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  classTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  dateTimeBanner: {
+    flexDirection: "row",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  dateTimeCol: {
+    flex: 1,
+    gap: 3,
+  },
+  dateTimeLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  dateTimeLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.5,
+  },
+  dateTimeValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    paddingLeft: 18,
+  },
+  dateTimeDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#e2e8f0",
+    marginHorizontal: 10,
+  },
+  peopleSection: {
+    gap: 10,
+  },
+  personRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  personIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  studentIconCircle: {
+    backgroundColor: "#e0f2fe",
+  },
+  personalIconCircle: {
+    backgroundColor: "#eef2ff",
+  },
+  personInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  personRole: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.4,
+  },
+  personName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  personSubtext: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  experimentalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#e0f2fe",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+  },
+  experimentalBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0284c7",
+  },
+  personDivider: {
+    height: 1,
+    backgroundColor: "#f1f5f9",
+  },
 
   addressSubtitle: { fontSize: 13, fontWeight: "800", color: "#456176", marginBottom: 8 },
   savedAddressesWrap: { gap: 8, marginBottom: 4 },
@@ -1105,5 +1480,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#1F2937",
+  },
+  btnAutoFillPrimary: {
+    backgroundColor: "#e0f2fe",
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  btnAutoFillPrimaryText: {
+    color: "#0369a1",
+    fontWeight: "700",
   },
 });

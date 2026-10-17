@@ -114,26 +114,23 @@ export type PaginatedResponse<T> = {
 
 export type ExperimentalSchedule = {
   nomeAluno: string;
-  sexo?: string;
+  sexo: string;
   emailAluno: string;
   cpfAluno: string;
-  dataNascimento: string; // ISO date string: "YYYY-MM-DD"
   ddd: string;
   numero: string;
   pais: string;
+  dataNascimento: string;
   agendamentoDTO: {
-    data: string; // ISO datetime: "YYYY-MM-DDTHH:MM:SS"
+    data: string;
     descricao: string;
     novoEndereco: {
       numero: string;
-      complemento: string;
+      complemento?: string;
+      unidade?: string;
       tipo: string;
       cep: {
         id: string;
-        logradouro: string;
-        bairro: string;
-        localidade: string;
-        uf: string;
       };
     };
     personalId: number;

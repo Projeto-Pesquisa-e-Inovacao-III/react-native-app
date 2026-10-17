@@ -37,7 +37,8 @@
         {
           "microphonePermission": "Permita o acesso ao microfone para gravar áudio e agendar aulas com IA."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
