@@ -73,6 +73,7 @@ export default function AiVoiceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
+  const isCancellingRef = useRef(false);
 
   useSpeechRecognitionEvent('start', () => {
     setIsRecording(true);
@@ -97,6 +98,10 @@ export default function AiVoiceScreen() {
   useSpeechRecognitionEvent('error', (event) => {
     setIsProcessing(false);
     setIsRecording(false);
+
+    if (event.error === 'aborted' || (event.error === 'no-speech' && isCancellingRef.current)) {
+      return;
+    }
 
     const messages: Record<string, string> = {
       'not-allowed': 'Permissão de microfone/fala não concedida.',
@@ -128,6 +133,7 @@ export default function AiVoiceScreen() {
   });
 
   const startRecording = useCallback(async () => {
+    isCancellingRef.current = false;
     setTranscriptionText(null);
     setIsProcessing(false);
     setIsRecording(false);
@@ -158,9 +164,18 @@ export default function AiVoiceScreen() {
   }, [router]);
 
   const stopRecording = useCallback(() => {
+    isCancellingRef.current = true;
     setIsProcessing(true);
     ExpoSpeechRecognitionModule.stop();
   }, []);
+
+  const cancelRecording = useCallback(() => {
+    isCancellingRef.current = true;
+    setIsProcessing(false);
+    setIsRecording(false);
+    ExpoSpeechRecognitionModule.abort();
+    router.back();
+  }, [router]);
 
   const startRecordingRef = useRef(startRecording);
   useEffect(() => {
@@ -234,7 +249,7 @@ function AiVoiceUI({
         <View style={styles.dragHandle} />
         <TouchableOpacity
           style={styles.closeButton}
-          onPress={() => router.back()}
+          onPress={cancelRecording}
           activeOpacity={0.7}
           accessibilityLabel="Fechar tela de gravação"
           accessibilityRole="button"
@@ -355,7 +370,7 @@ function AiVoiceUI({
         ) : (
           <TouchableOpacity
             style={styles.cancelBtn}
-            onPress={() => router.back()}
+            onPress={cancelRecording}
             activeOpacity={0.7}
           >
             <Text style={styles.cancelBtnText}>Cancelar</Text>
