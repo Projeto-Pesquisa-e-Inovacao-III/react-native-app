@@ -171,7 +171,7 @@ export default function NewExperimentalEvent({
     dataNascimento: "",
     ddd: "11",
     numero: "",
-    pais: "Brasil",
+    pais: "55",
   });
   const [descricao, setDescricao] = useState<string>("Aula experimental de pilates");
 
@@ -278,7 +278,7 @@ export default function NewExperimentalEvent({
         dataNascimento: "",
         ddd: "11",
         numero: "",
-        pais: "Brasil",
+        pais: "55",
       });
       setDescricao("Aula experimental de pilates");
       setDate(getTomorrowDateString());
@@ -504,7 +504,7 @@ export default function NewExperimentalEvent({
       dataNascimento: "15/05/1998",
       ddd: "11",
       numero: "998877665",
-      pais: "Brasil",
+      pais: "55",
     });
     setDescricao("Aula experimental funcional");
     setFieldErrors({});
@@ -519,7 +519,7 @@ export default function NewExperimentalEvent({
       dataNascimento: "22/08/2001",
       ddd: "11",
       numero: "987654321",
-      pais: "Brasil",
+      pais: "55",
     });
     setDescricao("Aula experimental de musculação");
     setFieldErrors({});
@@ -576,7 +576,7 @@ export default function NewExperimentalEvent({
     }
 
     const finalSexo = student.sexo?.toUpperCase().startsWith("M") ? "M" : "F";
-    const finalPais = student.pais?.trim() || "Brasil";
+    const finalPais = student.pais?.trim() || "55";
 
     const payload: ExperimentalSchedule = {
       nomeAluno: student.nome.trim(),
@@ -773,13 +773,6 @@ export default function NewExperimentalEvent({
 
             <Text style={styles.sectionTitle}>Telefone e País *</Text>
             <View style={styles.phoneRow}>
-              <TextInput
-                style={[styles.input, styles.phoneCountry, !!fieldErrors.pais && styles.inputError]}
-                value={student.pais}
-                onChangeText={(v) => updateStudent("pais", v)}
-                placeholder="País (Brasil)"
-                maxLength={20}
-              />
               <TextInput
                 style={[styles.input, styles.phoneDdd, !!fieldErrors.ddd && styles.inputError]}
                 value={student.ddd}
