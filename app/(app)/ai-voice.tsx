@@ -291,11 +291,7 @@ export default function AiVoiceScreen() {
             <TouchableOpacity
               style={styles.confirmActionBtn}
               onPress={() => {
-                Alert.alert(
-                  'Agendamento',
-                  'Integração com o serviço de agendamento por IA em andamento!',
-                  [{ text: 'OK', onPress: () => router.back() }]
-                );
+                router.push('/(app)/confirm-schedule');
               }}
               activeOpacity={0.8}
             >
