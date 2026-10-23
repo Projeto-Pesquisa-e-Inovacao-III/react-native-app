@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import AddressesScreen from "../addresses";
-import { getUserAddresses, createAddress, lookupCep } from "../../../../src/constants/address";
+import { getUserAddresses, createAddress, deleteUserAddress, lookupCep, updateUserAddress } from "../../../../src/constants/address";
 
 jest.mock("../../../../src/constants/address", () => ({
   getUserAddresses: jest.fn(),
@@ -48,6 +48,14 @@ jest.mock("../../../../src/components/modals/TimerModal", () => ({ title, conten
 
 const address = { id: 1, tipo: "Casa", numero: "10", logradouro: "Rua A", bairro: "Centro", padrao: true, cep: { id: "12345678", cidade: { nome: "São Paulo", estado: { sigla: "SP" } } } };
 const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AddressesScreen /></QueryClientProvider>);
+
+const fillAddress = async () => {
+  await fireEvent.press(screen.getByTestId("tipo-select"));
+  await fireEvent.changeText(screen.getByPlaceholderText("00000-000"), "12345678");
+  await fireEvent.changeText(screen.getByPlaceholderText("Alameda dos Anjos"), "Rua Nova");
+  await fireEvent.changeText(screen.getByPlaceholderText("123"), "20");
+  await fireEvent.changeText(screen.getByPlaceholderText("Vila Olímpia"), "Bairro");
+};
 
 describe("AddressesScreen", () => {
   beforeEach(async () => {
