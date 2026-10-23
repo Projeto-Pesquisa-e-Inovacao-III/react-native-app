@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   ScrollView,
@@ -21,6 +21,9 @@ import {
 } from 'lucide-react-native';
 import { GoogleMapEmbed } from '../../src/components/GoogleMapEmbed';
 import FocusAwareStatusBar from '../../src/components/FocusAwareStatusBar';
+import NewEvent from '../../src/components/NewEvent';
+import SuccessModal from '../../src/components/modals/SuccessModal';
+import ErrorModal from '../../src/components/modals/ErrorModal';
 
 // ─── Paleta de cores alinhada com o projeto ──────────────────────────────────
 const C = {
@@ -113,6 +116,25 @@ export default function ConfirmScheduleScreen() {
       router.replace('/(app)/(tabs)');
     }
   }, [router]);
+
+  // ─── Estado dos modais ───────────────────────────────────────────────────────
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [errorModal, setErrorModal] = useState({ visible: false, title: '', content: '' });
+
+  const showError = useCallback((title: string, content: string) => {
+    setErrorModal({ visible: true, title, content });
+  }, []);
+
+  const handleConfirm = useCallback(() => {
+    // TODO: chamar API de criação de agendamento aqui
+    setSuccessVisible(true);
+  }, []);
+
+  const handleSuccessClose = useCallback(() => {
+    setSuccessVisible(false);
+    safeDismissAll();
+  }, [safeDismissAll]);
 
   // Animação de entrada do card
   const cardSlide = useRef(new Animated.Value(40)).current;
@@ -289,7 +311,7 @@ export default function ConfirmScheduleScreen() {
             activeOpacity={0.75}
             accessibilityLabel="Editar agendamento"
             accessibilityRole="button"
-            onPress={() => safeDismiss()}
+            onPress={() => setEditModalVisible(true)}
           >
             <Pencil size={16} color={C.textSecondary} strokeWidth={2} />
             <Text style={styles.editBtnText}>Editar agendamento</Text>
@@ -301,10 +323,7 @@ export default function ConfirmScheduleScreen() {
             activeOpacity={0.85}
             accessibilityLabel="Confirmar agendamento"
             accessibilityRole="button"
-            onPress={() => {
-              // TODO: integrar com serviço de agendamento
-              safeDismissAll();
-            }}
+            onPress={handleConfirm}
           >
             <Check size={20} color="#FFFFFF" strokeWidth={2.5} />
             <Text style={styles.confirmBtnText}>Confirmar Agendamento</Text>
@@ -336,6 +355,42 @@ export default function ConfirmScheduleScreen() {
           </View>
         </Animated.View>
       </ScrollView>
+
+      {/* ── Modal de edição (reagendamento) ─────────────────────────────────── */}
+      <NewEvent
+        visible={editModalVisible}
+        onClose={() => setEditModalVisible(false)}
+        isReschedule
+        title="Editar agendamento"
+        buttonTitle="Salvar alterações"
+        appoitmentData={{
+          dataInicio: `${apt.date}T${apt.timeStart}:00`,
+          tipoAula: apt.type,
+          personal: { id: 0, nome: apt.trainer.name },
+        }}
+        onRescheduleSuccess={() => {
+          setEditModalVisible(false);
+          setSuccessVisible(true);
+        }}
+        errorModal={showError}
+      />
+
+      {/* ── Modal de sucesso ────────────────────────────────────────────────── */}
+      <SuccessModal
+        visible={successVisible}
+        title="Agendamento confirmado!"
+        content="Seu agendamento foi enviado ao personal. Aguarde a confirmação na sua agenda."
+        onClose={handleSuccessClose}
+      />
+
+      {/* ── Modal de erro ───────────────────────────────────────────────────── */}
+      <ErrorModal
+        visible={errorModal.visible}
+        title={errorModal.title}
+        content={errorModal.content}
+        onClose={() => setErrorModal(prev => ({ ...prev, visible: false }))}
+      />
+
     </View>
   );
 }
