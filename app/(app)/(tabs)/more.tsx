@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Banknote, Boxes, Clock, History as HistoryIcon, IdCard, LogOut, User, ChevronRight, Calendar, Bell, ChartLine } from 'lucide-react-native';
+import { Banknote, Boxes, Clock, History as HistoryIcon, IdCard, LogOut, MapPin, User, ChevronRight, Calendar, Bell, ChartLine } from 'lucide-react-native';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { findUserData } from '../../../src/constants/user';
@@ -75,6 +75,12 @@ export default function MoreRoute() {
               icon={<IdCard size={22} color="#192633" />} 
               title='Suas informações' 
               onClick={() => router.push("/(app)/(edit-user)/edit-user")} 
+              isLast={false}
+            />
+            <OptionItem 
+              icon={<MapPin size={22} color="#192633" />} 
+              title='Endereços' 
+              onClick={() => router.push('/(app)/addresses')} 
               isLast={false}
             />
             <OptionItem 
