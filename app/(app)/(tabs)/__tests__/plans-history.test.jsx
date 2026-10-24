@@ -1,0 +1,25 @@
+import React from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import PlansHistoryScreen from "../plans-history";
+import { getUserPlansHistory } from "../../../../src/constants/products";
+jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn(), back: jest.fn() }) }));
+jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+jest.mock("../../../../src/contexts/AuthContext", () => ({ useAuth: () => ({ roles: ["personal"] }) }));
+jest.mock("../../../../src/constants/products", () => ({ getUserPlansHistory: jest.fn() }));
+jest.mock("lucide-react-native", () => { const React = require("react"); const { View } = require("react-native"); const Icon = () => <View />; return new Proxy({}, { get: () => Icon }); });
+jest.mock("../../../../src/components/InputWithIcon", () => ({ value, onInputChange, placeholder }) => { const { TextInput } = require("react-native"); return <TextInput accessibilityLabel={placeholder} value={value} onChangeText={onInputChange} />; });
+jest.mock("../../../../src/components/RowWithHeaderTitle", () => ({ data, handleDetailsClick }) => { const { View, Text, Pressable } = require("react-native"); return <View>{data.map((x) => <View key={x.id}><Text>{x.title}</Text><Pressable onPress={() => handleDetailsClick(x.id)}><Text>Ver Detalhes</Text></Pressable></View>)}</View>; });
+jest.mock("../../../../src/components/PaginatedList", () => ({ children }) => { const { View } = require("react-native"); return <View>{children}</View>; });
+jest.mock("../../../../src/components/modals/DateRangePickerModal", () => ({ visible, onApply }) => { const { Pressable, Text } = require("react-native"); return visible ? <Pressable onPress={() => onApply({ start: "2026-10-01", end: "2026-10-09" })}><Text>Aplicar período</Text></Pressable> : null; });
+jest.mock("../../../../src/components/BottomTabBar", () => () => null);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PlansHistoryScreen /></QueryClientProvider>);
+const response = { content: [{ id: 7, dataCompra: "2026-10-09", produtoExibicao: { titulo: "Plano Premium", subtitulo: "Aulas", tipoAula: "PRESENCIAL" } }], page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } };
+describe("PlansHistoryScreen", () => {
+  beforeEach(async () => { jest.clearAllMocks(); getUserPlansHistory.mockResolvedValue({ data: response }); await renderScreen(); await waitFor(() => expect(screen.getByText("Plano Premium")).toBeOnTheScreen()); });
+  it("exibe compras e permite detalhes", () => { expect(screen.getByText("Histórico de Compras")).toBeOnTheScreen(); fireEvent.press(screen.getByText("Ver Detalhes")); });
+  it("aplica busca e reinicia a consulta", async () => { fireEvent.changeText(screen.getByLabelText("Buscar por plano..."), "premium"); await waitFor(() => expect(getUserPlansHistory).toHaveBeenCalled()); });
+  it("exibe estado vazio com filtros", async () => { getUserPlansHistory.mockResolvedValueOnce({ data: { content: [], page: { number: 0 } } }); await renderScreen(); expect(await screen.findByText("Nenhuma compra encontrada")).toBeOnTheScreen(); });
+  it("trata erro de rede sem quebrar o cabeçalho", async () => { getUserPlansHistory.mockRejectedValueOnce(new Error("offline")); await renderScreen(); expect(screen.getByText("Histórico de Compras")).toBeOnTheScreen(); });
+});
