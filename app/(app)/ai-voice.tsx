@@ -1,37 +1,19 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, X, Sparkles, RefreshCw } from 'lucide-react-native';
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Mic, X, Sparkles, RefreshCw } from "lucide-react-native";
 import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-  useAudioStream,
-} from 'expo-audio';
-
-const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
-
-function rmsFromBuffer(buffer: ArrayBuffer): number {
-  const samples = new Float32Array(buffer);
-  if (samples.length === 0) return 0;
-  let sum = 0;
-  for (let i = 0; i < samples.length; i++) {
-    sum += samples[i] * samples[i];
-  }
-  const rms = Math.sqrt(sum / samples.length);
-  return Math.min(1, Math.pow(rms * 4, 0.5));
-}
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 
 type WaveformBarProps = {
   baseHeight: number;
@@ -39,7 +21,11 @@ type WaveformBarProps = {
   normalizedVolume: number;
 };
 
-function WaveformBar({ baseHeight, isActive, normalizedVolume }: WaveformBarProps) {
+function WaveformBar({
+  baseHeight,
+  isActive,
+  normalizedVolume,
+}: WaveformBarProps) {
   const animVal = useRef(new Animated.Value(0.12)).current;
 
   useEffect(() => {
@@ -68,7 +54,7 @@ function WaveformBar({ baseHeight, isActive, normalizedVolume }: WaveformBarProp
         styles.waveBar,
         {
           height: baseHeight,
-          backgroundColor: '#0A3D62',
+          backgroundColor: "#0A3D62",
           transform: [{ scaleY: animVal }],
           opacity: isActive ? 1 : 0.25,
         },
@@ -77,82 +63,146 @@ function WaveformBar({ baseHeight, isActive, normalizedVolume }: WaveformBarProp
   );
 }
 
-const RECORDING_OPTIONS = {
-  ...RecordingPresets.HIGH_QUALITY,
-  isMeteringEnabled: true,
-};
+const BAR_BASE_HEIGHTS = [28, 44, 60, 36, 52, 40, 24];
 
 export default function AiVoiceScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
-  const recorderState = useAudioRecorderState(audioRecorder, 80);
-  const isRecording = recorderState.isRecording;
-
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
-  const { stream } = useAudioStream({
-    channels: 1,
-    sampleRate: 16000,
-    encoding: 'float32',
-    onBuffer: (buffer) => {
-      if (!buffer?.data) return;
-      setNormalizedVolume(rmsFromBuffer(buffer.data));
-    },
+  const isCancellingRef = useRef(false);
+  const isStartingRef = useRef(false);
+  const isRecognitionActiveRef = useRef(false);
+
+  useSpeechRecognitionEvent('start', () => {
+    isRecognitionActiveRef.current = true;
+    isStartingRef.current = false;
+    setIsRecording(true);
+    setIsProcessing(false);
   });
 
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
+  useSpeechRecognitionEvent('end', () => {
+    isRecognitionActiveRef.current = false;
+    isStartingRef.current = false;
+    setIsRecording(false);
+    setIsProcessing(false);
+  });
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const best = event.results[0]?.transcript;
+    if (best) {
+      setTranscriptionText(best);
+      if (event.isFinal) {
+        setIsProcessing(false);
+      }
+    }
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    isRecognitionActiveRef.current = false;
+    isStartingRef.current = false;
+    setIsProcessing(false);
+    setIsRecording(false);
+
+    if (event.error === 'aborted' || (event.error === 'no-speech' && isCancellingRef.current)) {
+      return;
+    }
+
+    const messages: Record<string, string> = {
+      'not-allowed': 'Permissão de microfone/fala não concedida.',
+      'no-speech': 'Nenhuma fala detectada. Tente novamente.',
+      'network': 'Falha na rede. Verifique sua conexão.',
+      'service-not-allowed': 'Serviço de reconhecimento indisponível.',
+      'audio-capture': 'Erro na captura de áudio.',
+      'language-not-supported': 'Idioma pt-BR não suportado neste dispositivo.',
+    };
+
+    const message = messages[event.error] ?? 'Erro desconhecido ao transcrever áudio.';
+    console.error('Speech recognition error:', event.error, event.message);
+
+    if (event.error === 'not-allowed') {
+      Alert.alert('Permissão negada', message, [{ text: 'OK', onPress: () => router.back() }]);
+    } else if (event.error !== 'no-speech') {
+      Alert.alert('Erro', message);
+    }
+  });
+
+  useSpeechRecognitionEvent('nomatch', () => {
+    setIsProcessing(false);
+    setTranscriptionText(null);
+  });
+
+  useSpeechRecognitionEvent('volumechange', (event) => {
+    const vol = Math.max(0, Math.min(1, (event.value + 2) / 12));
+    setNormalizedVolume(vol);
+  });
 
   const startRecording = useCallback(async () => {
-    try {
-      setTranscriptionText(null);
-      setIsTranscribing(false);
+    if (isStartingRef.current || isRecognitionActiveRef.current) {
+      return;
+    }
 
-      const status = await requestRecordingPermissionsAsync();
-      if (!status.granted) {
+    isStartingRef.current = true;
+    isCancellingRef.current = false;
+    setTranscriptionText(null);
+    setIsProcessing(false);
+
+    try {
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
+        isStartingRef.current = false;
         Alert.alert(
           'Permissão negada',
-          'Permita o acesso ao microfone nas configurações do dispositivo para gravar seu agendamento.',
+          'Permita o acesso ao microfone e reconhecimento de fala nas configurações do dispositivo para gravar e transcrever seu agendamento.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
         return;
       }
 
-      if (Platform.OS === 'ios') {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          allowsRecording: true,
-        });
+      if (!isStartingRef.current || isRecognitionActiveRef.current) {
+        return;
       }
 
-      await stream.start();
-
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error('Erro ao iniciar gravação:', error);
-      Alert.alert('Erro ao gravar', message || 'Não foi possível iniciar a gravação de áudio.');
-    }
-  }, [audioRecorder, stream, router]);
-
-  const stopRecording = useCallback(async () => {
-    try {
-      stream.stop();
-      setNormalizedVolume(0);
-      await audioRecorder.stop();
-      setIsTranscribing(true);
-
-      setTimeout(() => {
-        setIsTranscribing(false);
-        setTranscriptionText('Gostaria de agendar uma aula presencial com meu personal...');
-      }, 1500);
+      ExpoSpeechRecognitionModule.start({
+        lang: 'pt-BR',
+        interimResults: true,
+        iosVoiceProcessingEnabled: true,
+        volumeChangeEventOptions: {
+          enabled: true,
+          intervalMillis: 100,
+        },
+      });
     } catch (error) {
-      console.error('Erro ao finalizar gravação:', error);
-      setIsTranscribing(false);
+      isStartingRef.current = false;
+      isRecognitionActiveRef.current = false;
+      setIsRecording(false);
+      setIsProcessing(false);
+      console.error('Failed to start speech recognition:', error);
     }
-  }, [audioRecorder, stream]);
+  }, [router]);
+
+  const stopRecording = useCallback(() => {
+    if (!isRecognitionActiveRef.current) {
+      return;
+    }
+
+    isCancellingRef.current = true;
+    setIsProcessing(true);
+    ExpoSpeechRecognitionModule.stop();
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    isCancellingRef.current = true;
+    isStartingRef.current = false;
+    isRecognitionActiveRef.current = false;
+    setIsProcessing(false);
+    setIsRecording(false);
+    ExpoSpeechRecognitionModule.abort();
+    router.back();
+  }, [router]);
 
   const startRecordingRef = useRef(startRecording);
   useEffect(() => {
@@ -163,26 +213,66 @@ export default function AiVoiceScreen() {
     const timer = setTimeout(() => {
       startRecordingRef.current();
     }, 600);
-
     return () => {
       clearTimeout(timer);
-      try {
-        stream.stop();
-        if (audioRecorder.isRecording) {
-          audioRecorder.stop();
-        }
-      } catch {
-      }
+      ExpoSpeechRecognitionModule.abort();
     };
-  }, [audioRecorder, stream]);
+  }, [startRecording]);
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 24), paddingBottom: Math.max(insets.bottom, 24) }]}>
+    <AiVoiceUI
+      insets={insets}
+      router={router}
+      isRecording={isRecording}
+      isTranscribing={isProcessing}
+      transcriptionText={transcriptionText}
+      normalizedVolume={normalizedVolume}
+      onStart={startRecording}
+      onStop={stopRecording}
+      onCancel={cancelRecording}
+    />
+  );
+}
+
+// ─── Componente de UI compartilhado entre web e native ───────────────────────
+type AiVoiceUIProps = {
+  insets: { top: number; bottom: number };
+  router: ReturnType<typeof useRouter>;
+  isRecording: boolean;
+  isTranscribing: boolean;
+  transcriptionText: string | null;
+  normalizedVolume: number;
+  onStart: () => void;
+  onStop: () => void;
+  onCancel: () => void;
+};
+
+function AiVoiceUI({
+  insets,
+  router,
+  isRecording,
+  isTranscribing,
+  transcriptionText,
+  normalizedVolume,
+  onStart,
+  onStop,
+  onCancel,
+}: AiVoiceUIProps) {
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top, 24),
+          paddingBottom: Math.max(insets.bottom, 24),
+        },
+      ]}
+    >
       <View style={styles.topBar}>
         <View style={styles.dragHandle} />
         <TouchableOpacity
           style={styles.closeButton}
-          onPress={() => router.back()}
+          onPress={onCancel}
           activeOpacity={0.7}
           accessibilityLabel="Fechar tela de gravação"
           accessibilityRole="button"
@@ -201,20 +291,20 @@ export default function AiVoiceScreen() {
           {isTranscribing
             ? 'Transcrevendo áudio...'
             : isRecording
-            ? 'Ouvindo você...'
-            : transcriptionText
-            ? 'Transcrição concluída'
-            : 'Pronto para gravar'}
+              ? "Ouvindo você..."
+              : transcriptionText
+                ? "Transcrição concluída"
+                : "Pronto para gravar"}
         </Text>
 
         <Text style={styles.subtitle}>
           {isTranscribing
             ? 'Nossa inteligência artificial está processando sua fala.'
             : isRecording
-            ? 'Fale livremente o que deseja agendar (ex: dia, horário ou modalidade).'
-            : transcriptionText
-            ? 'Confira o texto transcrito ou grave novamente se desejar.'
-            : 'Toque no microfone para iniciar a gravação.'}
+              ? "Fale livremente o que deseja agendar (ex: dia, horário ou modalidade)."
+              : transcriptionText
+                ? "Confira o texto transcrito ou grave novamente se desejar."
+                : "Toque no microfone para iniciar a gravação."}
         </Text>
 
         <View style={styles.waveformArea}>
@@ -235,7 +325,7 @@ export default function AiVoiceScreen() {
               isRecording && styles.micCircleRecording,
               isTranscribing && styles.micCircleTranscribing,
             ]}
-            onPress={isRecording ? stopRecording : startRecording}
+            onPress={isRecording ? onStop : onStart}
             activeOpacity={0.85}
             disabled={isTranscribing}
             accessibilityLabel={isRecording ? 'Parar gravação' : 'Iniciar gravação'}
@@ -263,7 +353,9 @@ export default function AiVoiceScreen() {
         {transcriptionText && (
           <View style={styles.transcriptionCard}>
             <Text style={styles.transcriptionLabel}>Transcrição:</Text>
-            <Text style={styles.transcriptionContent}>"{transcriptionText}"</Text>
+            <Text style={styles.transcriptionContent}>
+              "{transcriptionText}"
+            </Text>
           </View>
         )}
       </View>
@@ -272,7 +364,7 @@ export default function AiVoiceScreen() {
         {isRecording ? (
           <TouchableOpacity
             style={styles.stopActionBtn}
-            onPress={stopRecording}
+            onPress={onStop}
             activeOpacity={0.8}
           >
             <View style={styles.stopSquare} />
@@ -282,7 +374,7 @@ export default function AiVoiceScreen() {
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={styles.retryActionBtn}
-              onPress={startRecording}
+              onPress={onStart}
               activeOpacity={0.8}
             >
               <RefreshCw color="#0A3D62" size={18} />
@@ -291,11 +383,7 @@ export default function AiVoiceScreen() {
             <TouchableOpacity
               style={styles.confirmActionBtn}
               onPress={() => {
-                Alert.alert(
-                  'Agendamento',
-                  'Integração com o serviço de agendamento por IA em andamento!',
-                  [{ text: 'OK', onPress: () => router.back() }]
-                );
+                router.push("/(app)/confirm-schedule");
               }}
               activeOpacity={0.8}
             >
@@ -305,7 +393,7 @@ export default function AiVoiceScreen() {
         ) : (
           <TouchableOpacity
             style={styles.cancelBtn}
-            onPress={() => router.back()}
+            onPress={onCancel}
             activeOpacity={0.7}
           >
             <Text style={styles.cancelBtnText}>Cancelar</Text>
@@ -319,12 +407,12 @@ export default function AiVoiceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'space-between',
+    backgroundColor: "#F8FAFC",
+    justifyContent: "space-between",
   },
   topBar: {
-    position: 'relative',
-    alignItems: 'center',
+    position: "relative",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
@@ -332,67 +420,67 @@ const styles = StyleSheet.create({
   dragHandle: {
     width: 44,
     height: 5,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: "#CBD5E1",
     borderRadius: 3,
     marginBottom: 10,
   },
   closeButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     right: 18,
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: 20,
   },
   aiTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: "#E0F2FE",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     marginBottom: 16,
   },
   aiTagText: {
-    color: '#0284C7',
+    color: "#0284C7",
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
   title: {
     fontSize: 24,
-    fontWeight: '800',
-    color: '#0F172A',
-    textAlign: 'center',
+    fontWeight: "800",
+    color: "#0F172A",
+    textAlign: "center",
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
+    color: "#64748B",
+    textAlign: "center",
     lineHeight: 21,
     maxWidth: 320,
     marginBottom: 36,
   },
   waveformArea: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     height: 120,
     marginBottom: 32,
     gap: 16,
   },
   waveformSide: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
   },
   waveBar: {
@@ -403,29 +491,29 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#0A3D62',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#001F3F',
+    backgroundColor: "#0A3D62",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#001F3F",
     shadowOpacity: 0.35,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
   micCircleRecording: {
-    backgroundColor: '#0A3D62',
+    backgroundColor: "#0A3D62",
   },
   micCircleTranscribing: {
-    backgroundColor: '#64748B',
+    backgroundColor: "#64748B",
   },
   transcriptionCard: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
+    width: "100%",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
@@ -434,15 +522,15 @@ const styles = StyleSheet.create({
   },
   transcriptionLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    color: "#94A3B8",
+    textTransform: "uppercase",
     marginBottom: 6,
   },
   transcriptionContent: {
     fontSize: 15,
-    color: '#1E293B',
-    fontStyle: 'italic',
+    color: "#1E293B",
+    fontStyle: "italic",
     lineHeight: 22,
   },
   bottomActions: {
@@ -450,14 +538,14 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   stopActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-    backgroundColor: '#EF4444',
+    backgroundColor: "#EF4444",
     paddingVertical: 15,
     borderRadius: 28,
-    shadowColor: '#EF4444',
+    shadowColor: "#EF4444",
     shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -467,52 +555,52 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 3,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   stopActionText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   retryActionBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: "#E2E8F0",
     paddingVertical: 14,
     borderRadius: 28,
   },
   retryActionText: {
-    color: '#0A3D62',
+    color: "#0A3D62",
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   confirmActionBtn: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0A3D62',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0A3D62",
     paddingVertical: 14,
     borderRadius: 28,
   },
   confirmActionText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   cancelBtn: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 12,
   },
   cancelBtnText: {
-    color: '#64748B',
+    color: "#64748B",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

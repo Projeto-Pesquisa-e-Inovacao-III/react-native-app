@@ -33,9 +33,11 @@
       ],
       "expo-status-bar",
       [
-        "expo-audio",
+        "expo-speech-recognition",
         {
-          "microphonePermission": "Permita o acesso ao microfone para gravar áudio e agendar aulas com IA."
+          "microphonePermission": "Permita o acesso ao microfone para gravar áudio e agendar aulas com IA.",
+          "speechRecognitionPermission": "Permita o acesso ao reconhecimento de fala para transcrever sua voz.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
       ],
       "expo-asset"
