@@ -49,7 +49,7 @@ export default function PersonalDetailsScreen() {
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={{ paddingTop: Math.max(insets.top, 18), paddingBottom: Math.max(insets.bottom, 32) + 60 }}
-        refreshControl={<RefreshControl refreshing={personalQuery.isFetching} onRefresh={() => personalQuery.refetch()} colors={['#093A5D']} />}
+        refreshControl={<RefreshControl refreshing={personalQuery.isFetching} onRefresh={() => void personalQuery.refetch()} colors={['#093A5D']} />}
       >
         <View style={styles.container}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(app)/(tabs)/users')} activeOpacity={0.7}>
