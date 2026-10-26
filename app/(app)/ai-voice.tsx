@@ -197,22 +197,16 @@ export default function AiVoiceScreen() {
       insets={insets}
       router={router}
       isRecording={isRecording}
-      isTranscribing={isTranscribing}
+      isTranscribing={isProcessing}
       transcriptionText={transcriptionText}
       normalizedVolume={normalizedVolume}
       onStart={startRecording}
       onStop={stopRecording}
+      onCancel={cancelRecording}
     />
   );
 }
 
-// ─── Entry point: seleciona a implementação correta por plataforma ─────────
-export default function AiVoiceScreen() {
-  if (Platform.OS === "web") {
-    return <AiVoiceScreenWeb />;
-  }
-  return <AiVoiceScreenNative />;
-}
 // ─── Componente de UI compartilhado entre web e native ───────────────────────
 type AiVoiceUIProps = {
   insets: { top: number; bottom: number };
@@ -223,6 +217,7 @@ type AiVoiceUIProps = {
   normalizedVolume: number;
   onStart: () => void;
   onStop: () => void;
+  onCancel: () => void;
 };
 
 function AiVoiceUI({
@@ -234,6 +229,7 @@ function AiVoiceUI({
   normalizedVolume,
   onStart,
   onStop,
+  onCancel,
 }: AiVoiceUIProps) {
   return (
     <View
@@ -249,7 +245,7 @@ function AiVoiceUI({
         <View style={styles.dragHandle} />
         <TouchableOpacity
           style={styles.closeButton}
-          onPress={cancelRecording}
+          onPress={onCancel}
           activeOpacity={0.7}
           accessibilityLabel="Fechar tela de gravação"
           accessibilityRole="button"
@@ -265,7 +261,7 @@ function AiVoiceUI({
         </View>
 
         <Text style={styles.title}>
-          {isProcessing
+          {isTranscribing
             ? 'Transcrevendo áudio...'
             : isRecording
               ? "Ouvindo você..."
@@ -275,7 +271,7 @@ function AiVoiceUI({
         </Text>
 
         <Text style={styles.subtitle}>
-          {isProcessing
+          {isTranscribing
             ? 'Nossa inteligência artificial está processando sua fala.'
             : isRecording
               ? "Fale livremente o que deseja agendar (ex: dia, horário ou modalidade)."
@@ -300,15 +296,15 @@ function AiVoiceUI({
             style={[
               styles.micCircle,
               isRecording && styles.micCircleRecording,
-              isProcessing && styles.micCircleTranscribing,
+              isTranscribing && styles.micCircleTranscribing,
             ]}
             onPress={isRecording ? onStop : onStart}
             activeOpacity={0.85}
-            disabled={isProcessing}
+            disabled={isTranscribing}
             accessibilityLabel={isRecording ? 'Parar gravação' : 'Iniciar gravação'}
             accessibilityRole="button"
           >
-            {isProcessing ? (
+            {isTranscribing ? (
               <RefreshCw color="#FFFFFF" size={28} />
             ) : (
               <Mic color="#FFFFFF" size={32} strokeWidth={2.2} />
@@ -370,7 +366,7 @@ function AiVoiceUI({
         ) : (
           <TouchableOpacity
             style={styles.cancelBtn}
-            onPress={cancelRecording}
+            onPress={onCancel}
             activeOpacity={0.7}
           >
             <Text style={styles.cancelBtnText}>Cancelar</Text>
