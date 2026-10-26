@@ -389,7 +389,7 @@ export default function PersonalWeeklyScheduleScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isFetching && !isLoading}
-              onRefresh={refetch}
+              onRefresh={() => { void refetch(); }}
               colors={["#1C6AAB"]}
               tintColor="#1C6AAB"
             />
