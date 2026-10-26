@@ -74,13 +74,19 @@ export default function AiVoiceScreen() {
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
   const isCancellingRef = useRef(false);
+  const isStartingRef = useRef(false);
+  const isRecognitionActiveRef = useRef(false);
 
   useSpeechRecognitionEvent('start', () => {
+    isRecognitionActiveRef.current = true;
+    isStartingRef.current = false;
     setIsRecording(true);
     setIsProcessing(false);
   });
 
   useSpeechRecognitionEvent('end', () => {
+    isRecognitionActiveRef.current = false;
+    isStartingRef.current = false;
     setIsRecording(false);
     setIsProcessing(false);
   });
@@ -96,6 +102,8 @@ export default function AiVoiceScreen() {
   });
 
   useSpeechRecognitionEvent('error', (event) => {
+    isRecognitionActiveRef.current = false;
+    isStartingRef.current = false;
     setIsProcessing(false);
     setIsRecording(false);
 
@@ -133,37 +141,54 @@ export default function AiVoiceScreen() {
   });
 
   const startRecording = useCallback(async () => {
-    isCancellingRef.current = false;
-    setTranscriptionText(null);
-    setIsProcessing(false);
-    setIsRecording(false);
-
-    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!result.granted) {
-      Alert.alert(
-        'Permissão negada',
-        'Permita o acesso ao microfone e reconhecimento de fala nas configurações do dispositivo para gravar e transcrever seu agendamento.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+    if (isStartingRef.current || isRecognitionActiveRef.current) {
       return;
     }
 
-    ExpoSpeechRecognitionModule.start({
-      lang: 'pt-BR',
-      interimResults: true,
-      continuous: false,
-      androidIntentOptions: {
-        EXTRA_LANGUAGE_MODEL: 'web_search',
-      },
-      iosVoiceProcessingEnabled: true,
-      volumeChangeEventOptions: {
-        enabled: true,
-        intervalMillis: 100,
-      },
-    });
+    isStartingRef.current = true;
+    isCancellingRef.current = false;
+    setTranscriptionText(null);
+    setIsProcessing(false);
+
+    try {
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
+        isStartingRef.current = false;
+        Alert.alert(
+          'Permissão negada',
+          'Permita o acesso ao microfone e reconhecimento de fala nas configurações do dispositivo para gravar e transcrever seu agendamento.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
+
+      if (!isStartingRef.current || isRecognitionActiveRef.current) {
+        return;
+      }
+
+      ExpoSpeechRecognitionModule.start({
+        lang: 'pt-BR',
+        interimResults: true,
+        iosVoiceProcessingEnabled: true,
+        volumeChangeEventOptions: {
+          enabled: true,
+          intervalMillis: 100,
+        },
+      });
+    } catch (error) {
+      isStartingRef.current = false;
+      isRecognitionActiveRef.current = false;
+      setIsRecording(false);
+      setIsProcessing(false);
+      console.error('Failed to start speech recognition:', error);
+    }
   }, [router]);
 
   const stopRecording = useCallback(() => {
+    if (!isRecognitionActiveRef.current) {
+      return;
+    }
+
     isCancellingRef.current = true;
     setIsProcessing(true);
     ExpoSpeechRecognitionModule.stop();
@@ -171,6 +196,8 @@ export default function AiVoiceScreen() {
 
   const cancelRecording = useCallback(() => {
     isCancellingRef.current = true;
+    isStartingRef.current = false;
+    isRecognitionActiveRef.current = false;
     setIsProcessing(false);
     setIsRecording(false);
     ExpoSpeechRecognitionModule.abort();
