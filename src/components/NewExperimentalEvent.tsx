@@ -158,7 +158,7 @@ export default function NewExperimentalEvent({
   onSuccess,
   personalId: propPersonalId,
 }: Props) {
-  const { user: authUser } = useAuth();
+  const { user: authUser, roles } = useAuth();
   // ── Steps: 1=student data, 2=schedule, 3=address ──────────────────────────
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
@@ -216,23 +216,28 @@ export default function NewExperimentalEvent({
   // ── Load personals (suporta perfil aluno, personal e admin) ────────────────
   const loadPersonals = useCallback(async () => {
     setLoadingPersonals(true);
-    try {
-      const res = await getPersonalList();
-      const raw = res.data?.content ?? res.data;
-      if (Array.isArray(raw) && raw.length > 0) {
-        const mapped: Personal[] = raw.map((p: any) => ({
-          id: p.id,
-          nome: p.nome ?? p.usuario?.nome ?? "Personal",
-          especialidade: p.especialidade ?? "Personal Trainer",
-          caminhoFoto: p.caminhoFoto,
-        }));
-        setPersonalsList(mapped);
-        setSelectedPersonalId((prev) => prev ?? mapped[0].id);
-        setLoadingPersonals(false);
-        return;
+    const isPersonalOrAdmin = roles ? (roles.includes("personal") || roles.includes("admin")) : false;
+
+    // Se NÃO for perfil personal/admin, busca a lista via /personais
+    if (!isPersonalOrAdmin) {
+      try {
+        const res = await getPersonalList();
+        const raw = res.data?.content ?? res.data;
+        if (Array.isArray(raw) && raw.length > 0) {
+          const mapped: Personal[] = raw.map((p: any) => ({
+            id: p.id,
+            nome: p.nome ?? p.usuario?.nome ?? "Personal",
+            especialidade: p.especialidade ?? "Personal Trainer",
+            caminhoFoto: p.caminhoFoto,
+          }));
+          setPersonalsList(mapped);
+          setSelectedPersonalId((prev) => prev ?? mapped[0].id);
+          setLoadingPersonals(false);
+          return;
+        }
+      } catch {
+        // Fallback para usuário logado se falhar
       }
-    } catch {
-      // Endpoint /personais dá 403 Forbidden para perfil personal/admin
     }
 
     try {
@@ -264,7 +269,7 @@ export default function NewExperimentalEvent({
       setSelectedPersonalId(p.id);
     }
     setLoadingPersonals(false);
-  }, [authUser]);
+  }, [authUser, roles]);
 
   // ── Reset on open ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -303,15 +308,16 @@ export default function NewExperimentalEvent({
     }
   }, [visible, loadPersonals]);
 
-  // Carrega na montagem
+  // Carrega apenas quando visível
   useEffect(() => {
+    if (!visible) return;
     loadPersonals();
-  }, [loadPersonals]);
+  }, [visible, loadPersonals]);
 
-  // ── Load disabled weekdays for selected personal ───────────────────────────
+  // ── Load disabled weekdays for selected personal (apenas quando visível) ───
   useEffect(() => {
     let mounted = true;
-    if (!selectedPersonalId) return;
+    if (!visible || !selectedPersonalId) return;
     disabledPersonalDays(selectedPersonalId)
       .then((res) => {
         const list = Array.isArray(res.data) ? res.data : res.data?.content ?? [];
@@ -322,7 +328,7 @@ export default function NewExperimentalEvent({
       })
       .catch(() => {});
     return () => { mounted = false; };
-  }, [selectedPersonalId]);
+  }, [visible, selectedPersonalId]);
 
   // ── Load time slots ────────────────────────────────────────────────────────
   const fetchHours = useCallback(async (pId: number, d: string, cType: string) => {

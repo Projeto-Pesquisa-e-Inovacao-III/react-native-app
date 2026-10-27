@@ -33,6 +33,7 @@ import NotificationCenterModal from '../../../src/components/modals/Notification
 import QRCodeDisplayModal, { AppointmentForQr } from '../../../src/components/modals/QRCodeDisplayModal';
 import PopupModal, { type PopupAppointment } from '../../../src/components/modals/PopupModal';
 import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
+import { useAuth } from '../../../src/contexts/AuthContext';
 import {
   acceptUserAppointment,
   appointmentAtCalendar,
@@ -207,6 +208,9 @@ function getStatusStyle(status: AppointmentStatus) {
 export default function ScheduleScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { roles } = useAuth();
+  const isPersonalOrAdmin = roles ? (roles.includes('personal') || roles.includes('admin')) : false;
+
   const today = useMemo(() => new Date(), []);
   const [selectedDate, setSelectedDate] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -290,8 +294,9 @@ export default function ScheduleScreen() {
     loadAppointments();
   }, [loadAppointments]);
 
-  // Busca o primeiro personal e seus dias desabilitados para bloquear o calendário
+  // Busca o primeiro personal e seus dias desabilitados para bloquear o calendário (apenas visão aluno)
   useEffect(() => {
+    if (isPersonalOrAdmin) return;
     let isMounted = true;
     async function loadPersonalAvailability() {
       try {
@@ -330,8 +335,9 @@ export default function ScheduleScreen() {
     };
   }, []);
 
-  // Checa disponibilidade dos próximos 14 dias para o personal e bloqueia datas sem horários
+  // Checa disponibilidade dos próximos 14 dias para o personal e bloqueia datas sem horários (apenas aluno)
   useEffect(() => {
+    if (isPersonalOrAdmin || !personalId) return;
     let isMounted = true;
     async function checkUpcomingAvailability() {
       if (!personalId) return;
@@ -385,6 +391,7 @@ export default function ScheduleScreen() {
 
   // Verifica regra de 24 horas e disponibilidade horária antes de abrir o modal de agendamento
   async function handleOpenNewEvent() {
+    if (isPersonalOrAdmin) return;
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const selDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
@@ -557,14 +564,16 @@ export default function ScheduleScreen() {
               disabledDates={unavailableDates}
             />
 
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleOpenNewEvent}
-              activeOpacity={0.9}
-            >
-              <Plus size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>Agendar</Text>
-            </TouchableOpacity>
+            {!isPersonalOrAdmin && (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={handleOpenNewEvent}
+                activeOpacity={0.9}
+              >
+                <Plus size={18} color="#FFFFFF" />
+                <Text style={styles.primaryButtonText}>Agendar</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.sectionHeader}>
@@ -579,16 +588,20 @@ export default function ScheduleScreen() {
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>Nenhum horário neste dia</Text>
               <Text style={styles.emptyDescription}>
-                Use o botão Agendar para adicionar um novo compromisso.
+                {isPersonalOrAdmin
+                  ? 'Nenhum agendamento cadastrado para este dia.'
+                  : 'Use o botão Agendar para adicionar um novo compromisso.'}
               </Text>
-              <TouchableOpacity
-                style={styles.emptyScheduleButton}
-                onPress={handleOpenNewEvent}
-                activeOpacity={0.9}
-              >
-                <Plus size={16} color="#19587A" />
-                <Text style={styles.emptyScheduleButtonText}>Agendar aula</Text>
-              </TouchableOpacity>
+              {!isPersonalOrAdmin && (
+                <TouchableOpacity
+                  style={styles.emptyScheduleButton}
+                  onPress={handleOpenNewEvent}
+                  activeOpacity={0.9}
+                >
+                  <Plus size={16} color="#19587A" />
+                  <Text style={styles.emptyScheduleButtonText}>Agendar aula</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             filteredAppointments.map((item) => {
@@ -719,14 +732,16 @@ export default function ScheduleScreen() {
         </ScrollView>
       </View>
 
-      {/* Modal de Agendamento real via NewEvent */}
-      <NewEvent
-        key={`${newEventVisible}-${selectedDateISO}`}
-        visible={newEventVisible}
-        initialDate={selectedDateISO}
-        onClose={() => setNewEventVisible(false)}
-        onSubmit={handleNewEventSubmit}
-      />
+      {/* Modal de Agendamento real via NewEvent (apenas aluno) */}
+      {!isPersonalOrAdmin && (
+        <NewEvent
+          key={`${newEventVisible}-${selectedDateISO}`}
+          visible={newEventVisible}
+          initialDate={selectedDateISO}
+          onClose={() => setNewEventVisible(false)}
+          onSubmit={handleNewEventSubmit}
+        />
+      )}
 
       {/* Modal de Detalhes do Agendamento */}
       <Modal
@@ -823,7 +838,7 @@ export default function ScheduleScreen() {
         visible={popupModalVisible}
         date={popupDate}
         appointments={popupAppointments}
-        canCreateNewEvent={true}
+        canCreateNewEvent={!isPersonalOrAdmin}
         onClose={() => setPopupModalVisible(false)}
         onNewEvent={() => {
           setPopupModalVisible(false);

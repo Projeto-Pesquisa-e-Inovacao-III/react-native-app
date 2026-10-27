@@ -343,13 +343,13 @@ export default function OverviewScreen({
   onNewEvent,
 }: Partial<OverviewNativeProps> = {}) {
   const { roles: authRoles, isAuthenticated } = useAuth();
-  const userRoles = propsUserRoles ?? (authRoles as Role[] | null) ?? ['aluno'];
+  const userRoles = propsUserRoles ?? (authRoles as Role[] | null);
   const { unreadCount } = useNotifications();
   const queryClient = useQueryClient();
   const router = useRouter();
 
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  const isAluno = !!userRoles?.includes("aluno");
+  const isAluno = userRoles ? userRoles.includes("aluno") : false;
   const [modal, setModal] = useState<ModalState>({
     visible: false,
     title: "",
@@ -444,22 +444,14 @@ export default function OverviewScreen({
   });
 
   const personalQuery = useQuery({
-    queryKey: ["overview", "personal"],
-    queryFn: isAluno ? getPersonalList : findUserData,
+    queryKey: ["overview", "personal", isAluno],
+    queryFn: getPersonalList,
     select: (response: ApiResponse<unknown>) => {
-      if (isAluno) {
-        return getNumericId(
-          getApiList<PersonalSummary>(response.data)[0]?.id
-        );
-      }
-
-      if (response.data && typeof response.data === "object" && "id" in response.data) {
-        return getNumericId(response.data.id);
-      }
-
-      return undefined;
+      return getNumericId(
+        getApiList<PersonalSummary>(response.data)[0]?.id
+      );
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isAluno,
     retry: false,
   });
 
@@ -468,7 +460,7 @@ export default function OverviewScreen({
     queryFn: () => disabledPersonalDays(personalQuery.data!),
     select: (response: ApiResponse<unknown>) =>
       getDisabledDayNames(response.data),
-    enabled: isAuthenticated && personalQuery.data !== undefined,
+    enabled: isAuthenticated && isAluno && personalQuery.data !== undefined,
     retry: false,
   });
 
@@ -510,10 +502,11 @@ export default function OverviewScreen({
     ? disabledDays
     : disabledDaysQuery.data ?? [];
 
-  // Checa disponibilidade dos próximos 14 dias para bloquear datas sem horário
+  // Checa disponibilidade dos próximos 14 dias para bloquear datas sem horário (apenas aluno)
   useEffect(() => {
     let isMounted = true;
     async function checkUpcomingAvailability() {
+      if (!isAluno) return;
       const pid = personalQuery.data;
       if (!pid) return;
 
@@ -959,15 +952,17 @@ export default function OverviewScreen({
         </View>
       </Modal>
 
-      {/* Modal de Agendamento com API integrada */}
-      <NewEvent
-        key={`${newEventVisible}-${selectedDate ?? "new"}`}
-        visible={newEventVisible}
-        initialDate={selectedDate}
-        availableHours={availableHours}
-        onClose={() => setNewEventVisible(false)}
-        onSubmit={handleScheduleSubmit}
-      />
+      {/* Modal de Agendamento com API integrada - apenas para visão de aluno */}
+      {isAluno && (
+        <NewEvent
+          key={`${newEventVisible}-${selectedDate ?? "new"}`}
+          visible={newEventVisible}
+          initialDate={selectedDate}
+          availableHours={availableHours}
+          onClose={() => setNewEventVisible(false)}
+          onSubmit={handleScheduleSubmit}
+        />
+      )}
 
       {/* PopupModal para visualização de agendamentos do dia */}
       <PopupModal
