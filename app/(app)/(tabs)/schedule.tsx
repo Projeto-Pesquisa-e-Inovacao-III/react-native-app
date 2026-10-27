@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -32,6 +31,9 @@ import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import QRCodeDisplayModal, { AppointmentForQr } from '../../../src/components/modals/QRCodeDisplayModal';
 import PopupModal, { type PopupAppointment } from '../../../src/components/modals/PopupModal';
+import ConfirmModal from '../../../src/components/modals/ConfirmModal';
+import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ErrorModal from '../../../src/components/modals/ErrorModal';
 import FocusAwareStatusBar from '../../../src/components/FocusAwareStatusBar';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import {
@@ -228,6 +230,9 @@ export default function ScheduleScreen() {
   const [popupModalVisible, setPopupModalVisible] = useState(false);
   const [popupDate, setPopupDate] = useState('');
   const [popupAppointments, setPopupAppointments] = useState<PopupAppointment[]>([]);
+  const [cancelAppointmentId, setCancelAppointmentId] = useState<number | null>(null);
+  const [successModalInfo, setSuccessModalInfo] = useState<{ title: string; content: string } | null>(null);
+  const [errorModalInfo, setErrorModalInfo] = useState<{ title: string; content: string } | null>(null);
   const { scheduleAppointmentNotification, unreadCount } = useNotifications();
 
   const loadAppointments = useCallback(async () => {
@@ -418,26 +423,24 @@ export default function ScheduleScreen() {
       setSelectedDate(dateToUse);
     }
 
-    // 1. Validação de 24 horas
     if (dateToUse.getTime() <= todayStart.getTime()) {
-      Alert.alert(
-        'Antecedência mínima',
-        'Aulas só podem ser agendadas com pelo menos 24 horas de antecedência. Selecione uma data a partir de amanhã.',
-      );
+      setErrorModalInfo({
+        title: 'Antecedência mínima',
+        content: 'Aulas só podem ser agendadas com pelo menos 24 horas de antecedência. Selecione uma data a partir de amanhã.',
+      });
       return;
     }
 
-    // 2. Validação de dias da semana em que o personal não atende
     const WEEKDAY_PT: Record<number, string> = {
       0: 'domingo', 1: 'segunda', 2: 'terca', 3: 'quarta',
       4: 'quinta', 5: 'sexta', 6: 'sabado',
     };
     const weekday = WEEKDAY_PT[dateToUse.getDay()];
     if (disabledWeekdays.includes(weekday)) {
-      Alert.alert(
-        'Personal indisponível',
-        'O personal não atende neste dia da semana. Selecione outro dia disponível no calendário.',
-      );
+      setErrorModalInfo({
+        title: 'Personal indisponível',
+        content: 'O personal não atende neste dia da semana. Selecione outro dia disponível no calendário.',
+      });
       return;
     }
 
@@ -474,36 +477,42 @@ export default function ScheduleScreen() {
   async function handleAccept(id: number) {
     try {
       await acceptUserAppointment(id);
-      Alert.alert('Sucesso', 'Agendamento aprovado com sucesso!');
+      setSuccessModalInfo({
+        title: 'Sucesso',
+        content: 'Agendamento aprovado com sucesso!',
+      });
       await loadAppointments();
       void queryClient.invalidateQueries({ queryKey: ['overview'] });
     } catch {
-      Alert.alert('Erro', 'Não foi possível aprovar o agendamento.');
+      setErrorModalInfo({
+        title: 'Erro',
+        content: 'Não foi possível aprovar o agendamento.',
+      });
     }
   }
 
-  async function handleRefuse(id: number) {
-    Alert.alert(
-      'Cancelar agendamento',
-      'Tem certeza que deseja cancelar esta solicitação?',
-      [
-        { text: 'Voltar', style: 'cancel' },
-        {
-          text: 'Sim, cancelar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await refuseAppointment(id);
-              Alert.alert('Sucesso', 'Agendamento cancelado com sucesso.');
-              await loadAppointments();
-              void queryClient.invalidateQueries({ queryKey: ['overview'] });
-            } catch {
-              Alert.alert('Erro', 'Não foi possível cancelar o agendamento.');
-            }
-          },
-        },
-      ]
-    );
+  function handleRefuse(id: number) {
+    setCancelAppointmentId(id);
+  }
+
+  async function confirmCancelAppointment() {
+    if (!cancelAppointmentId) return;
+    try {
+      await refuseAppointment(cancelAppointmentId);
+      setSuccessModalInfo({
+        title: 'Sucesso',
+        content: 'Agendamento cancelado com sucesso.',
+      });
+      await loadAppointments();
+      void queryClient.invalidateQueries({ queryKey: ['overview'] });
+    } catch {
+      setErrorModalInfo({
+        title: 'Erro',
+        content: 'Não foi possível cancelar o agendamento.',
+      });
+    } finally {
+      setCancelAppointmentId(null);
+    }
   }
 
   async function handleNewEventSubmit(payload?: NewEventPayload) {
@@ -865,6 +874,30 @@ export default function ScheduleScreen() {
 
       {/* Botão de gravação de áudio para agendamento com IA */}
       <VoiceRecorderButton />
+
+      <ConfirmModal
+        visible={cancelAppointmentId !== null}
+        title="Cancelar agendamento"
+        content="Tem certeza que deseja cancelar esta solicitação?"
+        confirmText="Sim, cancelar"
+        isDestructive={true}
+        onConfirm={confirmCancelAppointment}
+        onClose={() => setCancelAppointmentId(null)}
+      />
+
+      <SuccessModal
+        visible={!!successModalInfo}
+        title={successModalInfo?.title}
+        content={successModalInfo?.content}
+        onClose={() => setSuccessModalInfo(null)}
+      />
+
+      <ErrorModal
+        visible={!!errorModalInfo}
+        title={errorModalInfo?.title}
+        content={errorModalInfo?.content}
+        onClose={() => setErrorModalInfo(null)}
+      />
     </SafeAreaView>
   );
 }

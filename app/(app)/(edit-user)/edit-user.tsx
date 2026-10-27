@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -181,10 +180,11 @@ export default function EditUserScreen() {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert(
-          'Permissão Necessária',
-          'Precisamos de permissão para acessar sua galeria e atualizar sua foto de perfil.'
-        );
+        setModalText({
+          title: 'Permissão Necessária',
+          content: 'Precisamos de permissão para acessar sua galeria e atualizar sua foto de perfil.',
+        });
+        setOpenModal('error');
         return;
       }
 

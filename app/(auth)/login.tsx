@@ -7,10 +7,10 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import ErrorModal from '../../src/components/modals/ErrorModal';
 import { MailIcon, LockIcon } from '../../src/components/icons/AuthIcons';
 import InputWithIcon from '../../src/components/InputWithIcon';
 import Button from '../../src/components/Button';
@@ -28,6 +28,9 @@ export default function LoginRoute() {
 
   const [loginInfo, setLoginInfo] = useState(initialLoginState);
   const [loading, setLoading] = useState(false);
+  const [errorModal, setErrorModal] = useState<{ visible: boolean; title?: string; content?: string }>({
+    visible: false,
+  });
 
   function handleAutoFill(email?: string, password?: string) {
     setLoginInfo({
@@ -56,7 +59,11 @@ export default function LoginRoute() {
 
   async function handleSubmit() {
     if (!loginInfo.email.trim() || !loginInfo.password.trim()) {
-      Alert.alert('Campos obrigatórios', 'Por favor, informe seu email e senha.');
+      setErrorModal({
+        visible: true,
+        title: 'Campos obrigatórios',
+        content: 'Por favor, informe seu email e senha.',
+      });
       return;
     }
 
@@ -74,7 +81,11 @@ export default function LoginRoute() {
         err.response?.data?.message ||
         'Email ou senha incorretos. Verifique suas credenciais.';
 
-      Alert.alert('Falha no Login', message, [{ text: 'OK' }]);
+      setErrorModal({
+        visible: true,
+        title: 'Falha no Login',
+        content: message,
+      });
     } finally {
       setLoading(false);
     }
@@ -206,6 +217,12 @@ export default function LoginRoute() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ErrorModal
+        visible={errorModal.visible}
+        title={errorModal.title}
+        content={errorModal.content}
+        onClose={() => setErrorModal((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }

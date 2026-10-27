@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Linking,
   Image,
   TextInput,
@@ -37,6 +36,7 @@ import {
 import type { CheckSchedule, AbsenceAppointment } from '../../../src/models/schedule';
 import ConfirmModal from '../../../src/components/modals/ConfirmModal';
 import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ErrorModal from '../../../src/components/modals/ErrorModal';
 import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeAppointmentModal';
 import QRCodeScannerModal from '../../../src/components/modals/QRCodeScannerModal';
 import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
@@ -430,6 +430,7 @@ export default function CheckScheduleScreen() {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedId, setSelectedId] = useState<number>(0);
   const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
+  const [errorInfo, setErrorInfo] = useState<{ title: string; content: string } | null>(null);
 
   function togglePanel() {
     const nextState = !isPanelOpen;
@@ -615,16 +616,10 @@ export default function CheckScheduleScreen() {
   }
 
   function handleReschedule(id: number, _date: string) {
-    Alert.alert('Reagendar', `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`);
-    // Quando implementado, chamar:
-    // const item = appointments.find((r) => r.agendamentoId === id);
-    // scheduleRescheduleNotification({
-    //   studentName: item?.nome || 'Aluno',
-    //   personalName: 'Personal Trainer',
-    //   classType: item?.tipoAula || 'Aula',
-    //   date: novaData,
-    //   time: novoHorario,
-    // });
+    setErrorInfo({
+      title: 'Reagendar',
+      content: `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`,
+    });
   }
 
   function handleCardPress(id: number) {
@@ -979,6 +974,13 @@ export default function CheckScheduleScreen() {
         title={successInfo?.title}
         content={successInfo?.content}
         onClose={() => setSuccessInfo(null)}
+      />
+
+      <ErrorModal
+        visible={!!errorInfo}
+        title={errorInfo?.title}
+        content={errorInfo?.content}
+        onClose={() => setErrorInfo(null)}
       />
 
       <NotificationCenterModal
