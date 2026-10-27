@@ -215,8 +215,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
   },
   muscleChipSelected: {
-    backgroundColor: '#192633',
-    borderColor: '#192633',
+    backgroundColor: '#093a5d',
+    borderColor: '#093a5d',
   },
   muscleChipText: {
     fontSize: 13,
