@@ -32,8 +32,10 @@ import {
   refuseAppointment,
   concludeAppointment,
   reportAbsencePersonal,
+  findAppointmentById,
 } from '../../../src/constants/schedule';
 import type { CheckSchedule, AbsenceAppointment } from '../../../src/models/schedule';
+import NewEvent from '../../../src/components/NewEvent';
 import ConfirmModal from '../../../src/components/modals/ConfirmModal';
 import SuccessModal from '../../../src/components/modals/SuccessModal';
 import ErrorModal from '../../../src/components/modals/ErrorModal';
@@ -431,6 +433,9 @@ export default function CheckScheduleScreen() {
   const [selectedId, setSelectedId] = useState<number>(0);
   const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
   const [errorInfo, setErrorInfo] = useState<{ title: string; content: string } | null>(null);
+  const [rescheduleAppointmentData, setRescheduleAppointmentData] = useState<any>(null);
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [rescheduleTargetId, setRescheduleTargetId] = useState<number | null>(null);
 
   function togglePanel() {
     const nextState = !isPanelOpen;
@@ -615,11 +620,29 @@ export default function CheckScheduleScreen() {
     setSuccessInfo({ title: 'Ausência Registrada', content: 'A ausência foi registrada com sucesso.' });
   }
 
-  function handleReschedule(id: number, _date: string) {
-    setErrorInfo({
-      title: 'Reagendar',
-      content: `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`,
+  async function handleReschedule(id: number, _date: string) {
+    try {
+      setRescheduleTargetId(id);
+      const res = await findAppointmentById(id);
+      setRescheduleAppointmentData(res.data);
+      setIsRescheduleModalOpen(true);
+    } catch (err: any) {
+      setErrorInfo({
+        title: 'Reagendar',
+        content: err?.response?.data?.message || 'Não foi possível carregar os dados para reagendamento.',
+      });
+    }
+  }
+
+  async function handleSuccessReschedule() {
+    setIsRescheduleModalOpen(false);
+    setRescheduleAppointmentData(null);
+    setRescheduleTargetId(null);
+    setSuccessInfo({
+      title: 'Reagendado com sucesso',
+      content: 'Horário reagendado com sucesso.',
     });
+    await onRefresh();
   }
 
   function handleCardPress(id: number) {
@@ -982,6 +1005,26 @@ export default function CheckScheduleScreen() {
         content={errorInfo?.content}
         onClose={() => setErrorInfo(null)}
       />
+
+      {isRescheduleModalOpen && rescheduleTargetId !== null && (
+        <NewEvent
+          visible={true}
+          onClose={() => {
+            setIsRescheduleModalOpen(false);
+            setRescheduleAppointmentData(null);
+            setRescheduleTargetId(null);
+          }}
+          isReschedule={true}
+          rescheduleId={rescheduleTargetId}
+          appoitmentData={rescheduleAppointmentData}
+          title="Reagendar horário"
+          buttonTitle={isPersonal ? 'Reagendar' : 'Avançar'}
+          goToNextStep={!isPersonal}
+          openModalExtern={handleSuccessReschedule}
+          errorModal={(t, m) => setErrorInfo({ title: t, content: m })}
+          typeUser={roles || []}
+        />
+      )}
 
       <NotificationCenterModal
         visible={isNotificationModalVisible}

@@ -145,8 +145,8 @@ export default function AddressesScreen() {
   const addresses = addressesQuery.data ?? [];
   const isLimitReached = addresses.length >= ADDRESS_LIMIT;
 
-  async function handleCepLookup() {
-    const raw = form.cep.replace(/\D/g, '');
+  async function handleCepLookup(cepValue?: string) {
+    const raw = (cepValue ?? form.cep).replace(/\D/g, '');
     if (raw.length !== 8) return;
     setCepLoading(true);
     try {
@@ -214,11 +214,7 @@ export default function AddressesScreen() {
       handleCancelForm();
       return;
     }
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.push('/(app)/(tabs)/more');
-    }
+    router.navigate('/(app)/(tabs)/more');
   }
 
   function validate(): boolean {
@@ -339,31 +335,30 @@ export default function AddressesScreen() {
               />
             </View>
 
-            <View style={styles.cepRow}>
-              <View style={{ flex: 1 }}>
-                <InputWithIcon
-                  label="CEP"
-                  placeholder="00000-000"
-                  icon={<MapPin size={18} color="#64748B" />}
-                  value={form.cep}
-                  onInputChange={(value: string) => setForm((prev) => ({ ...prev, cep: formatCep(value) }))}
-                  keyboardType="numeric"
-                  maxLength={9}
-                />
-                {!!formErrors.cep && <Text style={styles.error}>{formErrors.cep}</Text>}
-              </View>
-              <TouchableOpacity
-                style={styles.searchCepButton}
-                onPress={handleCepLookup}
-                disabled={cepLoading}
-                activeOpacity={0.8}
-              >
-                {cepLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Search size={18} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
+            <View style={styles.fieldContainer}>
+              <InputWithIcon
+                label="CEP"
+                placeholder="00000-000"
+                icon={
+                  cepLoading ? (
+                    <ActivityIndicator size="small" color="#1C6AAB" />
+                  ) : (
+                    <MapPin size={18} color="#64748B" />
+                  )
+                }
+                value={form.cep}
+                onInputChange={(value: string) => {
+                  const formatted = formatCep(value);
+                  setForm((prev) => ({ ...prev, cep: formatted }));
+                  const raw = formatted.replace(/\D/g, '');
+                  if (raw.length === 8) {
+                    handleCepLookup(raw);
+                  }
+                }}
+                keyboardType="numeric"
+                maxLength={9}
+              />
+              {!!formErrors.cep && <Text style={styles.error}>{formErrors.cep}</Text>}
             </View>
 
             <View style={styles.fieldContainer}>

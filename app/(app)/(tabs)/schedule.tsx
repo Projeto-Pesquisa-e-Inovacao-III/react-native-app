@@ -486,7 +486,7 @@ export default function ScheduleScreen() {
     } catch {
       setErrorModalInfo({
         title: 'Erro',
-        content: 'Não foi possível aprovar o agendamento.',
+        content: 'Não foi possível aceitar o agendamento.',
       });
     }
   }
@@ -816,6 +816,21 @@ export default function ScheduleScreen() {
                     <Text style={styles.detailsQrBtnText}>Ver QR Code de Aprovação</Text>
                   </TouchableOpacity>
                 )}
+
+                <TouchableOpacity
+                  style={[styles.modalSecondary, { backgroundColor: '#19587A', marginBottom: 10 }]}
+                  onPress={() => {
+                    const id = selectedDetailsAppointment.agendamentoId || selectedDetailsAppointment.id;
+                    setSelectedDetailsAppointment(null);
+                    router.push({
+                      pathname: '/(app)/(tabs)/schedule-details',
+                      params: { id },
+                    });
+                  }}
+                  activeOpacity={0.9}
+                >
+                  <Text style={[styles.modalSecondaryText, { color: '#FFFFFF', fontWeight: '700' }]}>Detalhes do agendamento</Text>
+                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.modalSecondary}
