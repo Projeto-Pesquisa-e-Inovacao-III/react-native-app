@@ -10,11 +10,17 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic } from 'lucide-react-native';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function VoiceRecorderButton() {
+  const { roles } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const bottomOffset = 60 + Math.max(insets.bottom, 0) + 16;
+
+  if (roles?.includes('personal')) {
+    return null;
+  }
 
   const [isLabelVisible, setIsLabelVisible] = useState(true);
   const fadeAnim = useRef(new Animated.Value(1)).current;

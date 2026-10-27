@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -109,6 +111,8 @@ function TimeRange(props: TimeRangeProps) {
 export default function SetAvailabilityScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const bottomTabBarHeight = 60 + Math.max(insets.bottom, 0);
 
   const cronogramQuery = useQuery({
     queryKey: ["personalCronogram"],
@@ -425,8 +429,20 @@ export default function SetAvailabilityScreen() {
   }, [saveStatus]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
-      <ScrollView style={styles.page} contentContainerStyle={styles.pageContent}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC" }} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          style={styles.page}
+          contentContainerStyle={[
+            styles.pageContent,
+            { paddingBottom: bottomTabBarHeight + 110 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         <Text style={styles.title}>Definir horário de disponibilidade</Text>
 
         <View style={styles.bufferBar}>
@@ -589,7 +605,13 @@ export default function SetAvailabilityScreen() {
         })}
       </ScrollView>
 
-      <View style={[styles.footer, hasUnsaved && saveStatus === "idle" ? styles.footerDirty : null]}>
+      <View
+        style={[
+          styles.footer,
+          { bottom: bottomTabBarHeight },
+          hasUnsaved && saveStatus === "idle" ? styles.footerDirty : null,
+        ]}
+      >
         {hasUnsaved && saveStatus === "idle" ? (
           <View style={styles.unsavedHint}>
             <TriangleAlert size={14} color="#92400E" />
@@ -612,6 +634,7 @@ export default function SetAvailabilityScreen() {
           </Pressable>
         </View>
       </View>
+    </KeyboardAvoidingView>
 
       <InfoPersonalSchedulesModal
         visible={confirmVisible}
@@ -789,14 +812,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  keyboardAvoid: {
+    flex: 1,
+  },
   timeInput: {
     flex: 1,
-    height: 36,
+    height: 40,
     borderWidth: 1.5,
     borderColor: "#e2e8f0",
     borderRadius: 8,
     textAlign: "center",
-    fontSize: 13,
+    textAlignVertical: "center",
+    includeFontPadding: false,
+    paddingVertical: 0,
+    paddingHorizontal: 8,
+    fontSize: 14,
     color: "#1a202c",
     backgroundColor: "#fff",
   },
@@ -823,7 +853,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 60,
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",

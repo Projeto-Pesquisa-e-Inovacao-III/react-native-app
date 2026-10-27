@@ -13,7 +13,8 @@ import { Mic, X, Sparkles, RefreshCw } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
+  isSpeechRecognitionAvailable,
+} from "../../src/services/speechRecognition";
 
 type WaveformBarProps = {
   baseHeight: number;
@@ -141,6 +142,15 @@ export default function AiVoiceScreen() {
   });
 
   const startRecording = useCallback(async () => {
+    if (!isSpeechRecognitionAvailable) {
+      Alert.alert(
+        'Recurso indisponível',
+        'O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
+
     if (isStartingRef.current || isRecognitionActiveRef.current) {
       return;
     }
@@ -210,6 +220,14 @@ export default function AiVoiceScreen() {
   });
 
   useEffect(() => {
+    if (!isSpeechRecognitionAvailable) {
+      Alert.alert(
+        'Recurso indisponível',
+        'O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
     const timer = setTimeout(() => {
       startRecordingRef.current();
     }, 600);
@@ -217,7 +235,7 @@ export default function AiVoiceScreen() {
       clearTimeout(timer);
       ExpoSpeechRecognitionModule.abort();
     };
-  }, [startRecording]);
+  }, [router]);
 
   return (
     <AiVoiceUI

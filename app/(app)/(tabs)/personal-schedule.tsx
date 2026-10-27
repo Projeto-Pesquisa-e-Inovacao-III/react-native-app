@@ -30,7 +30,6 @@ import { findPersonalRequests } from "../../../src/constants/schedule";
 import ScreenHeader from "../../../src/components/ScreenHeader";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
-import VoiceRecorderButton from "../../../src/components/VoiceRecorderButton";
 import NewExperimentalEvent from "../../../src/components/NewExperimentalEvent";
 
 export type PersonalScheduleEvent = {
@@ -730,9 +729,6 @@ export default function PersonalWeeklyScheduleScreen() {
           void queryClient.invalidateQueries({ queryKey: ["personalWeeklySchedule"] });
         }}
       />
-
-      {/* Botão de gravação de áudio para agendamento com IA */}
-      <VoiceRecorderButton />
     </View>
   );
 }

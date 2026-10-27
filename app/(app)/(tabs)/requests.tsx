@@ -26,7 +26,6 @@ import DateRangePickerModal, { type DateRange } from '../../../src/components/mo
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import ScreenHeader from '../../../src/components/ScreenHeader';
-import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -492,16 +491,32 @@ export default function CheckScheduleScreen() {
           nameFilter || undefined,
         );
         const data = res?.data;
-        const items = Array.isArray(data)
+        const items: CheckSchedule[] = Array.isArray(data)
           ? data
           : Array.isArray(data?.content)
           ? data.content
           : [];
 
+        const deduplicate = (list: CheckSchedule[]): CheckSchedule[] => {
+          const seen = new Set<string | number>();
+          return list.filter((item) => {
+            const id = item?.agendamentoId ?? (item as any)?.idAgendamento ?? (item as any)?.id;
+            if (id !== undefined && id !== null) {
+              if (seen.has(id)) return false;
+              seen.add(id);
+              return true;
+            }
+            const fallbackKey = `${item?.dataInicio ?? ''}_${item?.nome ?? ''}`;
+            if (seen.has(fallbackKey)) return false;
+            seen.add(fallbackKey);
+            return true;
+          });
+        };
+
         if (replace) {
-          setAppointments(items);
+          setAppointments(deduplicate(items));
         } else {
-          setAppointments((prev) => [...(Array.isArray(prev) ? prev : []), ...items]);
+          setAppointments((prev) => deduplicate([...(Array.isArray(prev) ? prev : []), ...items]));
         }
 
         const pageNumber = data?.page?.number ?? data?.number ?? pageNum;
@@ -874,7 +889,13 @@ export default function CheckScheduleScreen() {
         <FlatList
           ref={flatListRef}
           data={appointments ?? []}
-          keyExtractor={(item, index) => String(item?.agendamentoId ?? index)}
+          keyExtractor={(item) => {
+            const id = item?.agendamentoId ?? (item as any)?.idAgendamento ?? (item as any)?.id;
+            if (id !== undefined && id !== null) {
+              return `appointment-${id}`;
+            }
+            return `appointment-${item?.dataInicio ?? ''}-${item?.nome ?? ''}`;
+          }}
           renderItem={({ item }) => (
             <AppointmentCard
               card={item}
@@ -973,9 +994,6 @@ export default function CheckScheduleScreen() {
           setSelectedDateRange(range);
         }}
       />
-
-      {/* Botão de gravação de áudio para agendamento com IA */}
-      <VoiceRecorderButton />
     </View>
   );
 }
