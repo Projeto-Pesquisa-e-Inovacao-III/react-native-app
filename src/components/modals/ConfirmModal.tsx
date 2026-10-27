@@ -141,14 +141,14 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 3,
-    borderColor: '#192633',
+    borderColor: '#093a5d',
     alignItems: 'center',
     justifyContent: 'center',
   },
   countdownText: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#192633',
+    color: '#093a5d',
   },
   countdownLabel: {
     fontSize: 12,
