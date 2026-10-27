@@ -80,7 +80,7 @@ export default function MoreRoute() {
             <OptionItem 
               icon={<MapPin size={22} color="#192633" />} 
               title='Endereços' 
-              onClick={() => router.push('/(app)/addresses')} 
+              onClick={() => router.push('/(app)/(edit-user)/addresses')} 
               isLast={false}
             />
             <OptionItem 
@@ -97,34 +97,78 @@ export default function MoreRoute() {
           <View style={styles.card}>
             {roles?.includes("aluno") && (
               <>
-                <OptionItem icon={<Banknote size={22} color="#192633" />} title='Histórico de compras' onClick={() => router.push("/plans-history")} />
-                <OptionItem icon={<HistoryIcon size={22} color="#192633" />} title='Histórico de agendamentos' onClick={() => router.push("/schedule-history")} isLast={true} />
+                <OptionItem 
+                  icon={<Banknote size={22} color="#192633" />} 
+                  title='Histórico de compras' 
+                  onClick={() => router.push("/(app)/(tabs)/plans-history")} 
+                />
+                <OptionItem 
+                  icon={<HistoryIcon size={22} color="#192633" />} 
+                  title='Histórico de agendamentos' 
+                  onClick={() => router.push("/(app)/(tabs)/schedule-history")} 
+                  isLast={true} 
+                />
               </>
             )}
 
             {/* personal não admin */}
             {roles?.includes("personal") && !roles?.includes("admin") && (
               <>
-                <OptionItem icon={<Clock size={22} color="#192633" />} title='Ajustar disponibilidade' onClick={() => router.push("/set-availability")} isLast={true} />
+                <OptionItem 
+                  icon={<Clock size={22} color="#192633" />} 
+                  title='Ajustar disponibilidade' 
+                  onClick={() => router.push("/(app)/(tabs)/set-availability")} 
+                  isLast={true} 
+                />
               </>
             )}
 
             {/* personal e admin */}
             {roles?.includes("personal") && roles?.includes("admin") && (
               <>
-                <OptionItem icon={<ChartLine size={22} color="#192633"/>} title='Dashboard' onClick={() => router.push("/dashboard")}/>
-                <OptionItem icon={<Calendar size={22} color="#192633" />} title='Agenda' onClick={() => router.push("/(app)/(tabs)/personal-schedule")} />
-                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
-                <OptionItem icon={<Clock size={22} color="#192633" />} title='Ajustar disponibilidade' onClick={() => router.push("/set-availability")} />
-                <OptionItem icon={<User size={22} color="#192633" />} title='Criar personal' onClick={() => router.push("/create-personal")} isLast={true} />
+                <OptionItem 
+                  icon={<ChartLine size={22} color="#192633"/>} 
+                  title='Dashboard' 
+                  onClick={() => router.push("/(app)/(tabs)/dashboard")}
+                />
+                <OptionItem 
+                  icon={<Calendar size={22} color="#192633" />} 
+                  title='Agenda' 
+                  onClick={() => router.push("/(app)/(tabs)/personal-schedule")} 
+                />
+                <OptionItem 
+                  icon={<Boxes size={22} color="#192633" />} 
+                  title='Pacotes' 
+                  onClick={() => router.push("/(app)/(tabs)/plans")} 
+                />
+                <OptionItem 
+                  icon={<Clock size={22} color="#192633" />} 
+                  title='Ajustar disponibilidade' 
+                  onClick={() => router.push("/(app)/(tabs)/set-availability")} 
+                />
+                <OptionItem 
+                  icon={<User size={22} color="#192633" />} 
+                  title='Criar personal' 
+                  onClick={() => router.push("/(app)/(tabs)/create-personal")} 
+                  isLast={true} 
+                />
               </>
             )}
 
             {/* apenas admin */}
             {roles?.includes("admin") && !roles?.includes("personal") && (
               <>
-                <OptionItem icon={<Boxes size={22} color="#192633" />} title='Pacotes' onClick={() => router.push("/plans")} />
-                <OptionItem icon={<User size={22} color="#192633" />} title='Criar personal' onClick={() => router.push("/create-personal")} isLast={true} />
+                <OptionItem 
+                  icon={<Boxes size={22} color="#192633" />} 
+                  title='Pacotes' 
+                  onClick={() => router.push("/(app)/(tabs)/plans")} 
+                />
+                <OptionItem 
+                  icon={<User size={22} color="#192633" />} 
+                  title='Criar personal' 
+                  onClick={() => router.push("/(app)/(tabs)/create-personal")} 
+                  isLast={true} 
+                />
               </>
             )}
           </View>

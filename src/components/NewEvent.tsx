@@ -13,6 +13,7 @@ import {
 import { getPersonalList, insertAppointment, disabledPersonalDays, rescheduleAppointment } from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
 import { getUserAddresses, lookupCep } from "../constants/address";
+import { useAuth } from "../contexts/AuthContext";
 import type { Schedule, ScheduleReschedule } from "../models/schedule";
 import SuccessModal from "./modals/SuccessModal";
 import ErrorModal from "./modals/ErrorModal";
@@ -189,6 +190,10 @@ export default function NewEvent({
     }
   }, [visible, initialDate, isReschedule, appoitmentData]);
 
+  // Autenticação e perfil
+  const { roles } = useAuth();
+  const isPersonalOrAdmin = roles ? (roles.includes("personal") || roles.includes("admin")) : false;
+
   // Personais
   const [personalsList, setPersonalsList] = useState<Personal[]>(
     propPersonals && propPersonals.length > 0 ? propPersonals : []
@@ -228,8 +233,9 @@ export default function NewEvent({
   const [error, setError] = useState("");
   const cepDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. Carregar lista de personais da API
+  // 1. Carregar lista de personais da API (apenas quando modal estiver visível e perfil for aluno)
   useEffect(() => {
+    if (!visible || isPersonalOrAdmin) return;
     let isMounted = true;
     async function fetchPersonals() {
       setLoadingPersonals(true);
@@ -257,15 +263,16 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [visible, isPersonalOrAdmin]);
 
-  // 1b. Carregar dias desabilitados do personal selecionado
+  // 1b. Carregar dias desabilitados do personal selecionado (apenas quando visível)
   useEffect(() => {
+    if (!visible || isPersonalOrAdmin || !selectedPersonalId) return;
+    const personalId = selectedPersonalId;
     let isMounted = true;
     async function fetchDisabledDays() {
-      if (!selectedPersonalId) return;
       try {
-        const res = await disabledPersonalDays(selectedPersonalId);
+        const res = await disabledPersonalDays(personalId);
         const data = res.data;
         const list = Array.isArray(data) ? data : data?.content ?? [];
         const inactive: string[] = Array.from(
@@ -282,7 +289,7 @@ export default function NewEvent({
     }
     fetchDisabledDays();
     return () => { isMounted = false; };
-  }, [selectedPersonalId]);
+  }, [visible, isPersonalOrAdmin, selectedPersonalId]);
 
   // 2. Carregar endereços salvos da API
   useEffect(() => {
