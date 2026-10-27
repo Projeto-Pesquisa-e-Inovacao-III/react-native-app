@@ -436,6 +436,7 @@ export default function CheckScheduleScreen() {
   const [rescheduleAppointmentData, setRescheduleAppointmentData] = useState<any>(null);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<number | null>(null);
+  const isLoadingRescheduleRef = useRef(false);
 
   function togglePanel() {
     const nextState = !isPanelOpen;
@@ -621,16 +622,23 @@ export default function CheckScheduleScreen() {
   }
 
   async function handleReschedule(id: number, _date: string) {
+    if (isLoadingRescheduleRef.current) return;
+    isLoadingRescheduleRef.current = true;
+
     try {
-      setRescheduleTargetId(id);
       const res = await findAppointmentById(id);
       setRescheduleAppointmentData(res.data);
+      setRescheduleTargetId(id);
       setIsRescheduleModalOpen(true);
     } catch (err: any) {
+      setRescheduleAppointmentData(null);
+      setRescheduleTargetId(null);
       setErrorInfo({
         title: 'Reagendar',
         content: err?.response?.data?.message || 'Não foi possível carregar os dados para reagendamento.',
       });
+    } finally {
+      isLoadingRescheduleRef.current = false;
     }
   }
 

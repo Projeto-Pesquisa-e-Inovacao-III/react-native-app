@@ -275,6 +275,7 @@ export default function EditUserScreen() {
     try {
       await update(options);
       await queryClient.refetchQueries({ queryKey: ['userData'] });
+      await queryClient.refetchQueries({ queryKey: ['user'] });
       setModalText({
         title: 'Perfil atualizado!',
         content: 'Seu perfil foi atualizado com sucesso.',
@@ -312,6 +313,7 @@ export default function EditUserScreen() {
     try {
       await editPersonalProfile(options);
       await queryClient.refetchQueries({ queryKey: ['userData'] });
+      await queryClient.refetchQueries({ queryKey: ['user'] });
       setModalText({
         title: 'Perfil atualizado!',
         content: 'Seu perfil foi atualizado com sucesso.',

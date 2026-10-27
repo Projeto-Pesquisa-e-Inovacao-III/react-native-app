@@ -219,6 +219,7 @@ export default function AddressesScreen() {
 
   function validate(): boolean {
     const errors: Partial<Record<keyof AddressForm, string>> = {};
+    if (!form.tipo) errors.tipo = 'Tipo de agendamento obrigatório.';
     if (!form.cep.replace(/\D/g, '')) errors.cep = 'CEP obrigatório.';
     if (!form.logradouro.trim()) errors.logradouro = 'Logradouro obrigatório.';
     if (!form.numero.trim()) errors.numero = 'Número obrigatório.';
@@ -322,7 +323,7 @@ export default function AddressesScreen() {
             </View>
 
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Local (Tipo)</Text>
+              <Text style={styles.fieldLabel}>Local (Tipo) *</Text>
               <Select
                 id="tipo-select"
                 openSelectId={openSelectId}
@@ -333,6 +334,7 @@ export default function AddressesScreen() {
                 selectPlaceholder="Selecione o tipo"
                 showSelectAll={false}
               />
+              {!!formErrors.tipo && <Text style={styles.error}>{formErrors.tipo}</Text>}
             </View>
 
             <View style={styles.fieldContainer}>

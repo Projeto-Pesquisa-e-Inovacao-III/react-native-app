@@ -650,6 +650,26 @@ export default function NewEvent({
       return;
     }
 
+    const appointmentPersonalId =
+      selectedPersonal?.id ??
+      appoitmentData?.personal?.id ??
+      appoitmentData?.personalId;
+    const numericPersonalId = Number(appointmentPersonalId);
+    if (!Number.isFinite(numericPersonalId) || numericPersonalId <= 0) {
+      const msg = "Não foi possível identificar o personal deste agendamento.";
+      setError(msg);
+      if (propErrorModal) {
+        propErrorModal("Erro ao reagendar", msg);
+      } else {
+        setErrorModal({
+          visible: true,
+          title: "Erro ao reagendar",
+          content: msg,
+        });
+      }
+      return;
+    }
+
     setSubmitting(true);
     setError("");
 
@@ -661,7 +681,7 @@ export default function NewEvent({
         data: formattedDateHour,
         descricao: `${date} - ${startHour}`,
         endereco: null,
-        personalId: Number(selectedPersonal?.id ?? appoitmentData?.personal?.id ?? 0),
+        personalId: numericPersonalId,
         tipoAulaProdutoContratado: String(type || appoitmentData?.tipoAula || "PRESENCIAL").toUpperCase(),
       };
 
