@@ -19,9 +19,10 @@ import {
   Clock3,
   RotateCcw,
   User,
+  UserPlus,
   X,
 } from "lucide-react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useRouter } from "expo-router";
@@ -30,6 +31,7 @@ import ScreenHeader from "../../../src/components/ScreenHeader";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
 import VoiceRecorderButton from "../../../src/components/VoiceRecorderButton";
+import NewExperimentalEvent from "../../../src/components/NewExperimentalEvent";
 
 export type PersonalScheduleEvent = {
   agendamentoId: number;
@@ -197,9 +199,11 @@ function getClassTypeColor(type?: string) {
 
 export default function PersonalWeeklyScheduleScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedEvent, setSelectedEvent] =
     useState<PersonalScheduleEvent | null>(null);
+  const [experimentalModalVisible, setExperimentalModalVisible] = useState(false);
 
   const isCurrentWeek = useMemo(() => {
     const currentStart = startOfWeek(new Date());
@@ -375,6 +379,16 @@ export default function PersonalWeeklyScheduleScreen() {
             <Text style={styles.todayButtonText}>Hoje</Text>
           </TouchableOpacity>
         )}
+
+        {/* Botão de aula experimental */}
+        <TouchableOpacity
+          onPress={() => setExperimentalModalVisible(true)}
+          style={styles.experimentalButton}
+          activeOpacity={0.8}
+        >
+          <UserPlus size={14} color="#ffffff" />
+          <Text style={styles.experimentalButtonText}>Aula Experimental</Text>
+        </TouchableOpacity>
       </ScreenHeader>
 
       <NotificationCenterModal
@@ -389,7 +403,7 @@ export default function PersonalWeeklyScheduleScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isFetching && !isLoading}
-              onRefresh={refetch}
+              onRefresh={() => { void refetch(); }}
               colors={["#1C6AAB"]}
               tintColor="#1C6AAB"
             />
@@ -707,6 +721,16 @@ export default function PersonalWeeklyScheduleScreen() {
         </Pressable>
       </Modal>
 
+      {/* Modal de Agendamento Experimental */}
+      <NewExperimentalEvent
+        visible={experimentalModalVisible}
+        onClose={() => setExperimentalModalVisible(false)}
+        onSuccess={() => {
+          setExperimentalModalVisible(false);
+          void queryClient.invalidateQueries({ queryKey: ["personalWeeklySchedule"] });
+        }}
+      />
+
       {/* Botão de gravação de áudio para agendamento com IA */}
       <VoiceRecorderButton />
     </View>
@@ -759,6 +783,24 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   todayButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  experimentalButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  experimentalButtonText: {
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "700",

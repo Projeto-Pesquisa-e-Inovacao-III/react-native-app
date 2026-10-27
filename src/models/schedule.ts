@@ -111,3 +111,29 @@ export type PaginatedResponse<T> = {
     totalPages: number;
   };
 };
+
+export type ExperimentalSchedule = {
+  nomeAluno: string;
+  sexo: string;
+  emailAluno: string;
+  cpfAluno: string;
+  ddd: string;
+  numero: string;
+  pais: string;
+  dataNascimento: string;
+  agendamentoDTO: {
+    data: string;
+    descricao: string;
+    novoEndereco: {
+      numero: string;
+      complemento?: string;
+      unidade?: string;
+      tipo: string;
+      cep: {
+        id: string;
+      };
+    };
+    personalId: number;
+    tipoAulaProdutoContratado: string;
+  };
+};

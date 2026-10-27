@@ -10,6 +10,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  Calendar,
+  CalendarCheck,
+  Clock,
+  Dumbbell,
+  Home,
+  Activity,
+} from "lucide-react-native";
 import { getPersonalList, insertAppointment, disabledPersonalDays, rescheduleAppointment } from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
 import { getUserAddresses, lookupCep } from "../constants/address";
@@ -104,6 +112,35 @@ function formatDate(date: string) {
   return Number.isNaN(parsed.getTime())
     ? date
     : parsed.toLocaleDateString("pt-BR");
+}
+
+function getClassTypeBadge(type: string) {
+  const upper = (type || "").toUpperCase();
+  if (upper.includes("RESIDENCIAL")) {
+    return {
+      label: "Residencial",
+      bg: "#fef3c7",
+      color: "#92400e",
+      borderColor: "#fde68a",
+      icon: Home,
+    };
+  }
+  if (upper.includes("FUNCIONAL")) {
+    return {
+      label: "Funcional",
+      bg: "#f3e8ff",
+      color: "#6b21a8",
+      borderColor: "#e9d5ff",
+      icon: Activity,
+    };
+  }
+  return {
+    label: "Presencial",
+    bg: "#e0f2fe",
+    color: "#0369a1",
+    borderColor: "#bae6fd",
+    icon: Dumbbell,
+  };
 }
 
 function getPeriod(hour: string): TimePeriod {
@@ -892,13 +929,72 @@ export default function NewEvent({
           </>
         ) : (
           <>
-            <View style={styles.summary}>
-              <Text style={styles.summaryTitle}>Resumo do agendamento</Text>
-              <Text style={styles.summaryText}>Personal: {selectedPersonal?.nome ?? '-'}</Text>
-              <Text style={styles.summaryText}>Data: {formatDate(date)}</Text>
-              <Text style={styles.summaryText}>Horário: {startHour}</Text>
-              <Text style={styles.summaryText}>Tipo de aula: {type}</Text>
-            </View>
+            {(() => {
+              const badge = getClassTypeBadge(type);
+              const BadgeIcon = badge.icon;
+              return (
+                <View style={styles.summaryCard}>
+                  {/* Top Bar: Title + Modality Chip */}
+                  <View style={styles.summaryHeader}>
+                    <View style={styles.summaryTitleRow}>
+                      <View style={styles.summaryHeaderIcon}>
+                        <CalendarCheck size={16} color="#0f567f" />
+                      </View>
+                      <Text style={styles.summaryTitle}>Resumo do agendamento</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.classTypeBadge,
+                        {
+                          backgroundColor: badge.bg,
+                          borderColor: badge.borderColor,
+                        },
+                      ]}
+                    >
+                      <BadgeIcon size={12} color={badge.color} />
+                      <Text style={[styles.classTypeBadgeText, { color: badge.color }]}>
+                        {badge.label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Date & Time Highlight Box */}
+                  <View style={styles.dateTimeBanner}>
+                    <View style={styles.dateTimeCol}>
+                      <View style={styles.dateTimeLabelRow}>
+                        <Calendar size={13} color="#0f567f" />
+                        <Text style={styles.dateTimeLabel}>DATA</Text>
+                      </View>
+                      <Text style={styles.dateTimeValue}>{formatDate(date) || "Não definida"}</Text>
+                    </View>
+                    <View style={styles.dateTimeDivider} />
+                    <View style={styles.dateTimeCol}>
+                      <View style={styles.dateTimeLabelRow}>
+                        <Clock size={13} color="#0f567f" />
+                        <Text style={styles.dateTimeLabel}>HORÁRIO</Text>
+                      </View>
+                      <Text style={styles.dateTimeValue}>{startHour || "--:--"}</Text>
+                    </View>
+                  </View>
+
+                  {/* Personal Trainer */}
+                  <View style={styles.personRow}>
+                    <View style={[styles.personIconCircle, styles.personalIconCircle]}>
+                      <Dumbbell size={16} color="#4f46e5" />
+                    </View>
+                    <View style={styles.personInfo}>
+                      <Text style={styles.personRole}>PERSONAL TRAINER</Text>
+                      <Text style={styles.personName} numberOfLines={1}>
+                        {selectedPersonal?.nome ?? "Personal"}
+                      </Text>
+                      <Text style={styles.personSubtext} numberOfLines={1}>
+                        {selectedPersonal?.especialidade || "Personal Trainer"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
 
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Endereço do local</Text>
@@ -1336,24 +1432,130 @@ const styles = StyleSheet.create({
     flex: 0.35,
     minWidth: 0,
   },
-  summary: {
+  summaryCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     padding: 16,
+    marginBottom: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  summaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  summaryTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  summaryHeaderIcon: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
     backgroundColor: "#e8f3fa",
-    borderWidth: 1,
-    borderColor: "#c8e0ee",
-    marginBottom: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   summaryTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "800",
-    color: "#173a52",
-    marginBottom: 8,
+    color: "#0f283d",
   },
-  summaryText: {
-    color: "#355c73",
-    marginBottom: 4,
+  classTypeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  classTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  dateTimeBanner: {
+    flexDirection: "row",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  dateTimeCol: {
+    flex: 1,
+    gap: 3,
+  },
+  dateTimeLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  dateTimeLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.5,
+  },
+  dateTimeValue: {
     fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    paddingLeft: 18,
+  },
+  dateTimeDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#e2e8f0",
+    marginHorizontal: 10,
+  },
+  personRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  personIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  personalIconCircle: {
+    backgroundColor: "#eef2ff",
+  },
+  personInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  personRole: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.4,
+  },
+  personName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  personSubtext: {
+    fontSize: 12,
+    color: "#64748b",
   },
   actions: {
     flexDirection: "row",
