@@ -2,18 +2,35 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { isRunningInExpoGo, requireOptionalNativeModule } from "expo";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Mic, X, Sparkles, RefreshCw } from "lucide-react-native";
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
+import type {
+  ExpoSpeechRecognitionModule as ExpoSpeechRecognitionModuleType,
+  useSpeechRecognitionEvent as useSpeechRecognitionEventType,
 } from "expo-speech-recognition";
+
+const isSpeechRecognitionSupported =
+  !isRunningInExpoGo() &&
+  (Platform.OS === "web" ||
+    requireOptionalNativeModule("ExpoSpeechRecognition") != null);
+
+const speechRecognitionPkg = isSpeechRecognitionSupported
+  ? (require("expo-speech-recognition") as typeof import("expo-speech-recognition"))
+  : null;
+
+const SpeechRecognitionModule: typeof ExpoSpeechRecognitionModuleType | null =
+  speechRecognitionPkg?.ExpoSpeechRecognitionModule ?? null;
+
+const useSafeSpeechRecognitionEvent: typeof useSpeechRecognitionEventType =
+  speechRecognitionPkg?.useSpeechRecognitionEvent ?? (() => {});
 
 type WaveformBarProps = {
   baseHeight: number;
@@ -77,21 +94,21 @@ export default function AiVoiceScreen() {
   const isStartingRef = useRef(false);
   const isRecognitionActiveRef = useRef(false);
 
-  useSpeechRecognitionEvent('start', () => {
+  useSafeSpeechRecognitionEvent('start', () => {
     isRecognitionActiveRef.current = true;
     isStartingRef.current = false;
     setIsRecording(true);
     setIsProcessing(false);
   });
 
-  useSpeechRecognitionEvent('end', () => {
+  useSafeSpeechRecognitionEvent('end', () => {
     isRecognitionActiveRef.current = false;
     isStartingRef.current = false;
     setIsRecording(false);
     setIsProcessing(false);
   });
 
-  useSpeechRecognitionEvent('result', (event) => {
+  useSafeSpeechRecognitionEvent('result', (event) => {
     const best = event.results[0]?.transcript;
     if (best) {
       setTranscriptionText(best);
@@ -101,7 +118,7 @@ export default function AiVoiceScreen() {
     }
   });
 
-  useSpeechRecognitionEvent('error', (event) => {
+  useSafeSpeechRecognitionEvent('error', (event) => {
     isRecognitionActiveRef.current = false;
     isStartingRef.current = false;
     setIsProcessing(false);
@@ -130,18 +147,18 @@ export default function AiVoiceScreen() {
     }
   });
 
-  useSpeechRecognitionEvent('nomatch', () => {
+  useSafeSpeechRecognitionEvent('nomatch', () => {
     setIsProcessing(false);
     setTranscriptionText(null);
   });
 
-  useSpeechRecognitionEvent('volumechange', (event) => {
+  useSafeSpeechRecognitionEvent('volumechange', (event) => {
     const vol = Math.max(0, Math.min(1, (event.value + 2) / 12));
     setNormalizedVolume(vol);
   });
 
   const startRecording = useCallback(async () => {
-    if (isStartingRef.current || isRecognitionActiveRef.current) {
+    if (!SpeechRecognitionModule || isStartingRef.current || isRecognitionActiveRef.current) {
       return;
     }
 
@@ -151,7 +168,7 @@ export default function AiVoiceScreen() {
     setIsProcessing(false);
 
     try {
-      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const result = await SpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) {
         isStartingRef.current = false;
         Alert.alert(
@@ -166,7 +183,7 @@ export default function AiVoiceScreen() {
         return;
       }
 
-      ExpoSpeechRecognitionModule.start({
+      SpeechRecognitionModule.start({
         lang: 'pt-BR',
         interimResults: true,
         iosVoiceProcessingEnabled: true,
@@ -185,13 +202,13 @@ export default function AiVoiceScreen() {
   }, [router]);
 
   const stopRecording = useCallback(() => {
-    if (!isRecognitionActiveRef.current) {
+    if (!SpeechRecognitionModule || !isRecognitionActiveRef.current) {
       return;
     }
 
     isCancellingRef.current = true;
     setIsProcessing(true);
-    ExpoSpeechRecognitionModule.stop();
+    SpeechRecognitionModule.stop();
   }, []);
 
   const cancelRecording = useCallback(() => {
@@ -200,7 +217,7 @@ export default function AiVoiceScreen() {
     isRecognitionActiveRef.current = false;
     setIsProcessing(false);
     setIsRecording(false);
-    ExpoSpeechRecognitionModule.abort();
+    SpeechRecognitionModule?.abort();
     router.back();
   }, [router]);
 
@@ -210,12 +227,15 @@ export default function AiVoiceScreen() {
   });
 
   useEffect(() => {
+    if (!SpeechRecognitionModule) {
+      return;
+    }
     const timer = setTimeout(() => {
       startRecordingRef.current();
     }, 600);
     return () => {
       clearTimeout(timer);
-      ExpoSpeechRecognitionModule.abort();
+      SpeechRecognitionModule.abort();
     };
   }, [startRecording]);
 
