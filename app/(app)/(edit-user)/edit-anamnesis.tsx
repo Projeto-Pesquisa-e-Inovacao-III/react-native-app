@@ -140,7 +140,7 @@ export default function EditAnamnesisScreen() {
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={[styles.container, { paddingTop: Math.max(insets.top, 18), paddingBottom: Math.max(insets.bottom, 28) + 70 }]}
-        refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={() => void query.refetch()} colors={['#093A5D']} />}
+        refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} colors={['#093A5D']} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
