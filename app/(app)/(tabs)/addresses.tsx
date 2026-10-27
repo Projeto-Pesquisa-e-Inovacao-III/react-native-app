@@ -25,7 +25,9 @@ import {
   Flag,
   Home,
   Briefcase,
+  ArrowLeft,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 import InputWithIcon from '../../../src/components/InputWithIcon';
 import Select from '../../../src/components/Select';
@@ -115,6 +117,7 @@ const TIPO_OPTIONS = [
 const ADDRESS_LIMIT = 6;
 
 export default function AddressesScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
@@ -206,6 +209,18 @@ export default function AddressesScreen() {
     setFormErrors({});
   }
 
+  function handleBackPress() {
+    if (showForm) {
+      handleCancelForm();
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.push('/(app)/(tabs)/more');
+    }
+  }
+
   function validate(): boolean {
     const errors: Partial<Record<keyof AddressForm, string>> = {};
     if (!form.cep.replace(/\D/g, '')) errors.cep = 'CEP obrigatório.';
@@ -275,12 +290,25 @@ export default function AddressesScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={[styles.headerArea, { paddingTop: Math.max(insets.top, 16) }]}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBackPress}
+            activeOpacity={0.7}
+          >
+            <ArrowLeft size={22} color="#0F172A" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Endereços</Text>
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={[
           styles.container,
           {
-            paddingTop: Math.max(insets.top, 20),
-            paddingBottom: Math.max(insets.bottom, 24) + 40,
+            paddingTop: 16,
+            paddingBottom: Math.max(insets.bottom, 24) + 80,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -451,7 +479,6 @@ export default function AddressesScreen() {
         ) : (
           <View style={styles.contentWrapper}>
             <View style={styles.headerRow}>
-              <Text style={styles.sectionTitle}>Endereços</Text>
               <Text style={styles.sectionSubtitle}>
                 Gerencie os endereços vinculados à sua conta.
               </Text>
@@ -587,6 +614,32 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+  },
+  headerArea: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    zIndex: 2,
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  title: {
+    color: '#0F172A',
+    fontSize: 24,
+    fontWeight: '700',
   },
   container: {
     paddingHorizontal: 16,

@@ -80,7 +80,7 @@ export default function MoreRoute() {
             <OptionItem 
               icon={<MapPin size={22} color="#192633" />} 
               title='Endereços' 
-              onClick={() => router.push('/(app)/(edit-user)/addresses')} 
+              onClick={() => router.push('/(app)/(tabs)/addresses')} 
               isLast={false}
             />
             <OptionItem 

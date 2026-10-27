@@ -16,9 +16,7 @@ export default function EditUserLayout() {
     ? 'anamnesis'
     : pathname.includes('security')
       ? 'security'
-      : pathname.includes('addresses')
-        ? 'addresses'
-        : 'edituser';
+      : 'edituser';
 
   function handleTabPress(tab: TabName) {
     switch (tab) {
@@ -45,13 +43,21 @@ export default function EditUserLayout() {
     }
   }
 
+  function handleBackPress() {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.push('/(app)/(tabs)/more');
+    }
+  }
+
   return (
     <View style={styles.screen}>
       <View style={[styles.headerArea, { paddingTop: Math.max(insets.top, 18) }]}>
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={handleBackPress}
             activeOpacity={0.7}
           >
             <ArrowLeft size={22} color="#0F172A" />
