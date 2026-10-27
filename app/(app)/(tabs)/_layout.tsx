@@ -31,7 +31,8 @@ export default function TabsLayout() {
       pathname.includes('/plans-history') ||
       pathname.includes('/create-personal') ||
       pathname.includes('/dashboard') ||
-      pathname.includes('/set-availability')
+      pathname.includes('/set-availability') ||
+      pathname.includes('/addresses')
     ) return 'more';
     if (pathname.includes('/schedule') || pathname.includes('/personal-schedule')) return 'schedule';
     if (pathname.includes('/requests')) return 'requests';
@@ -84,6 +85,7 @@ export default function TabsLayout() {
     <>
       <StatusBar style={isDarkHeader ? 'light' : 'dark'} animated />
       <Tabs
+        backBehavior="history"
         screenOptions={{ headerShown: false }}
         tabBar={renderTabBar}
       >
@@ -103,6 +105,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="set-availability" options={{ title: 'Ajustar Disponibilidade' }} />
         <Tabs.Screen name="create-personal" options={{ title: 'Criar Personal' }} />
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
+        <Tabs.Screen name="addresses" options={{ title: 'Endereços' }} />
       </Tabs>
     </>
   );

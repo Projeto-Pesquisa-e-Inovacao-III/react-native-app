@@ -7,11 +7,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { User, HeartPulse, Shield, MapPin } from 'lucide-react-native';
+import { User, HeartPulse, Shield } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 
 type AsideEditUserProps = {
-  activeTab: 'edituser' | 'anamnesis' | 'security' | 'addresses';
+  activeTab: 'edituser' | 'anamnesis' | 'security';
 };
 
 export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
@@ -42,16 +42,6 @@ export default function AsideEditUser({ activeTab }: AsideEditUserProps) {
       icon: Shield,
       route: '/(app)/(edit-user)/security',
     },
-    ...(isAluno
-      ? [
-          {
-            id: 'addresses',
-            title: 'Endereços',
-            icon: MapPin,
-            route: '/(app)/(edit-user)/addresses',
-          },
-        ]
-      : []),
   ];
 
   function handleNavigate(route: string) {
