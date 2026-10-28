@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -12,10 +13,16 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { CopyCheck, Info, Settings, TriangleAlert } from "lucide-react-native";
+import {
+  Check,
+  ChevronDown,
+  CopyCheck,
+  Info,
+  Settings,
+  TriangleAlert,
+} from "lucide-react-native";
 
 import {
   getPersonalBuffer,
@@ -41,6 +48,13 @@ const DAYS_META: Record<string, string> = {
   SEXTA: "Sexta-feira",
   SABADO: "Sábado",
 };
+const BUFFER_OPTIONS = [
+  { label: "15 min", value: "15" },
+  { label: "20 min", value: "20" },
+  { label: "30 min", value: "30" },
+  { label: "45 min", value: "45" },
+  { label: "1 hora", value: "60" },
+];
 
 function normalizeTime(value: string): string {
   const cleaned = value.replace(/[^0-9]/g, "");
@@ -136,6 +150,7 @@ export default function SetAvailabilityScreen() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const [pendingBuffer, setPendingBuffer] = useState<string | null>(null);
+  const [isBufferPickerOpen, setIsBufferPickerOpen] = useState(false);
   const [globalManha, setGlobalManha] = useState({ start: "08:00", end: "12:00" });
   const [globalTarde, setGlobalTarde] = useState({ start: "13:00", end: "18:00" });
 
@@ -427,6 +442,14 @@ export default function SetAvailabilityScreen() {
     if (saveStatus === "error") return "Erro ao salvar";
     return "";
   }, [saveStatus]);
+  const selectedBuffer =
+    pendingBuffer !== null
+      ? pendingBuffer
+      : String(bufferQuery.data || "0");
+  const selectedBufferLabel =
+    BUFFER_OPTIONS.find(function (option) {
+      return option.value === selectedBuffer;
+    })?.label || "Selecione um intervalo";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC" }} edges={['top', 'left', 'right']}>
@@ -451,20 +474,18 @@ export default function SetAvailabilityScreen() {
               <Settings size={15} color="#64748B" />
               <Text style={styles.controlLabel}>Intervalo pós agendamentos</Text>
             </View>
-            <View style={styles.pickerWrap}>
-              <Picker
-                selectedValue={pendingBuffer !== null ? pendingBuffer : bufferQuery.data || "0"}
-                onValueChange={function (value) {
-                  handleUpdateBuffer(String(value));
-                }}
-              >
-                <Picker.Item label="15 min" value="15" />
-                <Picker.Item label="20 min" value="20" />
-                <Picker.Item label="30 min" value="30" />
-                <Picker.Item label="45 min" value="45" />
-                <Picker.Item label="1 hora" value="60" />
-              </Picker>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Intervalo pós agendamentos: ${selectedBufferLabel}`}
+              accessibilityState={{ expanded: isBufferPickerOpen }}
+              style={styles.pickerTrigger}
+              onPress={function () {
+                setIsBufferPickerOpen(true);
+              }}
+            >
+              <Text style={styles.pickerTriggerText}>{selectedBufferLabel}</Text>
+              <ChevronDown size={18} color="#475569" />
+            </Pressable>
           </View>
 
           <View style={styles.infoRow}>
@@ -634,7 +655,59 @@ export default function SetAvailabilityScreen() {
           </Pressable>
         </View>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+
+      <Modal
+          transparent
+          animationType="fade"
+          visible={isBufferPickerOpen}
+          onRequestClose={function () {
+            setIsBufferPickerOpen(false);
+          }}
+      >
+          <View style={styles.pickerOverlay}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Fechar opções de intervalo"
+              style={StyleSheet.absoluteFill}
+              onPress={function () {
+                setIsBufferPickerOpen(false);
+              }}
+            />
+            <View style={styles.pickerSheet}>
+              <Text style={styles.pickerSheetTitle}>Intervalo pós agendamento</Text>
+              {BUFFER_OPTIONS.map(function (option) {
+                const isSelected = option.value === selectedBuffer;
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isSelected }}
+                    style={[
+                      styles.pickerOption,
+                      isSelected ? styles.pickerOptionSelected : null,
+                    ]}
+                    onPress={function () {
+                      handleUpdateBuffer(option.value);
+                      setIsBufferPickerOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerOptionText,
+                        isSelected ? styles.pickerOptionTextSelected : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    {isSelected ? <Check size={18} color="#0B3A5D" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+      </Modal>
 
       <InfoPersonalSchedulesModal
         visible={confirmVisible}
@@ -706,11 +779,65 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "500",
   },
-  pickerWrap: {
-    borderWidth: 1.5,
-    borderColor: "#e2e8f0",
-    borderRadius: 8,
-    overflow: "hidden",
+  pickerTrigger: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  pickerTriggerText: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  pickerOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+  },
+  pickerSheet: {
+    width: "100%",
+    maxWidth: 420,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  pickerSheetTitle: {
+    marginBottom: 10,
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  pickerOption: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  pickerOptionSelected: {
+    backgroundColor: "#eff6ff",
+  },
+  pickerOptionText: {
+    color: "#1e293b",
+    fontSize: 15,
+  },
+  pickerOptionTextSelected: {
+    color: "#0B3A5D",
+    fontWeight: "700",
   },
   infoRow: {
     flexDirection: "row",
@@ -803,20 +930,25 @@ const styles = StyleSheet.create({
   },
   dayTimes: {
     gap: 8,
+    minWidth: 0,
   },
   timeRange: {
     width: "100%",
+    minWidth: 0,
   },
   timeInputsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    width: "100%",
+    minWidth: 0,
   },
   keyboardAvoid: {
     flex: 1,
   },
   timeInput: {
     flex: 1,
+    minWidth: 0,
     height: 40,
     borderWidth: 1.5,
     borderColor: "#e2e8f0",
