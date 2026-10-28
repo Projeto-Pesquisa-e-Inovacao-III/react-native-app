@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackageCard } from "../../../src/components/PackageCard";
 import AddPackagePlan from "../../../src/components/modals/AddPackagePlan";
 import TimerModal from "../../../src/components/modals/TimerModal";
@@ -39,6 +39,7 @@ type ModalType =
   | null;
 
 export default function PlansScreen() {
+  const queryClient = useQueryClient();
   const { roles } = useAuth();
   const isAdmin = !!roles?.includes("admin");
   const isPersonal = !!roles?.includes("personal") && !isAdmin;
@@ -237,6 +238,8 @@ export default function PlansScreen() {
               content: openModal === "edit" ? "O pacote foi editado com sucesso." : "O pacote foi adicionado com sucesso.",
             });
             setOpenModal("success");
+            void queryClient.invalidateQueries({ queryKey: ["productsExhibitions"] });
+            void refetch();
           }}
         />
       )}
@@ -256,6 +259,8 @@ export default function PlansScreen() {
               content: openModal === "editAdditional" ? "O adicional foi editado com sucesso." : "O adicional foi criado com sucesso.",
             });
             setOpenModal("success");
+            void queryClient.invalidateQueries({ queryKey: ["productsExhibitions"] });
+            void refetch();
           }}
         />
       )}

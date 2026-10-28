@@ -14,9 +14,12 @@ import {
   ArrowUpRight,
   Calendar,
   CalendarDays,
+  CalendarClock,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Info,
   RotateCcw,
   User,
   UserPlus,
@@ -26,12 +29,21 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useRouter } from "expo-router";
-import { findPersonalRequests } from "../../../src/constants/schedule";
+import {
+  findPersonalRequests,
+  acceptUserAppointment,
+  refuseAppointment,
+  findAppointmentById,
+} from "../../../src/constants/schedule";
 import ScreenHeader from "../../../src/components/ScreenHeader";
 import NotificationCenterModal from "../../../src/components/modals/NotificationCenterModal";
 import { useNotifications } from "../../../src/contexts/NotificationContext";
-import VoiceRecorderButton from "../../../src/components/VoiceRecorderButton";
 import NewExperimentalEvent from "../../../src/components/NewExperimentalEvent";
+import NewEvent from "../../../src/components/NewEvent";
+import ConfirmModal from "../../../src/components/modals/ConfirmModal";
+import SuccessModal from "../../../src/components/modals/SuccessModal";
+import ErrorModal from "../../../src/components/modals/ErrorModal";
+import { useAuth } from "../../../src/contexts/AuthContext";
 
 export type PersonalScheduleEvent = {
   agendamentoId: number;
@@ -199,11 +211,88 @@ function getClassTypeColor(type?: string) {
 
 export default function PersonalWeeklyScheduleScreen() {
   const router = useRouter();
+  const { roles } = useAuth();
   const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedEvent, setSelectedEvent] =
     useState<PersonalScheduleEvent | null>(null);
   const [experimentalModalVisible, setExperimentalModalVisible] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
+  const [errorInfo, setErrorInfo] = useState<{ title: string; content: string } | null>(null);
+  const [confirmDeclineId, setConfirmDeclineId] = useState<number | null>(null);
+  const [rescheduleData, setRescheduleData] = useState<any>(null);
+  const [rescheduleId, setRescheduleId] = useState<number | null>(null);
+
+  async function handleApprove(id: number) {
+    try {
+      await acceptUserAppointment(id);
+      setSelectedEvent(null);
+      setSuccessInfo({
+        title: "Agendamento Aprovado",
+        content: "O agendamento foi aprovado com sucesso.",
+      });
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["personalWeeklySchedule"] });
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+    } catch (err: any) {
+      setErrorInfo({
+        title: "Erro ao aceitar",
+        content: err?.response?.data?.message || "Não foi possível aceitar o agendamento.",
+      });
+    }
+  }
+
+  function handleOpenDeclineConfirm(id: number) {
+    setSelectedEvent(null);
+    setConfirmDeclineId(id);
+  }
+
+  async function handleConfirmDecline() {
+    if (!confirmDeclineId) return;
+    try {
+      await refuseAppointment(confirmDeclineId);
+      setConfirmDeclineId(null);
+      setSuccessInfo({
+        title: "Agendamento Recusado",
+        content: "O agendamento foi recusado com sucesso.",
+      });
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["personalWeeklySchedule"] });
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+    } catch (err: any) {
+      setConfirmDeclineId(null);
+      setErrorInfo({
+        title: "Erro ao recusar",
+        content: err?.response?.data?.message || "Não foi possível recusar o agendamento.",
+      });
+    }
+  }
+
+  async function handleOpenReschedule(id: number) {
+    try {
+      setSelectedEvent(null);
+      setRescheduleId(id);
+      const res = await findAppointmentById(id);
+      setRescheduleData(res.data);
+    } catch (err: any) {
+      setErrorInfo({
+        title: "Erro ao carregar dados",
+        content: err?.response?.data?.message || "Não foi possível carregar os dados para reagendamento.",
+      });
+    }
+  }
+
+  async function handleSuccessReschedule() {
+    setRescheduleId(null);
+    setRescheduleData(null);
+    setSuccessInfo({
+      title: "Reagendado com sucesso",
+      content: "Horário reagendado com sucesso.",
+    });
+    await refetch();
+    void queryClient.invalidateQueries({ queryKey: ["personalWeeklySchedule"] });
+    void queryClient.invalidateQueries({ queryKey: ["overview"] });
+  }
 
   const isCurrentWeek = useMemo(() => {
     const currentStart = startOfWeek(new Date());
@@ -673,40 +762,76 @@ export default function PersonalWeeklyScheduleScreen() {
                   </View>
                 </View>
 
-                {/* Ações */}
+                {/* Ações: Aprovar, Recusar, Reagendar e Detalhes do Agendamento */}
+                {selectedEvent.status?.toUpperCase() === "PENDENTE_PERSONAL_APROVACAO" && (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: "#16A34A" }]}
+                      activeOpacity={0.85}
+                      onPress={() => handleApprove(selectedEvent.agendamentoId)}
+                    >
+                      <Check size={18} color="#FFFFFF" strokeWidth={2.5} />
+                      <Text style={styles.actionButtonText}>Aceitar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: "#DC2626" }]}
+                      activeOpacity={0.85}
+                      onPress={() => handleOpenDeclineConfirm(selectedEvent.agendamentoId)}
+                    >
+                      <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+                      <Text style={styles.actionButtonText}>Recusar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: "#fff", borderColor: "#19587A", borderWidth: 1 }]}
+                      activeOpacity={0.85}
+                      onPress={() => handleOpenReschedule(selectedEvent.agendamentoId)}
+                    >
+                      <CalendarClock size={18} color="#19587A" strokeWidth={2} />
+                      <Text style={[styles.actionButtonText, { color: "#19587A" }]}>Reagendar</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {selectedEvent.status?.toUpperCase() === "APROVADO" && (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: "#2563EB" }]}
+                      activeOpacity={0.85}
+                      onPress={() => handleOpenReschedule(selectedEvent.agendamentoId)}
+                    >
+                      <CalendarClock size={18} color="#FFFFFF" strokeWidth={2} />
+                      <Text style={styles.actionButtonText}>Reagendar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: "#DC2626" }]}
+                      activeOpacity={0.85}
+                      onPress={() => handleOpenDeclineConfirm(selectedEvent.agendamentoId)}
+                    >
+                      <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+                      <Text style={styles.actionButtonText}>Recusar</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
                 <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: '#19587A', marginBottom: 10 }]}
-                  activeOpacity={0.8}
+                  style={[styles.actionButton, { backgroundColor: "#19587A" }]}
+                  activeOpacity={0.85}
                   onPress={() => {
                     const targetId = selectedEvent.agendamentoId;
                     setSelectedEvent(null);
                     router.push({
-                      pathname: '/(app)/(tabs)/schedule-details',
+                      pathname: "/(app)/(tabs)/schedule-details",
                       params: { id: targetId },
                     });
                   }}
                 >
-                  <Text style={styles.actionButtonText}>
-                    Ver detalhes da aula
-                  </Text>
+                  <Info size={18} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Detalhes do agendamento</Text>
                   <ArrowUpRight size={16} color="#FFFFFF" />
                 </TouchableOpacity>
-
-                {selectedEvent.status === "PENDENTE_PERSONAL_APROVACAO" && (
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setSelectedEvent(null);
-                      router.push("/(app)/(tabs)/requests");
-                    }}
-                  >
-                    <Text style={styles.actionButtonText}>
-                      Gerenciar em Solicitações
-                    </Text>
-                    <ArrowUpRight size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                )}
 
                 <TouchableOpacity
                   style={styles.closeModalButton}
@@ -731,8 +856,48 @@ export default function PersonalWeeklyScheduleScreen() {
         }}
       />
 
-      {/* Botão de gravação de áudio para agendamento com IA */}
-      <VoiceRecorderButton />
+      <ConfirmModal
+        visible={confirmDeclineId !== null}
+        title="Recusar agendamento"
+        content="Tem certeza que deseja recusar este agendamento?"
+        confirmText="Sim, recusar"
+        isDestructive={true}
+        onConfirm={handleConfirmDecline}
+        onClose={() => setConfirmDeclineId(null)}
+      />
+
+      {rescheduleId !== null && rescheduleData && (
+        <NewEvent
+          visible={true}
+          onClose={() => {
+            setRescheduleId(null);
+            setRescheduleData(null);
+          }}
+          isReschedule={true}
+          rescheduleId={rescheduleId}
+          appoitmentData={rescheduleData}
+          title="Reagendar horário"
+          buttonTitle="Reagendar"
+          goToNextStep={false}
+          openModalExtern={handleSuccessReschedule}
+          errorModal={(t, m) => setErrorInfo({ title: t, content: m })}
+          typeUser={roles || []}
+        />
+      )}
+
+      <SuccessModal
+        visible={!!successInfo}
+        title={successInfo?.title}
+        content={successInfo?.content}
+        onClose={() => setSuccessInfo(null)}
+      />
+
+      <ErrorModal
+        visible={!!errorInfo}
+        title={errorInfo?.title}
+        content={errorInfo?.content}
+        onClose={() => setErrorInfo(null)}
+      />
     </View>
   );
 }
@@ -1100,6 +1265,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
     borderRadius: 12,
     paddingVertical: 11,
+    marginTop: 8,
   },
   closeModalButtonText: {
     color: "#475467",

@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Linking,
   Image,
   TextInput,
@@ -26,7 +25,6 @@ import DateRangePickerModal, { type DateRange } from '../../../src/components/mo
 import { useNotifications } from '../../../src/contexts/NotificationContext';
 import NotificationCenterModal from '../../../src/components/modals/NotificationCenterModal';
 import ScreenHeader from '../../../src/components/ScreenHeader';
-import VoiceRecorderButton from '../../../src/components/VoiceRecorderButton';
 import {
   findPersonalRequests,
   getScheduleData,
@@ -34,10 +32,13 @@ import {
   refuseAppointment,
   concludeAppointment,
   reportAbsencePersonal,
+  findAppointmentById,
 } from '../../../src/constants/schedule';
 import type { CheckSchedule, AbsenceAppointment } from '../../../src/models/schedule';
+import NewEvent from '../../../src/components/NewEvent';
 import ConfirmModal from '../../../src/components/modals/ConfirmModal';
 import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ErrorModal from '../../../src/components/modals/ErrorModal';
 import ConcludeAppointmentModal from '../../../src/components/modals/ConcludeAppointmentModal';
 import QRCodeScannerModal from '../../../src/components/modals/QRCodeScannerModal';
 import RegisterAbsenceModal from '../../../src/components/modals/RegisterAbsenceModal';
@@ -431,6 +432,11 @@ export default function CheckScheduleScreen() {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedId, setSelectedId] = useState<number>(0);
   const [successInfo, setSuccessInfo] = useState<{ title: string; content: string } | null>(null);
+  const [errorInfo, setErrorInfo] = useState<{ title: string; content: string } | null>(null);
+  const [rescheduleAppointmentData, setRescheduleAppointmentData] = useState<any>(null);
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [rescheduleTargetId, setRescheduleTargetId] = useState<number | null>(null);
+  const isLoadingRescheduleRef = useRef(false);
 
   function togglePanel() {
     const nextState = !isPanelOpen;
@@ -492,16 +498,32 @@ export default function CheckScheduleScreen() {
           nameFilter || undefined,
         );
         const data = res?.data;
-        const items = Array.isArray(data)
+        const items: CheckSchedule[] = Array.isArray(data)
           ? data
           : Array.isArray(data?.content)
           ? data.content
           : [];
 
+        const deduplicate = (list: CheckSchedule[]): CheckSchedule[] => {
+          const seen = new Set<string | number>();
+          return list.filter((item) => {
+            const id = item?.agendamentoId ?? (item as any)?.idAgendamento ?? (item as any)?.id;
+            if (id !== undefined && id !== null) {
+              if (seen.has(id)) return false;
+              seen.add(id);
+              return true;
+            }
+            const fallbackKey = `${item?.dataInicio ?? ''}_${item?.nome ?? ''}`;
+            if (seen.has(fallbackKey)) return false;
+            seen.add(fallbackKey);
+            return true;
+          });
+        };
+
         if (replace) {
-          setAppointments(items);
+          setAppointments(deduplicate(items));
         } else {
-          setAppointments((prev) => [...(Array.isArray(prev) ? prev : []), ...items]);
+          setAppointments((prev) => deduplicate([...(Array.isArray(prev) ? prev : []), ...items]));
         }
 
         const pageNumber = data?.page?.number ?? data?.number ?? pageNum;
@@ -599,17 +621,36 @@ export default function CheckScheduleScreen() {
     setSuccessInfo({ title: 'Ausência Registrada', content: 'A ausência foi registrada com sucesso.' });
   }
 
-  function handleReschedule(id: number, _date: string) {
-    Alert.alert('Reagendar', `Reagendamento ainda não implementado nesta versão mobile. ID: #${id}`);
-    // Quando implementado, chamar:
-    // const item = appointments.find((r) => r.agendamentoId === id);
-    // scheduleRescheduleNotification({
-    //   studentName: item?.nome || 'Aluno',
-    //   personalName: 'Personal Trainer',
-    //   classType: item?.tipoAula || 'Aula',
-    //   date: novaData,
-    //   time: novoHorario,
-    // });
+  async function handleReschedule(id: number, _date: string) {
+    if (isLoadingRescheduleRef.current) return;
+    isLoadingRescheduleRef.current = true;
+
+    try {
+      const res = await findAppointmentById(id);
+      setRescheduleAppointmentData(res.data);
+      setRescheduleTargetId(id);
+      setIsRescheduleModalOpen(true);
+    } catch (err: any) {
+      setRescheduleAppointmentData(null);
+      setRescheduleTargetId(null);
+      setErrorInfo({
+        title: 'Reagendar',
+        content: err?.response?.data?.message || 'Não foi possível carregar os dados para reagendamento.',
+      });
+    } finally {
+      isLoadingRescheduleRef.current = false;
+    }
+  }
+
+  async function handleSuccessReschedule() {
+    setIsRescheduleModalOpen(false);
+    setRescheduleAppointmentData(null);
+    setRescheduleTargetId(null);
+    setSuccessInfo({
+      title: 'Reagendado com sucesso',
+      content: 'Horário reagendado com sucesso.',
+    });
+    await onRefresh();
   }
 
   function handleCardPress(id: number) {
@@ -874,7 +915,13 @@ export default function CheckScheduleScreen() {
         <FlatList
           ref={flatListRef}
           data={appointments ?? []}
-          keyExtractor={(item, index) => String(item?.agendamentoId ?? index)}
+          keyExtractor={(item) => {
+            const id = item?.agendamentoId ?? (item as any)?.idAgendamento ?? (item as any)?.id;
+            if (id !== undefined && id !== null) {
+              return `appointment-${id}`;
+            }
+            return `appointment-${item?.dataInicio ?? ''}-${item?.nome ?? ''}`;
+          }}
           renderItem={({ item }) => (
             <AppointmentCard
               card={item}
@@ -960,6 +1007,33 @@ export default function CheckScheduleScreen() {
         onClose={() => setSuccessInfo(null)}
       />
 
+      <ErrorModal
+        visible={!!errorInfo}
+        title={errorInfo?.title}
+        content={errorInfo?.content}
+        onClose={() => setErrorInfo(null)}
+      />
+
+      {isRescheduleModalOpen && rescheduleTargetId !== null && (
+        <NewEvent
+          visible={true}
+          onClose={() => {
+            setIsRescheduleModalOpen(false);
+            setRescheduleAppointmentData(null);
+            setRescheduleTargetId(null);
+          }}
+          isReschedule={true}
+          rescheduleId={rescheduleTargetId}
+          appoitmentData={rescheduleAppointmentData}
+          title="Reagendar horário"
+          buttonTitle={isPersonal ? 'Reagendar' : 'Avançar'}
+          goToNextStep={!isPersonal}
+          openModalExtern={handleSuccessReschedule}
+          errorModal={(t, m) => setErrorInfo({ title: t, content: m })}
+          typeUser={roles || []}
+        />
+      )}
+
       <NotificationCenterModal
         visible={isNotificationModalVisible}
         onClose={() => setIsNotificationModalVisible(false)}
@@ -973,9 +1047,6 @@ export default function CheckScheduleScreen() {
           setSelectedDateRange(range);
         }}
       />
-
-      {/* Botão de gravação de áudio para agendamento com IA */}
-      <VoiceRecorderButton />
     </View>
   );
 }

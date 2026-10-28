@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -182,10 +181,11 @@ export default function EditUserScreen() {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert(
-          'Permissão Necessária',
-          'Precisamos de permissão para acessar sua galeria e atualizar sua foto de perfil.'
-        );
+        setModalText({
+          title: 'Permissão Necessária',
+          content: 'Precisamos de permissão para acessar sua galeria e atualizar sua foto de perfil.',
+        });
+        setOpenModal('error');
         return;
       }
 
@@ -276,6 +276,7 @@ export default function EditUserScreen() {
     try {
       await update(options);
       await queryClient.refetchQueries({ queryKey: ['userData'] });
+      await queryClient.refetchQueries({ queryKey: ['user'] });
       setModalText({
         title: 'Perfil atualizado!',
         content: 'Seu perfil foi atualizado com sucesso.',
@@ -313,6 +314,7 @@ export default function EditUserScreen() {
     try {
       await editPersonalProfile(options);
       await queryClient.refetchQueries({ queryKey: ['userData'] });
+      await queryClient.refetchQueries({ queryKey: ['user'] });
       setModalText({
         title: 'Perfil atualizado!',
         content: 'Seu perfil foi atualizado com sucesso.',

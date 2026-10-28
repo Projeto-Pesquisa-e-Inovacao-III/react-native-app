@@ -1,13 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import ErrorModal from './modals/ErrorModal';
 import { Eye, ChevronRight, Users } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import type { ListStudents } from '../models/students';
@@ -27,6 +27,9 @@ export default function UsersTable(props: {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
+  const [errorModal, setErrorModal] = useState<{ visible: boolean; title?: string; content?: string }>({
+    visible: false,
+  });
 
   function handleViewUserData(id: number, roles?: string[]) {
     const isPersonal = roles?.some(
@@ -43,7 +46,11 @@ export default function UsersTable(props: {
         params: { id: String(id) },
       });
     } catch {
-      Alert.alert('Visualizar Dados', `ID do usuário: ${id}`);
+      setErrorModal({
+        visible: true,
+        title: 'Visualizar Dados',
+        content: `ID do usuário: ${id}`,
+      });
     }
   }
 
@@ -224,6 +231,12 @@ export default function UsersTable(props: {
             </TouchableOpacity>
           );
         })}
+      <ErrorModal
+        visible={errorModal.visible}
+        title={errorModal.title}
+        content={errorModal.content}
+        onClose={() => setErrorModal((prev) => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }

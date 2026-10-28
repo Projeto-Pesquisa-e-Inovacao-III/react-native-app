@@ -92,6 +92,13 @@ export default function MonthlyCalendar({
   const activeMonth = propMonth ?? internalMonth;
 
   const monthDays = useMemo(() => getMonthMatrix(activeMonth), [activeMonth]);
+  const weeks = useMemo(() => {
+    const result: (Date | null)[][] = [];
+    for (let i = 0; i < monthDays.length; i += 7) {
+      result.push(monthDays.slice(i, i + 7));
+    }
+    return result;
+  }, [monthDays]);
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -177,89 +184,93 @@ export default function MonthlyCalendar({
         ))}
       </View>
 
-      {/* Grid de Dias */}
+      {/* Grid de Dias em Linhas Fixas */}
       <View style={styles.dayGrid}>
-        {monthDays.map((value, index) => {
-          if (!value) {
-            return <View key={`empty-${index}`} style={styles.emptyCell} />;
-          }
+        {weeks.map((week, weekIndex) => (
+          <View key={`week-${weekIndex}`} style={styles.weekGridRow}>
+            {week.map((value, dayIndex) => {
+              if (!value) {
+                return <View key={`empty-${weekIndex}-${dayIndex}`} style={styles.emptyCell} />;
+              }
 
-          const isoKey = toISODate(value);
-          const isSelected = normalizedSelectedDate ? isSameDay(value, normalizedSelectedDate) : false;
-          const isToday = isSameDay(value, today);
-          const dayDate = new Date(value.getFullYear(), value.getMonth(), value.getDate());
-          const isPastDay = dayDate.getTime() < today.getTime();
-          const isPastOrToday = dayDate.getTime() <= today.getTime();
+              const isoKey = toISODate(value);
+              const isSelected = normalizedSelectedDate ? isSameDay(value, normalizedSelectedDate) : false;
+              const isToday = isSameDay(value, today);
+              const dayDate = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+              const isPastDay = dayDate.getTime() < today.getTime();
+              const isPastOrToday = dayDate.getTime() <= today.getTime();
 
-          const weekdayKey = WEEKDAY_PT[value.getDay()];
-          const isRuleDisabled = disabledDays.includes(weekdayKey) || disabledDates.includes(isoKey);
+              const weekdayKey = WEEKDAY_PT[value.getDay()];
+              const isRuleDisabled = disabledDays.includes(weekdayKey) || disabledDates.includes(isoKey);
 
-          const dayEvents = eventsByDay.get(isoKey) ?? [];
-          const hasEvents = dayEvents.length > 0 || (hasEventOnDate?.(value) ?? false);
+              const dayEvents = eventsByDay.get(isoKey) ?? [];
+              const hasEvents = dayEvents.length > 0 || (hasEventOnDate?.(value) ?? false);
 
-          // Regra das 24 horas: dias de hoje ou passados (< 24h) ficam cinzas e não clicáveis,
-          // a menos que já possuam agendamentos para visualização via popup.
-          const is24hDisabled = isPastOrToday && !hasEvents;
-          const isDisabledDay = (isRuleDisabled && !hasEvents) || is24hDisabled;
+              // Regra das 24 horas: dias de hoje ou passados (< 24h) ficam cinzas e não clicáveis,
+              // a menos que já possuam agendamentos para visualização via popup.
+              const is24hDisabled = isPastOrToday && !hasEvents;
+              const isDisabledDay = (isRuleDisabled && !hasEvents) || is24hDisabled;
 
-          return (
-            <Pressable
-              key={isoKey}
-              disabled={isDisabledDay}
-              style={[
-                styles.dayCell,
-                isPastDay && !isSelected && !isDisabledDay && styles.dayCellPast,
-                isToday && !isSelected && !isDisabledDay && styles.dayCellToday,
-                isDisabledDay && styles.dayCellDisabled,
-                isSelected && !isDisabledDay && styles.dayCellSelected,
-              ]}
-              onPress={() => {
-                if (isDisabledDay) return;
-                onDateSelect?.(value, isoKey);
-              }}
-            >
-              <Text
-                style={[
-                  styles.dayNumber,
-                  isPastDay && !isSelected && !isDisabledDay && styles.dayNumberPast,
-                  isToday && !isSelected && !isDisabledDay && styles.dayNumberToday,
-                  isDisabledDay && styles.dayNumberDisabled,
-                  isSelected && !isDisabledDay && styles.dayNumberSelected,
-                ]}
-              >
-                {value.getDate()}
-              </Text>
+              return (
+                <Pressable
+                  key={isoKey}
+                  disabled={isDisabledDay}
+                  style={[
+                    styles.dayCell,
+                    isPastDay && !isSelected && !isDisabledDay && styles.dayCellPast,
+                    isToday && !isSelected && !isDisabledDay && styles.dayCellToday,
+                    isDisabledDay && styles.dayCellDisabled,
+                    isSelected && !isDisabledDay && styles.dayCellSelected,
+                  ]}
+                  onPress={() => {
+                    if (isDisabledDay) return;
+                    onDateSelect?.(value, isoKey);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dayNumber,
+                      isPastDay && !isSelected && !isDisabledDay && styles.dayNumberPast,
+                      isToday && !isSelected && !isDisabledDay && styles.dayNumberToday,
+                      isDisabledDay && styles.dayNumberDisabled,
+                      isSelected && !isDisabledDay && styles.dayNumberSelected,
+                    ]}
+                  >
+                    {value.getDate()}
+                  </Text>
 
-              {/* Indicadores de Evento (Dots coloridos por status) */}
-              {hasEvents && (
-                <View style={styles.dotsRow}>
-                  {dayEvents.length > 0 ? (
-                    dayEvents.slice(0, 3).map((ev, evIdx) => (
-                      <View
-                        key={`${ev.agendamentoId ?? evIdx}`}
-                        style={[
-                          styles.dayDot,
-                          {
-                            backgroundColor: isSelected
-                              ? '#FFFFFF'
-                              : getDotColor(ev.status),
-                          },
-                        ]}
-                      />
-                    ))
-                  ) : (
-                    <View
-                      style={[
-                        styles.dayDot,
-                        { backgroundColor: isSelected ? '#FFFFFF' : '#1C6AAB' },
-                      ]}
-                    />
+                  {/* Indicadores de Evento (Dots coloridos por status) */}
+                  {hasEvents && (
+                    <View style={styles.dotsRow}>
+                      {dayEvents.length > 0 ? (
+                        dayEvents.slice(0, 3).map((ev, evIdx) => (
+                          <View
+                            key={`${ev.agendamentoId ?? evIdx}`}
+                            style={[
+                              styles.dayDot,
+                              {
+                                backgroundColor: isSelected
+                                  ? '#FFFFFF'
+                                  : getDotColor(ev.status),
+                              },
+                            ]}
+                          />
+                        ))
+                      ) : (
+                        <View
+                          style={[
+                            styles.dayDot,
+                            { backgroundColor: isSelected ? '#FFFFFF' : '#1C6AAB' },
+                          ]}
+                        />
+                      )}
+                    </View>
                   )}
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -296,7 +307,6 @@ const styles = StyleSheet.create({
   },
   weekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 8,
   },
   weekLabel: {
@@ -308,20 +318,25 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   dayGrid: {
+    width: '100%',
+  },
+  weekGridRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    width: '100%',
   },
   emptyCell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     height: 46,
+    marginHorizontal: 1,
   },
   dayCell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     height: 46,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginVertical: 2,
+    marginHorizontal: 1,
   },
   dayCellSelected: {
     backgroundColor: '#1C6AAB',

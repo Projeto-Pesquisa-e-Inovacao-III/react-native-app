@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -7,17 +7,28 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic } from 'lucide-react-native';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function VoiceRecorderButton() {
+  const { roles } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const bottomOffset = 60 + Math.max(insets.bottom, 0) + 16;
 
   const [isLabelVisible, setIsLabelVisible] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const isNavigatingRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+    }, []),
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -34,7 +45,14 @@ export default function VoiceRecorderButton() {
     return () => clearTimeout(timer);
   }, [fadeAnim]);
 
+  if (roles?.includes('personal')) {
+    return null;
+  }
+
   const handlePress = () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
     router.push('/(app)/ai-voice');
   };
 
@@ -43,9 +61,11 @@ export default function VoiceRecorderButton() {
       <TouchableOpacity
         style={styles.touchableWrapper}
         onPress={handlePress}
+        disabled={isNavigating}
         activeOpacity={0.85}
         accessibilityLabel="Agendar aula com IA"
         accessibilityRole="button"
+        accessibilityState={{ disabled: isNavigating }}
       >
         {isLabelVisible && (
           <Animated.View

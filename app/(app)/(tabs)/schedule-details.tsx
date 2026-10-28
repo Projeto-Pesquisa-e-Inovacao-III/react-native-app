@@ -797,6 +797,7 @@ export default function ScheduleDetailsScreen() {
           buttonTitle="Aceitar agendamento"
           callSuccessModal={() => acceptAppointment(modalTargetId)}
           closeThen={() => setOpenModal(null)}
+          actionColor="#16A34A"
         />
       )}
 

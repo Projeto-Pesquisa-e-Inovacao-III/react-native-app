@@ -13,6 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Trash2, PlusCircle, XCircle, X } from "lucide-react-native";
 import ErrorModal from "./ErrorModal";
 import type { ProductExhibition } from "../../models/products";
+import { formatCurrencyInput, parseCurrencyToNumber } from "../../utils/currency";
+import { newProductExhibition, updateProductExhibition } from "../../constants/products";
+
 type AddPackagePlanProps = {
   onClose: (saved: boolean) => void;
   title?: string;
@@ -39,6 +42,7 @@ export default function AddPackagePlan({
   packageValues,
   callSuccessModal,
   isEdit,
+  typePackage,
 }: AddPackagePlanProps) {
   const [loading, setLoading] = useState(false);
   const [openErrorModal, setOpenErrorModal] = useState(false);
@@ -48,7 +52,7 @@ export default function AddPackagePlan({
     name: packageValues?.titulo || "",
     subtitle: packageValues?.subtitulo || "",
     type: packageValues?.tipoAula || "PRESENCIAL",
-    price: packageValues?.preco?.toString() || "",
+    price: packageValues?.preco ? formatCurrencyInput(packageValues.preco) : "",
     deadline: packageValues?.duracaoMes?.toString() || "",
     benefits: packageValues?.beneficios ? packageValues.beneficios.map((b) => b.valor) : [""],
     quantity: packageValues?.quantidadeAula || null,
@@ -83,43 +87,78 @@ export default function AddPackagePlan({
     }));
   }
 
-  function handleSavePackage() {
-    setLoading(true);
+  async function handleSavePackage() {
+    if (loading) return;
+
     const filteredBenefits = packageInfo.benefits.filter((b) => b.trim() !== "");
+    const numPrice = parseCurrencyToNumber(packageInfo.price);
+    const numDeadline = Number(packageInfo.deadline);
 
     const errors: typeof fieldErrors = {};
     if (!packageInfo.name.trim()) errors.name = "Preencha o nome do pacote.";
     if (!packageInfo.subtitle.trim()) errors.subtitle = "Preencha o subtítulo do pacote.";
-    if (!packageInfo.price) errors.price = "Preencha o preço.";
-    if (!packageInfo.quantity) errors.quantity = "Informe a quantidade de aulas.";
-    if (!packageInfo.deadline.trim()) errors.deadline = "Informe a validade em meses.";
+    if (!packageInfo.price || numPrice <= 0 || numPrice > 9999) errors.price = "Informe um preço válido de até R$ 9.999,00.";
+    if (!packageInfo.quantity || Number(packageInfo.quantity) <= 0) errors.quantity = "Informe a quantidade de aulas.";
+    if (!packageInfo.deadline.trim() || isNaN(numDeadline) || numDeadline <= 0) errors.deadline = "Informe a validade em meses.";
     if (filteredBenefits.length === 0) errors.benefits = "Deve haver entre 1 e 8 benefícios.";
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setLoading(false);
       return;
     }
     setFieldErrors({});
 
-    // Simulação visual de salvamento para desenvolvimento da tela
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      setLoading(true);
+
+      const payload: ProductExhibition = {
+        titulo: packageInfo.name.trim(),
+        subtitulo: packageInfo.subtitle.trim(),
+        descricao: packageInfo.subtitle.trim(),
+        tipoAula: packageInfo.type,
+        preco: numPrice,
+        duracaoMes: numDeadline,
+        quantidadeAula: packageInfo.quantity ? Number(packageInfo.quantity) : null,
+        beneficios: filteredBenefits.map((b) => ({ valor: b.trim() })),
+        tipoProduto: typePackage,
+        status: "ATIVO",
+        periodo: numDeadline === 1 ? "1 mês" : `${numDeadline} meses`,
+      };
+
+      if (isEdit && packageValues?.id) {
+        await updateProductExhibition(packageValues.id, payload);
+      } else {
+        await newProductExhibition(payload);
+      }
+
       callSuccessModal();
-      onClose(true);
-    }, 1000);
+    } catch (err: any) {
+      console.error("Erro ao salvar pacote:", err);
+      const apiErrorMessage =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "Não foi possível salvar o pacote. Verifique os dados e tente novamente.";
+
+      setErrorMessage({
+        title: isEdit ? "Erro ao Editar Pacote" : "Erro ao Criar Pacote",
+        content: apiErrorMessage,
+      });
+      setOpenErrorModal(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <Modal animationType="slide" transparent={false} visible={true}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => onClose(false)} style={styles.backButton}>
-            <ArrowLeft size={22} color="#1e293b" />
+          <TouchableOpacity onPress={() => onClose(false)} style={styles.backButton} disabled={loading}>
+            <ArrowLeft size={22} color={loading ? "#94a3b8" : "#1e293b"} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{title || "Criar Pacote"}</Text>
-          <TouchableOpacity onPress={() => onClose(false)}>
-            <X size={24} color="#909fb5" />
+          <TouchableOpacity onPress={() => onClose(false)} disabled={loading}>
+            <X size={24} color={loading ? "#cbd5e1" : "#909fb5"} />
           </TouchableOpacity>
         </View>
 
@@ -165,9 +204,12 @@ export default function AddPackagePlan({
                 placeholderTextColor="#94a3b8"
                 keyboardType="numeric"
                 value={packageInfo.price}
-                onChangeText={(price) => {
-                  setPackageInfo({ ...packageInfo, price });
-                  if (price) setFieldErrors((prev) => ({ ...prev, price: undefined }));
+                onChangeText={(rawText) => {
+                  const numVal = parseCurrencyToNumber(rawText);
+                  if (numVal > 9999) return;
+                  const formatted = formatCurrencyInput(rawText);
+                  setPackageInfo((prev) => ({ ...prev, price: formatted }));
+                  if (formatted) setFieldErrors((prev) => ({ ...prev, price: undefined }));
                 }}
               />
               {fieldErrors.price && <Text style={styles.errorText}>{fieldErrors.price}</Text>}
@@ -255,7 +297,11 @@ export default function AddPackagePlan({
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={() => onClose(false)}>
+            <TouchableOpacity
+              style={[styles.btn, styles.cancelBtn]}
+              onPress={() => onClose(false)}
+              disabled={loading}
+            >
               <Text style={styles.cancelBtnText}>Cancelar</Text>
             </TouchableOpacity>
           </View>

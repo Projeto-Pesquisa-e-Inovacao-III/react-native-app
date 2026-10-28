@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,8 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Activity, ArrowLeft, Check, FileText, HeartPulse, Ruler, Undo2, Weight, X } from 'lucide-react-native';
+import SuccessModal from '../../../src/components/modals/SuccessModal';
+import ErrorModal from '../../../src/components/modals/ErrorModal';
 import { getAnamnesis, updateAnamnesis } from '../../../src/constants/anamnesis';
 import type { AnamnesisData, CondicaoDto } from '../../../src/models/anamnesis';
 import { parseNumericValue, validateHeightWeightValues } from '../../../src/utils/validacao';
@@ -49,6 +50,8 @@ export default function EditAnamnesisScreen() {
   const [otherCondition, setOtherCondition] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ altura?: string; peso?: string }>({});
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
 
   const query = useQuery<AnamnesisData>({
     queryKey: ['anamnesisInfo'],
@@ -123,11 +126,9 @@ export default function EditAnamnesisScreen() {
         rotina: form.rotina?.trim() || null,
         observacaoSaude: form.observacaoSaude?.trim() || null,
       });
-      Alert.alert('Anamnese atualizada!', 'Suas informações foram atualizadas com sucesso.', [
-        { text: 'OK', onPress: () => router.replace('/(app)/(tabs)') },
-      ]);
+      setSuccessModalVisible(true);
     } catch {
-      Alert.alert('Erro ao atualizar anamnese', 'Ocorreu um erro. Tente novamente mais tarde.');
+      setErrorModalVisible(true);
     } finally {
       setSaving(false);
     }
@@ -191,6 +192,21 @@ export default function EditAnamnesisScreen() {
           )}
         </View>
       </ScrollView>
+      <SuccessModal
+        visible={successModalVisible}
+        title="Anamnese atualizada!"
+        content="Suas informações foram atualizadas com sucesso."
+        onClose={() => {
+          setSuccessModalVisible(false);
+          router.replace('/(app)/(tabs)');
+        }}
+      />
+      <ErrorModal
+        visible={errorModalVisible}
+        title="Erro ao atualizar anamnese"
+        content="Ocorreu um erro. Tente novamente mais tarde."
+        onClose={() => setErrorModalVisible(false)}
+      />
     </View>
   );
 }

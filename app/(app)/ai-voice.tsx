@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   StyleSheet,
   Text,
@@ -10,10 +9,12 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Mic, X, Sparkles, RefreshCw } from "lucide-react-native";
+import ErrorModal from "../../src/components/modals/ErrorModal";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
+  isSpeechRecognitionAvailable,
+} from "../../src/services/speechRecognition";
 
 type WaveformBarProps = {
   baseHeight: number;
@@ -73,6 +74,16 @@ export default function AiVoiceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
+  const [errorModal, setErrorModal] = useState<{
+    visible: boolean;
+    title: string;
+    content: string;
+    onClose?: () => void;
+  }>({
+    visible: false,
+    title: "",
+    content: "",
+  });
   const isCancellingRef = useRef(false);
   const isStartingRef = useRef(false);
   const isRecognitionActiveRef = useRef(false);
@@ -124,9 +135,18 @@ export default function AiVoiceScreen() {
     console.error('Speech recognition error:', event.error, event.message);
 
     if (event.error === 'not-allowed') {
-      Alert.alert('Permissão negada', message, [{ text: 'OK', onPress: () => router.back() }]);
+      setErrorModal({
+        visible: true,
+        title: 'Permissão negada',
+        content: message,
+        onClose: () => router.back(),
+      });
     } else if (event.error !== 'no-speech') {
-      Alert.alert('Erro', message);
+      setErrorModal({
+        visible: true,
+        title: 'Erro',
+        content: message,
+      });
     }
   });
 
@@ -141,6 +161,16 @@ export default function AiVoiceScreen() {
   });
 
   const startRecording = useCallback(async () => {
+    if (!isSpeechRecognitionAvailable) {
+      setErrorModal({
+        visible: true,
+        title: 'Recurso indisponível',
+        content: 'O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.',
+        onClose: () => router.back(),
+      });
+      return;
+    }
+
     if (isStartingRef.current || isRecognitionActiveRef.current) {
       return;
     }
@@ -154,11 +184,12 @@ export default function AiVoiceScreen() {
       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) {
         isStartingRef.current = false;
-        Alert.alert(
-          'Permissão negada',
-          'Permita o acesso ao microfone e reconhecimento de fala nas configurações do dispositivo para gravar e transcrever seu agendamento.',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+        setErrorModal({
+          visible: true,
+          title: 'Permissão negada',
+          content: 'Permita o acesso ao microfone e reconhecimento de fala nas configurações do dispositivo para gravar e transcrever seu agendamento.',
+          onClose: () => router.back(),
+        });
         return;
       }
 
@@ -210,6 +241,15 @@ export default function AiVoiceScreen() {
   });
 
   useEffect(() => {
+    if (!isSpeechRecognitionAvailable) {
+      setErrorModal({
+        visible: true,
+        title: 'Recurso indisponível',
+        content: 'O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.',
+        onClose: () => router.back(),
+      });
+      return;
+    }
     const timer = setTimeout(() => {
       startRecordingRef.current();
     }, 600);
@@ -217,20 +257,32 @@ export default function AiVoiceScreen() {
       clearTimeout(timer);
       ExpoSpeechRecognitionModule.abort();
     };
-  }, [startRecording]);
+  }, [router]);
 
   return (
-    <AiVoiceUI
-      insets={insets}
-      router={router}
-      isRecording={isRecording}
-      isTranscribing={isProcessing}
-      transcriptionText={transcriptionText}
-      normalizedVolume={normalizedVolume}
-      onStart={startRecording}
-      onStop={stopRecording}
-      onCancel={cancelRecording}
-    />
+    <>
+      <AiVoiceUI
+        insets={insets}
+        router={router}
+        isRecording={isRecording}
+        isTranscribing={isProcessing}
+        transcriptionText={transcriptionText}
+        normalizedVolume={normalizedVolume}
+        onStart={startRecording}
+        onStop={stopRecording}
+        onCancel={cancelRecording}
+      />
+      <ErrorModal
+        visible={errorModal.visible}
+        title={errorModal.title}
+        content={errorModal.content}
+        onClose={() => {
+          const cb = errorModal.onClose;
+          setErrorModal({ visible: false, title: "", content: "" });
+          cb?.();
+        }}
+      />
+    </>
   );
 }
 

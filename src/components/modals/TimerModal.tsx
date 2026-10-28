@@ -8,6 +8,7 @@ type TimerModalProps = {
   content?: string;
   callSuccessModal?: () => void;
   buttonTitle?: string;
+  actionColor?: string;
 };
 
 export default function TimerModal({
@@ -16,6 +17,7 @@ export default function TimerModal({
   content,
   callSuccessModal,
   buttonTitle,
+  actionColor,
 }: TimerModalProps) {
   return (
     <Modal transparent animationType="fade" visible={true}>
@@ -31,7 +33,7 @@ export default function TimerModal({
                 callSuccessModal?.();
                 closeThen(false);
               }}
-              classname={styles.deleteBtn}
+              classname={[styles.deleteBtn, actionColor ? { backgroundColor: actionColor } : undefined]}
             />
             <SmallerButton
               title="Cancelar"
