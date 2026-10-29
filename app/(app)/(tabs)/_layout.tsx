@@ -95,6 +95,8 @@ export default function TabsLayout() {
         <Tabs.Screen name="requests" options={{ title: 'Solicitações' }} />
         <Tabs.Screen name="plans" options={{ title: 'Planos' }} />
         <Tabs.Screen name="users" options={{ title: 'Usuários' }} />
+        <Tabs.Screen name="users/view-user-data" options={{ title: 'Dados do Usuário' }} />
+        <Tabs.Screen name="users/view-personal-data" options={{ title: 'Dados do Personal' }} />
         <Tabs.Screen name="more" options={{ title: 'Mais opções' }} />
         <Tabs.Screen name="schedule-details" options={{ title: 'Detalhes do Agendamento' }} />
         <Tabs.Screen name="schedule-history" options={{ title: 'Histórico de Agendamentos' }} />
