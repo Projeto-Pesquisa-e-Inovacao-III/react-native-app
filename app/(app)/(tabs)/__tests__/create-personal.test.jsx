@@ -68,6 +68,15 @@ describe("CreatePersonalScreen", () => {
     expect(screen.getByText(/Personal Cadastrado!/)).toBeOnTheScreen();
   });
 
+  it("impede o cadastro quando o email é inválido", async () => {
+    await fillValidForm();
+    await fireEvent.changeText(screen.getByPlaceholderText("email@dominio.com"), "email-invalido");
+    await fireEvent.press(screen.getAllByText("Cadastrar Personal").at(-1));
+
+    expect(await screen.findByText("Digite um email válido.")).toBeOnTheScreen();
+    expect(createPersonal).not.toHaveBeenCalled();
+  });
+
   it("mostra erro quando a API falha", async () => {
     createPersonal.mockRejectedValueOnce({ response: { data: { message: "Falha no cadastro" } } });
     await fillValidForm();
