@@ -1,0 +1,25 @@
+import React from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import SecurityScreen from "../security";
+import { findUserData, softDelete } from "../../../../src/constants/user";
+const mockLogout = jest.fn();
+const mockReplace = jest.fn();
+jest.mock("expo-router", () => ({ useRouter: () => ({ replace: mockReplace, back: jest.fn() }) }));
+jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+jest.mock("../../../../src/contexts/AuthContext", () => ({ useAuth: () => ({ logout: mockLogout }) }));
+jest.mock("../../../../src/constants/user", () => ({ findUserData: jest.fn(), softDelete: jest.fn(), changePassword: jest.fn() }));
+jest.mock("lucide-react-native", () => { const React = require("react"); const { View } = require("react-native"); const Icon = () => <View />; return new Proxy({}, { get: (_, key) => key === "__esModule" ? false : Icon }); });
+jest.mock("../../../../src/components/InputWithIcon", () => ({ label, value, onInputChange, ...p }) => { const { View, Text, TextInput } = require("react-native"); return <View><Text>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onInputChange} {...p} /></View>; });
+jest.mock("../../../../src/components/modals/SuccessModal", () => ({ visible, title, content }) => { const { Text } = require("react-native"); return visible ? <Text>{title} {content}</Text> : null; });
+jest.mock("../../../../src/components/modals/ErrorModal", () => ({ title, content }) => { const { Text } = require("react-native"); return <Text>{title} {content}</Text>; });
+jest.mock("../../../../src/components/modals/TimerModal", () => ({ buttonTitle, callSuccessModal }) => { const { Pressable, Text } = require("react-native"); return <Pressable onPress={callSuccessModal}><Text>{buttonTitle}</Text></Pressable>; });
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SecurityScreen /></QueryClientProvider>);
+describe("SecurityScreen", () => {
+  beforeEach(async () => { jest.clearAllMocks(); findUserData.mockResolvedValue({ data: { email: "user@example.com" } }); softDelete.mockResolvedValue({}); await renderScreen(); await waitFor(() => expect(screen.getByText("Segurança")).toBeOnTheScreen()); });
+  it("exibe email e zona de perigo", () => { expect(screen.getByDisplayValue("user@example.com")).toBeOnTheScreen(); expect(screen.getByText("Zona de Perigo")).toBeOnTheScreen(); });
+  it("exibe a ação de apagar conta sem executá-la", () => { expect(screen.getByText("Apagar minha conta")).toBeOnTheScreen(); expect(softDelete).not.toHaveBeenCalled(); });
+  it("mantém os campos de senha vazios por padrão", () => { expect(screen.getAllByDisplayValue("")).toHaveLength(2); expect(screen.getByText("Descartar alterações")).toBeOnTheScreen(); });
+  it("carrega o email do usuário em modo somente leitura", () => { expect(screen.getByDisplayValue("user@example.com")).toBeOnTheScreen(); });
+});
