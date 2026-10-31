@@ -3,6 +3,7 @@ import { Linking, Pressable, Text, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import ScheduleDetailsScreen from "../schedule-details";
+import { useAuth } from "../../../../src/contexts/AuthContext";
 import {
   acceptUserAppointment,
   appointmentAtCalendar,
@@ -15,7 +16,7 @@ import {
 const mockReplace = jest.fn();
 jest.mock("expo-router", () => ({ useRouter: () => ({ back: jest.fn(), replace: mockReplace, push: jest.fn() }), useLocalSearchParams: () => ({ id: "4" }) }));
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-jest.mock("../../../../src/contexts/AuthContext", () => ({ useAuth: () => ({ roles: ["personal"] }) }));
+jest.mock("../../../../src/contexts/AuthContext", () => ({ useAuth: jest.fn() }));
 jest.mock("../../../../src/constants/schedule", () => ({
   findAppointmentById: jest.fn(), appointmentAtCalendar: jest.fn(), getAppointmentResumes: jest.fn(),
   acceptUserAppointment: jest.fn(), refuseAppointment: jest.fn(), concludeAppointment: jest.fn(), reportAbsencePersonal: jest.fn(), appointmentAtCalendar: jest.fn(),
@@ -53,6 +54,18 @@ jest.mock("../../../../src/components/modals/ConcludeAppointmentModal", () => {
       React.createElement(Text, null, "Confirmar conclusão")
     );
 });
+jest.mock("../../../../src/components/modals/QRCodeScannerModal", () => {
+    const React = require("react");
+    const { Pressable, Text } = require("react-native");
+    return ({ visible, appointmentId, onSuccess }) =>
+      visible
+        ? React.createElement(
+            Pressable,
+            { accessibilityRole: "button", onPress: onSuccess },
+            React.createElement(Text, null, `Ler QR Code #${appointmentId}`),
+          )
+        : null;
+});
 jest.mock("../../../../src/components/modals/RegisterAbsenceModal", () => {
   const React = require("react");
   const { Pressable, Text } = require("react-native");
@@ -67,13 +80,23 @@ jest.mock("../../../../src/components/modals/RegisterAbsenceModal", () => {
     );
 });
 jest.mock("../../../../src/components/modals/AiPanelModal", () => () => null);
+jest.mock("../../../../src/components/modals/QRCodeDisplayModal", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
+  return ({ visible, appointment }) =>
+    visible ? React.createElement(Text, null, `QR:${appointment.id}`) : null;
+});
 jest.mock("../../../../src/components/modals/SuccessModal", () => ({ visible, title, content }) => { const { Text } = require("react-native"); return visible ? <Text>{title} {content}</Text> : null; });
 jest.mock("../../../../src/components/modals/ErrorModal", () => ({ title, content }) => { const { Text } = require("react-native"); return <Text>{title} {content}</Text>; });
 const appointment = { id: 4, status: "APROVADO", nome: "ignored", dataInicio: "2026-10-09T09:00:00", dataFim: "2026-10-09T10:00:00", tipoAula: "PRESENCIAL", personal: { nome: "Carlos", idade: 30 }, aluno: { id: 8, nome: "João", idade: 28 }, endereco: { numero: "10", cep: { logradouro: "Rua A", bairro: "Centro", uf: "SP" } } };
 let view;
 const renderScreen = async () => { view = await render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><ScheduleDetailsScreen /></QueryClientProvider>); return view; };
 describe("ScheduleDetailsScreen", () => {
-  beforeEach(() => { jest.resetAllMocks(); });
+  beforeEach(() => {
+    jest.resetAllMocks();
+    useAuth.mockReturnValue({ roles: ["personal"], isAuthenticated: true });
+    getAppointmentResumes.mockResolvedValue({ data: { content: [] } });
+  });
 
   describe("quando o agendamento existe", () => {
     beforeEach(async () => {
@@ -85,6 +108,69 @@ describe("ScheduleDetailsScreen", () => {
     });
 
     it("renderiza dados do agendamento", async () => { expect(await screen.findByText("João")).toBeOnTheScreen(); expect(screen.getByText("09:00 - 10:00")).toBeOnTheScreen(); expect(screen.getByText("Marcado")).toBeOnTheScreen(); });
+  });
+
+  it.each(["APROVADO", "PENDENTE_PERSONAL_CONCLUIR"])(
+    "permite que um aluno autenticado abra o QR Code quando o status é %s",
+    async (status) => {
+      useAuth.mockReturnValue({ roles: ["aluno"], isAuthenticated: true });
+      findAppointmentById.mockResolvedValue({
+        data: { ...appointment, status },
+      });
+      appointmentAtCalendar.mockResolvedValue({ data: [] });
+      await renderScreen();
+
+      await fireEvent.press(
+        await screen.findByText("Mostrar QR Code de confirmação"),
+      );
+
+      expect(screen.getByText("QR:4")).toBeOnTheScreen();
+    },
+  );
+
+  it("não exibe o QR Code para um aluno não autenticado", async () => {
+    useAuth.mockReturnValue({ roles: ["aluno"], isAuthenticated: false });
+    findAppointmentById.mockResolvedValue({ data: appointment });
+    appointmentAtCalendar.mockResolvedValue({ data: [] });
+    await renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText("Detalhes do agendamento")).toBeOnTheScreen(),
+    );
+    expect(
+      screen.queryByText("Mostrar QR Code de confirmação"),
+    ).not.toBeOnTheScreen();
+  });
+
+  it("não exibe o QR Code para o personal", async () => {
+    useAuth.mockReturnValue({ roles: ["personal"], isAuthenticated: true });
+    findAppointmentById.mockResolvedValue({ data: appointment });
+    appointmentAtCalendar.mockResolvedValue({ data: [] });
+    await renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText("Detalhes do agendamento")).toBeOnTheScreen(),
+    );
+    expect(
+      screen.queryByText("Mostrar QR Code de confirmação"),
+    ).not.toBeOnTheScreen();
+  });
+
+  it("não exibe o QR Code para uma conta com perfil de aluno e personal", async () => {
+    useAuth.mockReturnValue({
+      roles: ["aluno", "personal"],
+      isAuthenticated: true,
+    });
+    findAppointmentById.mockResolvedValue({ data: appointment });
+    appointmentAtCalendar.mockResolvedValue({ data: [] });
+    await renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText("Detalhes do agendamento")).toBeOnTheScreen(),
+    );
+    expect(
+      screen.queryByText("Mostrar QR Code de confirmação"),
+    ).not.toBeOnTheScreen();
   });
 
   it("redireciona quando o agendamento não existe", async () => {
@@ -114,7 +200,7 @@ describe("ScheduleDetailsScreen", () => {
     await renderScreen();
     await waitFor(() => expect(screen.getByText("Detalhes do agendamento")).toBeOnTheScreen());
 
-    await fireEvent.press(screen.getByText("João"));
+    await fireEvent.press(await screen.findByText("João"));
     await fireEvent.press(screen.getByText("Direções"));
 
     expect(Linking.openURL).toHaveBeenCalled();
@@ -154,7 +240,7 @@ describe("ScheduleDetailsScreen", () => {
     );
   });
 
-  it("deve enviar os dados de conclusão quando o personal conclui uma aula", async () => {
+  it("deve validar o QR Code antes de enviar os dados de conclusão da aula", async () => {
     findAppointmentById.mockResolvedValue({
       data: { ...appointment, status: "PENDENTE_PERSONAL_CONCLUIR" },
     });
@@ -165,6 +251,9 @@ describe("ScheduleDetailsScreen", () => {
     await waitFor(() => expect(screen.getByText("Concluir aula")).toBeOnTheScreen());
 
     await fireEvent.press(screen.getByText("Concluir aula"));
+    expect(await screen.findByText("Ler QR Code #4")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByText("Ler QR Code #4"));
     await fireEvent.press(screen.getByText("Confirmar conclusão"));
 
     await waitFor(() => {

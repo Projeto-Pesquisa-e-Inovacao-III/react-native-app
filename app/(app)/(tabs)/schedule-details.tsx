@@ -26,6 +26,7 @@ import {
   MapPin,
   MessageSquare,
   Navigation,
+  QrCode,
   Sparkles,
   UserX,
   X,
@@ -50,15 +51,20 @@ import NewEvent from "../../../src/components/NewEvent";
 import TimerModal from "../../../src/components/modals/TimerModal";
 import ConcludeAppointmentModal from "../../../src/components/modals/ConcludeAppointmentModal";
 import RegisterAbsenceModal from "../../../src/components/modals/RegisterAbsenceModal";
+import QRCodeScannerModal from "../../../src/components/modals/QRCodeScannerModal";
 import SuccessModal from "../../../src/components/modals/SuccessModal";
 import ErrorModal from "../../../src/components/modals/ErrorModal";
 import AiPanelModal from "../../../src/components/modals/AiPanelModal";
+import QRCodeDisplayModal, {
+  type AppointmentForQr,
+} from "../../../src/components/modals/QRCodeDisplayModal";
 
 type ModalType =
   | "reschedule"
   | "accept"
   | "conclude"
   | "decline"
+  | "qr_scanner"
   | "success"
   | "registerAbsence"
   | "cancel"
@@ -96,7 +102,7 @@ export default function ScheduleDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { roles } = useAuth();
+  const { roles, isAuthenticated } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
   const appointmentId = Number(Array.isArray(id) ? id[0] : id);
@@ -112,6 +118,8 @@ export default function ScheduleDetailsScreen() {
     content: string;
   } | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [selectedQrAppointment, setSelectedQrAppointment] =
+    useState<AppointmentForQr | null>(null);
 
   // 1. Busca detalhes do agendamento
   const {
@@ -389,6 +397,13 @@ export default function ScheduleDetailsScreen() {
   const statusConfig = appointmentData?.status
     ? STATUS_CONFIG[appointmentData.status]
     : null;
+  const canShowCheckinQr =
+    isAuthenticated &&
+    roles?.includes("aluno") === true &&
+    !isPersonal &&
+    !isAdmin &&
+    (appointmentData?.status === "APROVADO" ||
+      appointmentData?.status === "PENDENTE_PERSONAL_CONCLUIR");
 
   const displayName = isAluno
     ? appointmentData?.personal?.nome
@@ -643,6 +658,36 @@ export default function ScheduleDetailsScreen() {
 
             {/* Botões de Ação de acordo com perfil e status */}
             <View style={styles.actionButtonsContainer}>
+              {canShowCheckinQr && (
+                <TouchableOpacity
+                  style={[styles.btnAction, styles.btnOther, styles.qrCodeAction]}
+                  onPress={() => {
+                    setSelectedQrAppointment({
+                      id: Number(
+                        appointmentData.agendamentoId ??
+                          appointmentData.id ??
+                          appointmentId,
+                      ),
+                      name: appointmentData.personal?.nome || "Personal Trainer",
+                      type: appointmentData.tipoAula || "Aula",
+                      start: String(appointmentData.dataInicio ?? ""),
+                      end: String(
+                        appointmentData.dataFim ??
+                          appointmentData.dataInicio ??
+                          "",
+                      ),
+                      address: fullAddress,
+                    });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <QrCode size={18} color="#19587A" strokeWidth={2} />
+                  <Text style={styles.btnActionTextBlue}>
+                    Mostrar QR Code de confirmação
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {/* 1. Personal concluindo aula do dia ou anterior */}
               {isPersonal &&
                 buttonsActionsCondition &&
@@ -651,7 +696,7 @@ export default function ScheduleDetailsScreen() {
                     <TouchableOpacity
                       style={[styles.btnAction, styles.btnAccept]}
                       onPress={() =>
-                        handleOpenModal(appointmentData.id, "conclude")
+                        handleOpenModal(appointmentId, "qr_scanner")
                       }
                       activeOpacity={0.85}
                     >
@@ -829,6 +874,16 @@ export default function ScheduleDetailsScreen() {
         />
       )}
 
+      {openModal === "qr_scanner" && (
+        <QRCodeScannerModal
+          visible={true}
+          appointmentId={modalTargetId}
+          studentName={appointmentData?.aluno?.nome}
+          onClose={() => setOpenModal(null)}
+          onSuccess={() => setOpenModal("conclude")}
+        />
+      )}
+
       {openModal === "registerAbsence" && (
         <RegisterAbsenceModal
           visible={true}
@@ -878,6 +933,11 @@ export default function ScheduleDetailsScreen() {
         analiseIa={appointmentData?.analiseIa}
         note={lastNote}
         studentName={displayName}
+      />
+      <QRCodeDisplayModal
+        visible={!!selectedQrAppointment}
+        appointment={selectedQrAppointment}
+        onClose={() => setSelectedQrAppointment(null)}
       />
     </View>
   );
@@ -1134,6 +1194,9 @@ const styles = StyleSheet.create({
   actionButtonsContainer: {
     marginTop: 8,
     marginBottom: 30,
+  },
+  qrCodeAction: {
+    marginBottom: 12,
   },
   buttonsColumn: {
     gap: 12,
