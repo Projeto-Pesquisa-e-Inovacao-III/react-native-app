@@ -45,6 +45,7 @@
     "start-usb": "expo start --localhost",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "postinstall": "patch-package",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "jest",
@@ -64,6 +65,7 @@
     "babel-preset-expo": "~58.0.0",
     "jest": "~30.5.2",
     "jest-expo": "~58.0.13",
+    "patch-package": "^8.0.1",
     "test-renderer": "^1.3.0",
     "typescript": "~6.0.3"
   }

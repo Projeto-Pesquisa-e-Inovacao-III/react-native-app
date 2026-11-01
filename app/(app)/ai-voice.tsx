@@ -21,6 +21,19 @@ import { isAxiosError } from "axios";
 
 function getApiErrorMessage(error: unknown) {
   if (isAxiosError(error)) {
+    if (error.response?.status === 405) {
+      const allowedMethods = error.response.headers?.allow;
+      return [
+        "O backend recusou o método POST para a extração do agendamento.",
+        "Confirme se o serviço atualizado disponibiliza POST /api/agendamentos/extrair.",
+        typeof allowedMethods === "string" && allowedMethods
+          ? `Métodos aceitos pela rota: ${allowedMethods}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
     const data: unknown = error.response?.data;
     if (typeof data === "string" && data.trim()) return data;
     if (data && typeof data === "object") {
@@ -92,6 +105,7 @@ export default function AiVoiceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
+  const [hasFinalTranscription, setHasFinalTranscription] = useState(false);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
@@ -126,6 +140,7 @@ export default function AiVoiceScreen() {
     if (best) {
       setTranscriptionText(best);
       if (event.isFinal) {
+        setHasFinalTranscription(true);
         setIsProcessing(false);
       }
     }
@@ -151,6 +166,18 @@ export default function AiVoiceScreen() {
     };
 
     const message = messages[event.error] ?? 'Erro desconhecido ao transcrever áudio.';
+    if (event.error === 'no-speech') {
+      setTranscriptionText(null);
+      setHasFinalTranscription(false);
+      console.warn('Speech recognition did not detect speech:', event.message);
+      setErrorModal({
+        visible: true,
+        title: 'Nenhuma fala detectada',
+        content: 'Fale mais perto do microfone e tente novamente.',
+      });
+      return;
+    }
+
     console.error('Speech recognition error:', event.error, event.message);
 
     if (event.error === 'not-allowed') {
@@ -172,6 +199,7 @@ export default function AiVoiceScreen() {
   useSpeechRecognitionEvent('nomatch', () => {
     setIsProcessing(false);
     setTranscriptionText(null);
+    setHasFinalTranscription(false);
   });
 
   useSpeechRecognitionEvent('volumechange', (event) => {
@@ -200,6 +228,7 @@ export default function AiVoiceScreen() {
     isStartingRef.current = true;
     isCancellingRef.current = false;
     setTranscriptionText(null);
+    setHasFinalTranscription(false);
     setIsProcessing(false);
 
     try {
@@ -264,7 +293,7 @@ export default function AiVoiceScreen() {
       return;
     }
 
-    isCancellingRef.current = true;
+    isCancellingRef.current = false;
     setIsProcessing(true);
     ExpoSpeechRecognitionModule.stop();
   }, []);
@@ -275,13 +304,15 @@ export default function AiVoiceScreen() {
     isRecognitionActiveRef.current = false;
     setIsProcessing(false);
     setIsRecording(false);
+    setTranscriptionText(null);
+    setHasFinalTranscription(false);
     ExpoSpeechRecognitionModule.abort();
     router.back();
   }, [router]);
 
   const continueToConfirmation = useCallback(async () => {
     const text = transcriptionText?.trim();
-    if (!text || isExtracting) return;
+    if (!text || !hasFinalTranscription || isExtracting) return;
 
     setIsExtracting(true);
     try {
@@ -300,7 +331,7 @@ export default function AiVoiceScreen() {
     } finally {
       setIsExtracting(false);
     }
-  }, [isExtracting, router, transcriptionText]);
+  }, [hasFinalTranscription, isExtracting, router, transcriptionText]);
 
   const startRecordingRef = useRef(startRecording);
   useEffect(() => {
@@ -342,6 +373,7 @@ export default function AiVoiceScreen() {
         isTranscribing={isProcessing}
         isExtracting={isExtracting}
         transcriptionText={transcriptionText}
+        hasFinalTranscription={hasFinalTranscription}
         normalizedVolume={normalizedVolume}
         onStart={startRecording}
         onStop={stopRecording}
@@ -369,6 +401,7 @@ type AiVoiceUIProps = {
   isTranscribing: boolean;
   isExtracting: boolean;
   transcriptionText: string | null;
+  hasFinalTranscription: boolean;
   normalizedVolume: number;
   onStart: () => void;
   onStop: () => void;
@@ -382,6 +415,7 @@ function AiVoiceUI({
   isTranscribing,
   isExtracting,
   transcriptionText,
+  hasFinalTranscription,
   normalizedVolume,
   onStart,
   onStop,
@@ -517,11 +551,15 @@ function AiVoiceUI({
             <TouchableOpacity
               style={[styles.confirmActionBtn, isExtracting && styles.confirmActionBtnDisabled]}
               onPress={onContinue}
-              disabled={isExtracting}
+              disabled={isExtracting || !hasFinalTranscription}
               activeOpacity={0.8}
             >
               <Text style={styles.confirmActionText}>
-                {isExtracting ? "Interpretando..." : "Continuar"}
+                {isExtracting
+                  ? "Interpretando..."
+                  : hasFinalTranscription
+                    ? "Continuar"
+                    : "Aguardando transcrição"}
               </Text>
             </TouchableOpacity>
           </View>

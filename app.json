@@ -17,6 +17,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "permissions": ["android.permission.RECORD_AUDIO"],
       "package": "com.anonymous.reactnativeapp"
     },
     "web": {
@@ -32,6 +33,7 @@
         }
       ],
       "expo-status-bar",
+      "./plugins/withAgp9Compatibility",
       [
         "expo-speech-recognition",
         {

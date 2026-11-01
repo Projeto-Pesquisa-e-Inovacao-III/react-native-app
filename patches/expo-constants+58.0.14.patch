@@ -1,0 +1,54 @@
+diff --git a/node_modules/expo-constants/scripts/get-app-config-android.gradle b/node_modules/expo-constants/scripts/get-app-config-android.gradle
+index 7911284..b538aa2 100644
+--- a/node_modules/expo-constants/scripts/get-app-config-android.gradle
++++ b/node_modules/expo-constants/scripts/get-app-config-android.gradle
+@@ -11,14 +11,13 @@ def expoConstantsDir = project.providers.exec {
+ def config = project.hasProperty("react") ? project.react : [];
+ def nodeExecutableAndArgs = config.nodeExecutableAndArgs ?: ["node"]
+ 
+-afterEvaluate {
+   def expoGradleExtension = gradle.extensions.findByName("expoGradle")
+   def customProjectRoot = expoGradleExtension?.projectRoot
+   def projectRoot = file("${customProjectRoot ?: rootProject.projectDir}")
+ 
+-  project.android.libraryVariants.all { variant ->
++  project.androidComponents.onVariants(project.androidComponents.selector().all()) { variant ->
+     def assetsDir = file("$buildDir/generated/assets/expo-constants/${variant.name}")
+-    def configMode = variant.buildType.name == "debug" || variant.buildType.name == "debugOptimized" ? "development" : "production"
++    def configMode = variant.buildType == "debug" || variant.buildType == "debugOptimized" ? "development" : "production"
+ 
+     def createConfigTask = tasks.register("create${variant.name.capitalize()}ExpoConfig", Exec) {
+       description = 'expo-constants: Create app.config.'
+@@ -46,7 +45,11 @@ afterEvaluate {
+     }
+ 
+     // Generate app.config at preBuild
+-    variant.preBuildProvider.configure { it.dependsOn(createConfigTask) }
++    project.tasks.configureEach { task ->
++      if (task.name == "pre${variant.name.capitalize()}Build") {
++        task.dependsOn(createConfigTask)
++      }
++    }
+ 
+     // Add generated assetsDir into assets.srcDirs
+     project.android.sourceSets.maybeCreate(variant.name).assets.srcDirs += assetsDir
+@@ -75,11 +78,14 @@ afterEvaluate {
+     }
+   }
+ 
+-  project.android.libraryVariants.all { variant ->
+-    if (!variant.buildType.debuggable) {
++  project.androidComponents.onVariants(project.androidComponents.selector().all()) { variant ->
++    if (!project.android.buildTypes.getByName(variant.buildType).debuggable) {
+       return
+     }
+-    variant.preBuildProvider.configure { it.dependsOn(createFingerprintTask) }
+-    project.android.sourceSets.maybeCreate(variant.buildType.name).assets.srcDirs += fingerprintAssetsDir
++    project.tasks.configureEach { task ->
++      if (task.name == "pre${variant.name.capitalize()}Build") {
++        task.dependsOn(createFingerprintTask)
++      }
++    }
++    project.android.sourceSets.maybeCreate(variant.buildType).assets.srcDirs += fingerprintAssetsDir
+   }
+-}

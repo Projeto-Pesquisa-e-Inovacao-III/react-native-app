@@ -1,0 +1,20 @@
+diff --git a/node_modules/react-native-webview/android/build.gradle b/node_modules/react-native-webview/android/build.gradle
+index ae14145..3e5218c 100644
+--- a/node_modules/react-native-webview/android/build.gradle
++++ b/node_modules/react-native-webview/android/build.gradle
+@@ -57,7 +57,14 @@ apply plugin: 'com.android.library'
+ if (isNewArchitectureEnabled()) {
+     apply plugin: 'com.facebook.react'
+ }
+-apply plugin: 'kotlin-android'
++def agpMajorVersion = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0].toInteger()
++def kotlinPluginProperty = providers.gradleProperty("android.builtInKotlin").orNull
++def shouldApplyKotlinPlugin = agpMajorVersion <= 8 ||
++        (kotlinPluginProperty != null && !kotlinPluginProperty.toBoolean())
++
++if (shouldApplyKotlinPlugin) {
++    apply plugin: 'kotlin-android'
++}
+ 
+ android {
+     if (supportsNamespace()) {
