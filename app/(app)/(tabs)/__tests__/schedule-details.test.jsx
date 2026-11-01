@@ -9,6 +9,7 @@ import {
   appointmentAtCalendar,
   concludeAppointment,
   findAppointmentById,
+  getOrCreateTrainingRecommendation,
   getAppointmentResumes,
   refuseAppointment,
   reportAbsencePersonal,
@@ -19,6 +20,7 @@ jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({
 jest.mock("../../../../src/contexts/AuthContext", () => ({ useAuth: jest.fn() }));
 jest.mock("../../../../src/constants/schedule", () => ({
   findAppointmentById: jest.fn(), appointmentAtCalendar: jest.fn(), getAppointmentResumes: jest.fn(),
+  getOrCreateTrainingRecommendation: jest.fn(),
   acceptUserAppointment: jest.fn(), refuseAppointment: jest.fn(), concludeAppointment: jest.fn(), reportAbsencePersonal: jest.fn(), appointmentAtCalendar: jest.fn(),
 }));
 jest.mock("lucide-react-native", () => { const React = require("react"); const { View } = require("react-native"); const Icon = () => <View />; return new Proxy({}, { get: () => Icon }); });
@@ -96,6 +98,7 @@ describe("ScheduleDetailsScreen", () => {
     jest.resetAllMocks();
     useAuth.mockReturnValue({ roles: ["personal"], isAuthenticated: true });
     getAppointmentResumes.mockResolvedValue({ data: { content: [] } });
+    getOrCreateTrainingRecommendation.mockResolvedValue({ data: "Recomendação de treino" });
   });
 
   describe("quando o agendamento existe", () => {
@@ -108,6 +111,14 @@ describe("ScheduleDetailsScreen", () => {
     });
 
     it("renderiza dados do agendamento", async () => { expect(await screen.findByText("João")).toBeOnTheScreen(); expect(screen.getByText("09:00 - 10:00")).toBeOnTheScreen(); expect(screen.getByText("Marcado")).toBeOnTheScreen(); });
+
+    it("busca a recomendação personalizada ao abrir o painel de IA", async () => {
+      await fireEvent.press(await screen.findByText("Treino personalizado com IA"));
+
+      await waitFor(() =>
+        expect(getOrCreateTrainingRecommendation).toHaveBeenCalledWith(4),
+      );
+    });
   });
 
   it.each(["APROVADO", "PENDENTE_PERSONAL_CONCLUIR"])(
@@ -127,6 +138,20 @@ describe("ScheduleDetailsScreen", () => {
       expect(screen.getByText("QR:4")).toBeOnTheScreen();
     },
   );
+
+  it("mantém o botão de treino visível ao personal enquanto o agendamento aguarda aprovação", async () => {
+    findAppointmentById.mockResolvedValue({
+      data: { ...appointment, status: "PENDENTE_PERSONAL_APROVACAO" },
+    });
+    appointmentAtCalendar.mockResolvedValue({ data: [] });
+    await renderScreen();
+
+    await fireEvent.press(
+      await screen.findByText("Treino personalizado com IA"),
+    );
+
+    expect(getOrCreateTrainingRecommendation).not.toHaveBeenCalled();
+  });
 
   it("não exibe o QR Code para um aluno não autenticado", async () => {
     useAuth.mockReturnValue({ roles: ["aluno"], isAuthenticated: false });

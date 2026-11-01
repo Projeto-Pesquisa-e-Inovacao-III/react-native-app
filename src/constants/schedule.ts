@@ -2,10 +2,52 @@ import { api } from '../services/api';
 import type {
   AbsenceAppointment,
   ExperimentalSchedule,
+  ExtractedSchedule,
   Schedule,
   ScheduleReschedule,
   CheckSchedule,
 } from '../models/schedule';
+import { isAxiosError } from 'axios';
+
+const AI_REQUEST_TIMEOUT = 60_000;
+
+function isRecommendationNotFound(error: unknown) {
+  if (!isAxiosError(error)) return false;
+
+  const responseData: unknown = error.response?.data;
+  const messages =
+    typeof responseData === 'string'
+      ? [responseData]
+      : responseData && typeof responseData === 'object'
+        ? Object.values(responseData).filter(
+            (value): value is string => typeof value === 'string',
+          )
+        : [];
+
+  return messages.some((message) =>
+    message.toLowerCase().includes('não possui recomendacao de treino existente'),
+  );
+}
+
+export function extractScheduleFromSpeech(textoAgendamento: string) {
+  return api.post<ExtractedSchedule>(
+    '/agendamentos/extrair',
+    { textoAgendamento },
+    { timeout: AI_REQUEST_TIMEOUT },
+  );
+}
+
+export async function getOrCreateTrainingRecommendation(agendamentoId: number) {
+  const path = `/agendamentos/${agendamentoId}/recomendacao-treino`;
+
+  try {
+    return await api.get<string>(path, { timeout: AI_REQUEST_TIMEOUT });
+  } catch (error) {
+    if (!isRecommendationNotFound(error)) throw error;
+  }
+
+  return api.post<string>(path, undefined, { timeout: AI_REQUEST_TIMEOUT });
+}
 
 export function insertAppointment(data: Schedule) {
   return api.post('/agendamentos', data);

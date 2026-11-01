@@ -5,6 +5,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +16,23 @@ import {
   useSpeechRecognitionEvent,
   isSpeechRecognitionAvailable,
 } from "../../src/services/speechRecognition";
+import { extractScheduleFromSpeech } from "../../src/constants/schedule";
+import { isAxiosError } from "axios";
+
+function getApiErrorMessage(error: unknown) {
+  if (isAxiosError(error)) {
+    const data: unknown = error.response?.data;
+    if (typeof data === "string" && data.trim()) return data;
+    if (data && typeof data === "object") {
+      const message = Object.values(data).find(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      );
+      if (message) return message;
+    }
+  }
+
+  return "Não foi possível interpretar seu pedido. Tente novamente.";
+}
 
 type WaveformBarProps = {
   baseHeight: number;
@@ -72,6 +90,7 @@ export default function AiVoiceScreen() {
 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [normalizedVolume, setNormalizedVolume] = useState(0);
   const [errorModal, setErrorModal] = useState<{
@@ -165,7 +184,10 @@ export default function AiVoiceScreen() {
       setErrorModal({
         visible: true,
         title: 'Recurso indisponível',
-        content: 'O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.',
+        content:
+          Platform.OS === "web"
+            ? "Este navegador não oferece suporte ao reconhecimento de fala. Abra o app em um navegador compatível e permita o acesso ao microfone."
+            : "O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.",
         onClose: () => router.back(),
       });
       return;
@@ -181,6 +203,21 @@ export default function AiVoiceScreen() {
     setIsProcessing(false);
 
     try {
+      const options = {
+        lang: 'pt-BR',
+        interimResults: true,
+        iosVoiceProcessingEnabled: true,
+        volumeChangeEventOptions: {
+          enabled: true,
+          intervalMillis: 100,
+        },
+      };
+
+      if (Platform.OS === "web") {
+        ExpoSpeechRecognitionModule.start(options);
+        return;
+      }
+
       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) {
         isStartingRef.current = false;
@@ -197,21 +234,28 @@ export default function AiVoiceScreen() {
         return;
       }
 
-      ExpoSpeechRecognitionModule.start({
-        lang: 'pt-BR',
-        interimResults: true,
-        iosVoiceProcessingEnabled: true,
-        volumeChangeEventOptions: {
-          enabled: true,
-          intervalMillis: 100,
-        },
-      });
+      ExpoSpeechRecognitionModule.start(options);
     } catch (error) {
       isStartingRef.current = false;
       isRecognitionActiveRef.current = false;
       setIsRecording(false);
       setIsProcessing(false);
       console.error('Failed to start speech recognition:', error);
+      const errorName =
+        error && typeof error === "object" && "name" in error
+          ? String(error.name)
+          : "";
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido.";
+      setErrorModal({
+        visible: true,
+        title: "Não foi possível iniciar o áudio",
+        content:
+          Platform.OS === "web" &&
+          (errorName === "NotAllowedError" || errorName === "SecurityError")
+            ? "O navegador bloqueou o microfone. Inicie a gravação pelo botão e permita o acesso ao microfone nas configurações do site."
+            : `Não foi possível iniciar o reconhecimento de fala. Verifique a permissão do microfone e tente novamente. (${errorMessage})`,
+      });
     }
   }, [router]);
 
@@ -235,6 +279,29 @@ export default function AiVoiceScreen() {
     router.back();
   }, [router]);
 
+  const continueToConfirmation = useCallback(async () => {
+    const text = transcriptionText?.trim();
+    if (!text || isExtracting) return;
+
+    setIsExtracting(true);
+    try {
+      const response = await extractScheduleFromSpeech(text);
+      router.push({
+        pathname: "/(app)/confirm-schedule",
+        params: { extractedSchedule: JSON.stringify(response.data) },
+      });
+    } catch (error) {
+      console.error("Failed to extract appointment details from speech:", error);
+      setErrorModal({
+        visible: true,
+        title: "Não foi possível interpretar",
+        content: getApiErrorMessage(error),
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  }, [isExtracting, router, transcriptionText]);
+
   const startRecordingRef = useRef(startRecording);
   useEffect(() => {
     startRecordingRef.current = startRecording;
@@ -245,11 +312,19 @@ export default function AiVoiceScreen() {
       setErrorModal({
         visible: true,
         title: 'Recurso indisponível',
-        content: 'O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.',
+        content:
+          Platform.OS === "web"
+            ? "Este navegador não oferece suporte ao reconhecimento de fala. Abra o app em um navegador compatível e permita o acesso ao microfone."
+            : "O reconhecimento de fala requer uma compilação de desenvolvimento nativa (development build) e não está disponível no Expo Go.",
         onClose: () => router.back(),
       });
       return;
     }
+
+    if (Platform.OS === "web") {
+      return;
+    }
+
     const timer = setTimeout(() => {
       startRecordingRef.current();
     }, 600);
@@ -263,14 +338,15 @@ export default function AiVoiceScreen() {
     <>
       <AiVoiceUI
         insets={insets}
-        router={router}
         isRecording={isRecording}
         isTranscribing={isProcessing}
+        isExtracting={isExtracting}
         transcriptionText={transcriptionText}
         normalizedVolume={normalizedVolume}
         onStart={startRecording}
         onStop={stopRecording}
         onCancel={cancelRecording}
+        onContinue={continueToConfirmation}
       />
       <ErrorModal
         visible={errorModal.visible}
@@ -289,26 +365,28 @@ export default function AiVoiceScreen() {
 // ─── Componente de UI compartilhado entre web e native ───────────────────────
 type AiVoiceUIProps = {
   insets: { top: number; bottom: number };
-  router: ReturnType<typeof useRouter>;
   isRecording: boolean;
   isTranscribing: boolean;
+  isExtracting: boolean;
   transcriptionText: string | null;
   normalizedVolume: number;
   onStart: () => void;
   onStop: () => void;
   onCancel: () => void;
+  onContinue: () => void;
 };
 
 function AiVoiceUI({
   insets,
-  router,
   isRecording,
   isTranscribing,
+  isExtracting,
   transcriptionText,
   normalizedVolume,
   onStart,
   onStop,
   onCancel,
+  onContinue,
 }: AiVoiceUIProps) {
   return (
     <View
@@ -340,7 +418,9 @@ function AiVoiceUI({
         </View>
 
         <Text style={styles.title}>
-          {isTranscribing
+          {isExtracting
+            ? "Interpretando seu pedido..."
+            : isTranscribing
             ? 'Transcrevendo áudio...'
             : isRecording
               ? "Ouvindo você..."
@@ -350,8 +430,10 @@ function AiVoiceUI({
         </Text>
 
         <Text style={styles.subtitle}>
-          {isTranscribing
-            ? 'Nossa inteligência artificial está processando sua fala.'
+          {isExtracting
+            ? "A inteligência artificial está organizando os dados do agendamento."
+            : isTranscribing
+            ? 'Aguardando a transcrição do áudio.'
             : isRecording
               ? "Fale livremente o que deseja agendar (ex: dia, horário ou modalidade)."
               : transcriptionText
@@ -433,13 +515,14 @@ function AiVoiceUI({
               <Text style={styles.retryActionText}>Gravar novamente</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.confirmActionBtn}
-              onPress={() => {
-                router.push("/(app)/confirm-schedule");
-              }}
+              style={[styles.confirmActionBtn, isExtracting && styles.confirmActionBtnDisabled]}
+              onPress={onContinue}
+              disabled={isExtracting}
               activeOpacity={0.8}
             >
-              <Text style={styles.confirmActionText}>Continuar</Text>
+              <Text style={styles.confirmActionText}>
+                {isExtracting ? "Interpretando..." : "Continuar"}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -640,6 +723,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#0A3D62",
     paddingVertical: 14,
     borderRadius: 28,
+  },
+  confirmActionBtnDisabled: {
+    opacity: 0.6,
   },
   confirmActionText: {
     color: "#FFFFFF",

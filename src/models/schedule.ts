@@ -59,6 +59,25 @@ export type AnaliseIa = {
   }[];
 };
 
+export type ExtractedSchedule = {
+  personalNome: string;
+  data: string;
+  tipoAula: string;
+  novoEndereco: {
+    numero: string;
+    complemento?: string;
+    unidade?: string;
+    tipo: string;
+    cep: {
+      id: string;
+      logradouro: string;
+      bairro: string;
+      localidade: string;
+      uf: string;
+    };
+  };
+};
+
 export type CheckSchedule = {
   agendamentoId: number;
   status: string;

@@ -71,6 +71,8 @@ export type NewEventPayload = {
 type NewEventProps = {
   visible: boolean;
   initialDate?: string;
+  initialStartHour?: string;
+  initialAddress?: SavedAddress;
   onClose: () => void;
   onSubmit?: (payload: NewEventPayload) => void;
   availableHours?: string[];
@@ -163,6 +165,8 @@ function isDateAtLeastTomorrow(dateStr: string) {
 export default function NewEvent({
   visible,
   initialDate = "",
+  initialStartHour = "",
+  initialAddress,
   onClose,
   onSubmit,
   personals: propPersonals,
@@ -211,12 +215,25 @@ export default function NewEvent({
         setDate(getTomorrowDateString());
       }
 
-      if (isReschedule && appoitmentData?.tipoAula) {
+      if (appoitmentData?.tipoAula) {
         setType(appoitmentData.tipoAula as NewEventPayload["type"]);
       }
 
-      if (isReschedule && appoitmentData?.personal?.id) {
+      if (appoitmentData?.personal?.id) {
         setSelectedPersonalId(appoitmentData.personal.id);
+      }
+
+      setStartHour(initialStartHour);
+      if (initialAddress) {
+        setAddress({
+          postalCode: initialAddress.postalCode,
+          street: initialAddress.street,
+          city: initialAddress.city,
+          state: initialAddress.state,
+          number: initialAddress.number,
+          complement: initialAddress.complement,
+          neighborhood: initialAddress.neighborhood || "",
+        });
       }
 
       setStep(1);
@@ -225,7 +242,7 @@ export default function NewEvent({
       setErrorModal({ visible: false, title: "", content: "" });
       setSavedPayload(null);
     }
-  }, [visible, initialDate, isReschedule, appoitmentData]);
+  }, [visible, initialDate, initialStartHour, initialAddress, isReschedule, appoitmentData]);
 
   // Autenticação e perfil
   const { roles } = useAuth();
@@ -255,13 +272,13 @@ export default function NewEvent({
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number>();
   const [address, setAddress] = useState<Address>({
-    postalCode: "",
-    street: "",
-    city: "",
-    state: "",
-    number: "",
-    complement: "",
-    neighborhood: "",
+    postalCode: initialAddress?.postalCode ?? "",
+    street: initialAddress?.street ?? "",
+    city: initialAddress?.city ?? "",
+    state: initialAddress?.state ?? "",
+    number: initialAddress?.number ?? "",
+    complement: initialAddress?.complement ?? "",
+    neighborhood: initialAddress?.neighborhood ?? "",
   });
   const [loadingCep, setLoadingCep] = useState(false);
 
@@ -287,7 +304,17 @@ export default function NewEvent({
             caminhoFoto: p.caminhoFoto,
           }));
           setPersonalsList(mapped);
-          setSelectedPersonalId(mapped[0].id);
+          const requestedPersonalId = Number(appoitmentData?.personal?.id);
+          const requestedPersonalName = String(appoitmentData?.personal?.nome ?? "")
+            .trim()
+            .toLocaleLowerCase();
+          const preferredPersonal =
+            mapped.find((personal) => personal.id === requestedPersonalId) ??
+            mapped.find(
+              (personal) =>
+                personal.nome.trim().toLocaleLowerCase() === requestedPersonalName,
+            );
+          setSelectedPersonalId(preferredPersonal?.id ?? mapped[0].id);
         }
       } catch {
         // Mantém fallback inicial
@@ -300,7 +327,7 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, [visible, isPersonalOrAdmin]);
+  }, [visible, isPersonalOrAdmin, appoitmentData]);
 
   // 1b. Carregar dias desabilitados do personal selecionado (apenas quando visível)
   useEffect(() => {
@@ -349,6 +376,24 @@ export default function NewEvent({
             complement: addr.complemento || "",
           }));
           setSavedAddresses(mapped);
+          if (initialAddress) {
+            const matchingAddress = mapped.find(
+              (savedAddress) =>
+                savedAddress.postalCode.replace(/\D/g, "") ===
+                  initialAddress.postalCode.replace(/\D/g, "") &&
+                savedAddress.number === initialAddress.number,
+            );
+            setAddress({
+              postalCode: initialAddress.postalCode,
+              street: initialAddress.street,
+              city: initialAddress.city,
+              state: initialAddress.state,
+              number: initialAddress.number,
+              complement: initialAddress.complement,
+              neighborhood: initialAddress.neighborhood || "",
+            });
+            setSelectedAddressId(matchingAddress?.id);
+          }
         }
       } catch {
         // Mantém fallback inicial
@@ -361,7 +406,7 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialAddress]);
 
   // 3. Carregar horários disponíveis do personal selecionado para a data e tipo
   useEffect(() => {
@@ -380,6 +425,12 @@ export default function NewEvent({
               endHour: slot.fim || slot.horaFim,
             }));
             setDynamicSchedules(mappedSlots);
+            if (initialStartHour) {
+              const matchingSlot = mappedSlots.find(
+                (slot) => slot.startHour === initialStartHour,
+              );
+              if (matchingSlot) setStartHour(matchingSlot.startHour);
+            }
 
             // Ajusta o período ativo se o atual não tiver slots
             const periods = Array.from(
@@ -406,7 +457,7 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, [selectedPersonalId, date, type, propSchedules]);
+  }, [selectedPersonalId, date, type, propSchedules, initialStartHour]);
 
   const selectedPersonal = useMemo(() => {
     return (
