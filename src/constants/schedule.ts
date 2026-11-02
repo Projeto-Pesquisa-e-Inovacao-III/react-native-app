@@ -30,11 +30,55 @@ function isRecommendationNotFound(error: unknown) {
 }
 
 export function extractScheduleFromSpeech(textoAgendamento: string) {
-  return api.post<ExtractedSchedule>(
-    '/agendamentos/extrair',
-    { textoAgendamento },
-    { timeout: AI_REQUEST_TIMEOUT },
-  );
+  const endpoint = '/agendamentos/extrair';
+  const payload = { textoAgendamento };
+  const startedAt = Date.now();
+
+  if (__DEV__) {
+    console.info('[Agendamento IA] Requisição enviada', {
+      method: 'POST',
+      endpoint,
+      payload,
+    });
+  }
+
+  return api
+    .post<ExtractedSchedule>(endpoint, payload, {
+      timeout: AI_REQUEST_TIMEOUT,
+    })
+    .then((response) => {
+      if (__DEV__) {
+        console.info('[Agendamento IA] Resposta recebida', {
+          endpoint,
+          status: response.status,
+          durationMs: Date.now() - startedAt,
+          data: response.data,
+        });
+      }
+
+      return response;
+    })
+    .catch((error: unknown) => {
+      if (__DEV__) {
+        if (isAxiosError(error)) {
+          console.error('[Agendamento IA] Falha na requisição', {
+            endpoint,
+            status: error.response?.status ?? null,
+            durationMs: Date.now() - startedAt,
+            response: error.response?.data ?? null,
+            message: error.message,
+          });
+        } else {
+          console.error('[Agendamento IA] Falha na requisição', {
+            endpoint,
+            durationMs: Date.now() - startedAt,
+            error,
+          });
+        }
+      }
+
+      throw error;
+    });
 }
 
 export async function getOrCreateTrainingRecommendation(agendamentoId: number) {

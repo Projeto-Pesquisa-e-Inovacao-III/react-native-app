@@ -49,29 +49,52 @@ const C = {
   avatarBg: '#1565A0',
 };
 
-function isExtractedSchedule(value: unknown): value is ExtractedSchedule {
-  if (!value || typeof value !== 'object') return false;
-  const schedule = value as Record<string, unknown>;
-  const address = schedule.novoEndereco;
-  if (!address || typeof address !== 'object') return false;
-  const parsedAddress = address as Record<string, unknown>;
-  const cep = parsedAddress.cep;
-  if (!cep || typeof cep !== 'object') return false;
-  const parsedCep = cep as Record<string, unknown>;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null;
+}
 
-  return (
-    typeof schedule.personalNome === 'string' &&
-    typeof schedule.data === 'string' &&
-    !Number.isNaN(new Date(schedule.data).getTime()) &&
-    typeof schedule.tipoAula === 'string' &&
-    typeof parsedAddress.numero === 'string' &&
-    typeof parsedAddress.tipo === 'string' &&
-    typeof parsedCep.id === 'string' &&
-    typeof parsedCep.logradouro === 'string' &&
-    typeof parsedCep.bairro === 'string' &&
-    typeof parsedCep.localidade === 'string' &&
-    typeof parsedCep.uf === 'string'
-  );
+function asString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function parseExtractedSchedule(value: unknown): ExtractedSchedule | null {
+  const schedule = asRecord(value);
+  const address = asRecord(schedule?.novoEndereco);
+  const cep = asRecord(address?.cep);
+  if (!schedule || !address) return null;
+
+  const personalNome = asString(schedule.personalNome, asString(schedule.personalId));
+  const data = asString(schedule.data);
+  const tipoAula = asString(schedule.tipoAula);
+  if (
+    !personalNome.trim() ||
+    !data ||
+    Number.isNaN(new Date(data).getTime()) ||
+    !tipoAula
+  ) {
+    return null;
+  }
+
+  return {
+    personalNome,
+    data,
+    tipoAula,
+    novoEndereco: {
+      numero: asString(address.numero),
+      complemento: asString(address.complemento),
+      unidade: asString(address.unidade),
+      tipo: asString(address.tipo, tipoAula),
+      cep: {
+        id: asString(cep?.id),
+        logradouro: asString(cep?.logradouro),
+        bairro: asString(cep?.bairro),
+        localidade: asString(cep?.localidade),
+        uf: asString(cep?.uf),
+      },
+    },
+  };
 }
 
 function getAddressLabel(appointment: ExtractedSchedule) {
@@ -144,7 +167,7 @@ export default function ConfirmScheduleScreen() {
 
     try {
       const parsed: unknown = JSON.parse(raw);
-      return isExtractedSchedule(parsed) ? parsed : null;
+      return parseExtractedSchedule(parsed);
     } catch {
       return null;
     }
@@ -267,8 +290,8 @@ export default function ConfirmScheduleScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Confirme o agendamento</Text>
           <Text style={styles.headerSubtitle}>
-            Confira os dados interpretados pela IA e escolha um horário
-            disponível antes de enviar a solicitação ao personal.
+            Confira os dados interpretados. A data e o horário já foram informados;
+            avance para revisar o endereço e enviar o agendamento.
           </Text>
         </View>
 
@@ -334,14 +357,21 @@ export default function ConfirmScheduleScreen() {
               <View style={styles.addressLeft}>
                 <MapPin size={15} color={C.textMuted} strokeWidth={2} />
                 <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.addressLabel}>Endereço sugerido</Text>
-                  <Text style={styles.addressText}>{appointmentAddress}</Text>
+                  <Text style={styles.addressLabel}>
+                    {appointmentAddress ? 'Endereço sugerido' : 'Endereço não identificado'}
+                  </Text>
+                  <Text style={styles.addressText}>
+                    {appointmentAddress ||
+                      'Você poderá escolher um endereço cadastrado ou informar outro na próxima etapa.'}
+                  </Text>
                 </View>
               </View>
             </View>
 
             {/* Mapa */}
-            <GoogleMapEmbed endereco={appointmentAddress} height={148} style={styles.map} />
+            {appointmentAddress ? (
+              <GoogleMapEmbed endereco={appointmentAddress} height={148} style={styles.map} />
+            ) : null}
 
 
             {/* Aviso de confirmação */}
@@ -361,7 +391,9 @@ export default function ConfirmScheduleScreen() {
             onPress={handleConfirm}
           >
             <Check size={20} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.confirmBtnText}>Escolher horário e confirmar</Text>
+            <Text style={styles.confirmBtnText}>
+              {appointmentAddress ? 'Revisar endereço e agendar' : 'Informar endereço e agendar'}
+            </Text>
           </TouchableOpacity>
 
           {/* ── Linha de ações secundárias ───────────────────────────────────── */}
@@ -404,9 +436,9 @@ export default function ConfirmScheduleScreen() {
         initialDate={appointment?.data.split('T')[0]}
         initialStartHour={appointmentDateTime?.time}
         initialAddress={initialAddress}
-        title="Novo agendamento"
-        buttonTitle="Avançar"
+        title="Finalizar agendamento"
         appoitmentData={appointmentSelection}
+        voiceAssisted
         onSubmit={() => safeDismissAll()}
         errorModal={showError}
       />
