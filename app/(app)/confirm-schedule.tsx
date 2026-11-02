@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   ScrollView,
@@ -7,23 +7,21 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   MapPin,
   Mic,
-  CheckCircle2,
   X,
-  Pencil,
   Check,
   Info,
 } from 'lucide-react-native';
 import { GoogleMapEmbed } from '../../src/components/GoogleMapEmbed';
 import FocusAwareStatusBar from '../../src/components/FocusAwareStatusBar';
-import NewEvent from '../../src/components/NewEvent';
-import SuccessModal from '../../src/components/modals/SuccessModal';
+import NewEvent, { type SavedAddress } from '../../src/components/NewEvent';
 import ErrorModal from '../../src/components/modals/ErrorModal';
+import type { ExtractedSchedule } from '../../src/models/schedule';
 
 // ─── Paleta de cores alinhada com o projeto ──────────────────────────────────
 const C = {
@@ -51,22 +49,83 @@ const C = {
   avatarBg: '#1565A0',
 };
 
-// ─── Dados mockados representando o resultado da IA ──────────────────────────
-const MOCK_APPOINTMENT = {
-  type: 'PRESENCIAL',
-  recognized: true,
-  gym: 'Academia Fit Evolution',
-  date: 'Qua, 16/09/2026',
-  timeStart: '15:00',
-  timeEnd: '16:00',
-  trainer: {
-    initials: 'FB',
-    name: 'Fabio Henrique',
-    role: 'PERSONAL TRAINER',
-    available: true,
-  },
-  address: 'Rua Carvalho, 294 - Jardim Paulista',
-};
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function parseExtractedSchedule(value: unknown): ExtractedSchedule | null {
+  const schedule = asRecord(value);
+  const address = asRecord(schedule?.novoEndereco);
+  const cep = asRecord(address?.cep);
+  if (!schedule || !address) return null;
+
+  const personalNome = asString(schedule.personalNome, asString(schedule.personalId));
+  const data = asString(schedule.data);
+  const tipoAula = asString(schedule.tipoAula);
+  if (
+    !personalNome.trim() ||
+    !data ||
+    Number.isNaN(new Date(data).getTime()) ||
+    !tipoAula
+  ) {
+    return null;
+  }
+
+  return {
+    personalNome,
+    data,
+    tipoAula,
+    novoEndereco: {
+      numero: asString(address.numero),
+      complemento: asString(address.complemento),
+      unidade: asString(address.unidade),
+      tipo: asString(address.tipo, tipoAula),
+      cep: {
+        id: asString(cep?.id),
+        logradouro: asString(cep?.logradouro),
+        bairro: asString(cep?.bairro),
+        localidade: asString(cep?.localidade),
+        uf: asString(cep?.uf),
+      },
+    },
+  };
+}
+
+function getAddressLabel(appointment: ExtractedSchedule) {
+  const { cep } = appointment.novoEndereco;
+  return [
+    cep.logradouro,
+    appointment.novoEndereco.numero,
+    cep.bairro,
+    cep.localidade,
+    cep.uf,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function getLocalDateTime(value: string) {
+  const [date, time = ''] = value.split('T');
+  const [year, month, day] = date.split('-').map(Number);
+  const localDate = new Date(year, month - 1, day);
+  return {
+    date: Number.isNaN(localDate.getTime())
+      ? date
+      : localDate.toLocaleDateString('pt-BR', {
+          weekday: 'short',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }),
+    time: time.slice(0, 5),
+  };
+}
 
 // ─── Sub-componente: Badge ────────────────────────────────────────────────────
 type BadgeProps = {
@@ -99,7 +158,51 @@ function InfoRow({ icon, text }: InfoRowProps) {
 export default function ConfirmScheduleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const apt = MOCK_APPOINTMENT;
+  const { extractedSchedule: rawSchedule } = useLocalSearchParams<{
+    extractedSchedule?: string | string[];
+  }>();
+  const appointment = useMemo(() => {
+    const raw = Array.isArray(rawSchedule) ? rawSchedule[0] : rawSchedule;
+    if (!raw) return null;
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parseExtractedSchedule(parsed);
+    } catch {
+      return null;
+    }
+  }, [rawSchedule]);
+  const appointmentAddress = appointment ? getAddressLabel(appointment) : '';
+  const appointmentDateTime = appointment
+    ? getLocalDateTime(appointment.data)
+    : null;
+  const initialAddress = useMemo<SavedAddress | undefined>(
+    () =>
+      appointment
+        ? {
+            id: 0,
+            label: appointment.novoEndereco.tipo,
+            postalCode: appointment.novoEndereco.cep.id,
+            street: appointment.novoEndereco.cep.logradouro,
+            neighborhood: appointment.novoEndereco.cep.bairro,
+            city: appointment.novoEndereco.cep.localidade,
+            state: appointment.novoEndereco.cep.uf,
+            number: appointment.novoEndereco.numero,
+            complement: appointment.novoEndereco.complemento ?? '',
+          }
+        : undefined,
+    [appointment],
+  );
+  const appointmentSelection = useMemo(
+    () =>
+      appointment
+        ? {
+            tipoAula: appointment.tipoAula,
+            personal: { nome: appointment.personalNome },
+          }
+        : undefined,
+    [appointment],
+  );
 
   // Fecha apenas a tela atual (volta ao modal anterior, ex: ai-voice)
   const safeDismiss = useCallback(() => {
@@ -119,22 +222,13 @@ export default function ConfirmScheduleScreen() {
 
   // ─── Estado dos modais ───────────────────────────────────────────────────────
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [successVisible, setSuccessVisible] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, title: '', content: '' });
 
   const showError = useCallback((title: string, content: string) => {
     setErrorModal({ visible: true, title, content });
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    // TODO: chamar API de criação de agendamento aqui
-    setSuccessVisible(true);
-  }, []);
-
-  const handleSuccessClose = useCallback(() => {
-    setSuccessVisible(false);
-    safeDismissAll();
-  }, [safeDismissAll]);
+  const handleConfirm = useCallback(() => setEditModalVisible(true), []);
 
   // Animação de entrada do card
   const cardSlide = useRef(new Animated.Value(40)).current;
@@ -196,8 +290,8 @@ export default function ConfirmScheduleScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Confirme o agendamento</Text>
           <Text style={styles.headerSubtitle}>
-            A IA interpretou sua fala com sucesso. Revise os detalhes abaixo
-            antes de confirmar o envio ao personal.
+            Confira os dados interpretados. A data e o horário já foram informados;
+            avance para revisar o endereço e enviar o agendamento.
           </Text>
         </View>
 
@@ -211,7 +305,7 @@ export default function ConfirmScheduleScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View
+        {appointment ? <Animated.View
           style={{ opacity: cardOpacity, transform: [{ translateY: cardSlide }] }}
         >
           {/* ── Card principal ─────────────────────────────────────────────── */}
@@ -220,56 +314,40 @@ export default function ConfirmScheduleScreen() {
             {/* Linha: tipo + reconhecido */}
             <View style={styles.cardTopRow}>
               <Badge
-                label={apt.type}
+                label={appointment.tipoAula}
                 color={C.blueText}
                 bg={C.blueLight}
               />
-              {apt.recognized && (
-                <Badge
-                  label="✓ Reconhecido"
-                  color={C.greenText}
-                  bg={C.greenLight}
-                  icon={
-                    <CheckCircle2
-                      size={12}
-                      color={C.greenText}
-                      style={{ marginRight: 4 }}
-                    />
-                  }
-                />
-              )}
+              <Badge label="✓ Interpretado" color={C.greenText} bg={C.greenLight} />
             </View>
 
-            {/* Academia */}
-            <Text style={styles.gymName}>{apt.gym}</Text>
+            <Text style={styles.gymName}>Agendamento sugerido</Text>
 
             {/* Data e horário */}
             <InfoRow
               icon={<View style={styles.calIconWrap}><Text style={styles.calIcon}>📅</Text></View>}
-              text={`${apt.date}  •  ${apt.timeStart} - ${apt.timeEnd}`}
+              text={`${appointmentDateTime?.date}  •  ${appointmentDateTime?.time || 'Horário não informado'}`}
             />
 
             <View style={styles.divider} />
 
             {/* Trainer */}
             <View style={styles.trainerRow}>
-              {/* Avatar */}
               <View style={styles.trainerAvatar}>
-                <Text style={styles.trainerInitials}>{apt.trainer.initials}</Text>
+                <Text style={styles.trainerInitials}>
+                  {appointment.personalNome
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((part) => part[0] ?? '')
+                    .join('')
+                    .toUpperCase()}
+                </Text>
               </View>
 
               <View style={styles.trainerInfo}>
-                <Text style={styles.trainerRole}>{apt.trainer.role}</Text>
-                <Text style={styles.trainerName}>{apt.trainer.name}</Text>
+                <Text style={styles.trainerRole}>PERSONAL TRAINER</Text>
+                <Text style={styles.trainerName}>{appointment.personalNome}</Text>
               </View>
-
-              {apt.trainer.available && (
-                <Badge
-                  label="Grade livre"
-                  color={C.greenText}
-                  bg={C.greenLight}
-                />
-              )}
             </View>
 
             <View style={styles.divider} />
@@ -279,21 +357,21 @@ export default function ConfirmScheduleScreen() {
               <View style={styles.addressLeft}>
                 <MapPin size={15} color={C.textMuted} strokeWidth={2} />
                 <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.addressLabel}>Endereço da Unidade</Text>
-                  <Text style={styles.addressText}>{apt.address}</Text>
+                  <Text style={styles.addressLabel}>
+                    {appointmentAddress ? 'Endereço sugerido' : 'Endereço não identificado'}
+                  </Text>
+                  <Text style={styles.addressText}>
+                    {appointmentAddress ||
+                      'Você poderá escolher um endereço cadastrado ou informar outro na próxima etapa.'}
+                  </Text>
                 </View>
               </View>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                accessibilityLabel="Trocar endereço"
-                accessibilityRole="button"
-              >
-                <Text style={styles.trocarBtn}>Trocar</Text>
-              </TouchableOpacity>
             </View>
 
             {/* Mapa */}
-            <GoogleMapEmbed endereco={apt.address} height={148} style={styles.map} />
+            {appointmentAddress ? (
+              <GoogleMapEmbed endereco={appointmentAddress} height={148} style={styles.map} />
+            ) : null}
 
 
             {/* Aviso de confirmação */}
@@ -305,19 +383,6 @@ export default function ConfirmScheduleScreen() {
             </View>
           </View>
 
-          {/* ── Ação: Editar ─────────────────────────────────────────────────── */}
-          <TouchableOpacity
-            style={styles.editBtn}
-            activeOpacity={0.75}
-            accessibilityLabel="Editar agendamento"
-            accessibilityRole="button"
-            onPress={() => setEditModalVisible(true)}
-          >
-            <Pencil size={16} color={C.textSecondary} strokeWidth={2} />
-            <Text style={styles.editBtnText}>Editar agendamento</Text>
-          </TouchableOpacity>
-
-          {/* ── Ação: Confirmar ──────────────────────────────────────────────── */}
           <TouchableOpacity
             style={styles.confirmBtn}
             activeOpacity={0.85}
@@ -326,7 +391,9 @@ export default function ConfirmScheduleScreen() {
             onPress={handleConfirm}
           >
             <Check size={20} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.confirmBtnText}>Confirmar Agendamento</Text>
+            <Text style={styles.confirmBtnText}>
+              {appointmentAddress ? 'Revisar endereço e agendar' : 'Informar endereço e agendar'}
+            </Text>
           </TouchableOpacity>
 
           {/* ── Linha de ações secundárias ───────────────────────────────────── */}
@@ -353,42 +420,41 @@ export default function ConfirmScheduleScreen() {
               <Text style={styles.cancelBtnText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </Animated.View> : (
+          <View style={styles.card}>
+            <Text style={styles.gymName}>Não foi possível carregar os dados interpretados.</Text>
+            <Text style={styles.infoRowText}>
+              Volte à gravação e envie o pedido novamente.
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
-      {/* ── Modal de edição (reagendamento) ─────────────────────────────────── */}
       <NewEvent
         visible={editModalVisible}
         onClose={() => setEditModalVisible(false)}
-        isReschedule
-        title="Editar agendamento"
-        buttonTitle="Salvar alterações"
-        appoitmentData={{
-          dataInicio: `${apt.date}T${apt.timeStart}:00`,
-          tipoAula: apt.type,
-          personal: { id: 0, nome: apt.trainer.name },
-        }}
-        onRescheduleSuccess={() => {
-          setEditModalVisible(false);
-          setSuccessVisible(true);
-        }}
+        initialDate={appointment?.data.split('T')[0]}
+        initialStartHour={appointmentDateTime?.time}
+        initialAddress={initialAddress}
+        title="Finalizar agendamento"
+        appoitmentData={appointmentSelection}
+        voiceAssisted
+        onSubmit={() => safeDismissAll()}
         errorModal={showError}
-      />
-
-      {/* ── Modal de sucesso ────────────────────────────────────────────────── */}
-      <SuccessModal
-        visible={successVisible}
-        title="Agendamento confirmado!"
-        content="Seu agendamento foi enviado ao personal. Aguarde a confirmação na sua agenda."
-        onClose={handleSuccessClose}
       />
 
       {/* ── Modal de erro ───────────────────────────────────────────────────── */}
       <ErrorModal
-        visible={errorModal.visible}
-        title={errorModal.title}
-        content={errorModal.content}
-        onClose={() => setErrorModal(prev => ({ ...prev, visible: false }))}
+        visible={errorModal.visible || !appointment}
+        title={errorModal.title || 'Dados da IA inválidos'}
+        content={
+          errorModal.content ||
+          'Volte à gravação e envie o pedido novamente para interpretar os dados.'
+        }
+        onClose={() => {
+          setErrorModal({ visible: false, title: '', content: '' });
+          if (!appointment) safeDismiss();
+        }}
       />
 
     </View>

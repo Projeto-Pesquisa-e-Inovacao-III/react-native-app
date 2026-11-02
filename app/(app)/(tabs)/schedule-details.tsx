@@ -38,6 +38,7 @@ import {
   appointmentAtCalendar,
   concludeAppointment,
   findAppointmentById,
+  getOrCreateTrainingRecommendation,
   getAppointmentResumes,
   refuseAppointment,
   reportAbsencePersonal,
@@ -118,6 +119,10 @@ export default function ScheduleDetailsScreen() {
     content: string;
   } | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState<string | null>(null);
+  const [isLoadingAiRecommendation, setIsLoadingAiRecommendation] = useState(false);
+  const [aiRecommendationError, setAiRecommendationError] = useState<string | null>(null);
+  const [aiRecommendationNotice, setAiRecommendationNotice] = useState<string | null>(null);
   const [selectedQrAppointment, setSelectedQrAppointment] =
     useState<AppointmentForQr | null>(null);
 
@@ -172,6 +177,65 @@ export default function ScheduleDetailsScreen() {
   });
 
   const last3Appointments: any[] = resumosData?.data?.content ?? [];
+  const displayName = isAluno
+    ? appointmentData?.personal?.nome
+    : appointmentData?.aluno?.nome;
+  const lastNote = appointmentData?.descricao || "";
+
+  const loadAiRecommendation = useCallback(async () => {
+    setAiRecommendation(null);
+    setAiRecommendationError(null);
+    setIsLoadingAiRecommendation(true);
+    try {
+      const response = await getOrCreateTrainingRecommendation(appointmentId);
+      if (typeof response.data !== "string" || !response.data.trim()) {
+        throw new Error("A API não retornou uma recomendação de treino válida.");
+      }
+      setAiRecommendation(response.data);
+    } catch (error) {
+      console.error("Failed to load AI training recommendation:", error);
+      const responseData =
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "data" in error.response
+          ? error.response.data
+          : undefined;
+      const apiMessage =
+        responseData && typeof responseData === "object"
+          ? Object.values(responseData).find(
+              (value): value is string => typeof value === "string",
+            )
+          : typeof responseData === "string"
+            ? responseData
+            : undefined;
+      setAiRecommendationError(
+        apiMessage ||
+          (error instanceof Error
+            ? error.message
+            : "Não foi possível carregar a recomendação. Tente novamente."),
+      );
+    } finally {
+      setIsLoadingAiRecommendation(false);
+    }
+  }, [appointmentId]);
+
+  const openAiPanel = useCallback(() => {
+    setAiPanelOpen(true);
+    if (appointmentData?.status !== "APROVADO") {
+      setAiRecommendation(null);
+      setAiRecommendationError(null);
+      setAiRecommendationNotice(
+        "A recomendação personalizada poderá ser gerada depois que este agendamento for aprovado.",
+      );
+      return;
+    }
+
+    setAiRecommendationNotice(null);
+    void loadAiRecommendation();
+  }, [appointmentData?.status, loadAiRecommendation]);
 
   // Condição para liberação dos botões de conclusão/ausência pelo personal (a partir do dia da aula)
   const buttonsActionsCondition = useMemo(() => {
@@ -405,9 +469,6 @@ export default function ScheduleDetailsScreen() {
     (appointmentData?.status === "APROVADO" ||
       appointmentData?.status === "PENDENTE_PERSONAL_CONCLUIR");
 
-  const displayName = isAluno
-    ? appointmentData?.personal?.nome
-    : appointmentData?.aluno?.nome;
   const displayRole = isAluno ? "Personal Trainer" : "Aluno";
   const displayAge = isAluno
     ? appointmentData?.personal?.idade
@@ -415,8 +476,6 @@ export default function ScheduleDetailsScreen() {
   const displayAvatar = isAluno
     ? appointmentData?.personal?.avatarUrl
     : appointmentData?.aluno?.avatarUrl;
-
-  const lastNote = appointmentData?.descricao || "";
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -563,27 +622,27 @@ export default function ScheduleDetailsScreen() {
               </View>
             </View>
 
-            {/* Card de Dica de IA (quando disponível) */}
-            {/* {(isPersonal || isAdmin) &&
-              appointmentData?.status === "APROVADO" && (
-                <TouchableOpacity
-                  style={styles.aiBannerCard}
-                  onPress={() => setAiPanelOpen(true)}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.aiBannerIcon}>
-                    <Sparkles size={20} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.aiBannerTextCol}>
-                    <Text style={styles.aiBannerTitle}>
-                      Dica do Treinador IA
-                    </Text>
-                    <Text style={styles.aiBannerSub}>
-                      Toque para ver orientações de treino
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )} */}
+            {(isPersonal || isAdmin) && appointmentData && (
+              <TouchableOpacity
+                style={styles.aiBannerCard}
+                onPress={openAiPanel}
+                activeOpacity={0.85}
+              >
+                <View style={styles.aiBannerIcon}>
+                  <Sparkles size={20} color="#FFFFFF" />
+                </View>
+                <View style={styles.aiBannerTextCol}>
+                  <Text style={styles.aiBannerTitle}>
+                    Treino personalizado com IA
+                  </Text>
+                  <Text style={styles.aiBannerSub}>
+                    {appointmentData.status === "APROVADO"
+                      ? "Gerar ou consultar recomendações para este aluno"
+                      : "Disponível após aprovar este agendamento"}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
 
             {/* Card de Endereço Completo */}
             <View style={styles.card}>
@@ -931,6 +990,11 @@ export default function ScheduleDetailsScreen() {
         visible={aiPanelOpen}
         onClose={() => setAiPanelOpen(false)}
         analiseIa={appointmentData?.analiseIa}
+        recommendationText={aiRecommendation}
+        isLoading={isLoadingAiRecommendation}
+        error={aiRecommendationError}
+        notice={aiRecommendationNotice}
+        onRetry={loadAiRecommendation}
         note={lastNote}
         studentName={displayName}
       />

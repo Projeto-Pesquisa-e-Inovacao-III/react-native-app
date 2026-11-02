@@ -10,14 +10,19 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Calendar,
   CalendarCheck,
+  CheckCircle2,
   Clock,
+  Clock3,
   Dumbbell,
   Home,
   Activity,
+  Info,
 } from "lucide-react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { getPersonalList, insertAppointment, disabledPersonalDays, rescheduleAppointment } from "../constants/schedule";
 import { getPersonalHours } from "../constants/personal";
 import { getUserAddresses, lookupCep } from "../constants/address";
@@ -25,6 +30,7 @@ import { useAuth } from "../contexts/AuthContext";
 import type { Schedule, ScheduleReschedule } from "../models/schedule";
 import SuccessModal from "./modals/SuccessModal";
 import ErrorModal from "./modals/ErrorModal";
+import NoticeModal from "./modals/NoticeModal";
 
 export type Personal = {
   id: number;
@@ -71,6 +77,8 @@ export type NewEventPayload = {
 type NewEventProps = {
   visible: boolean;
   initialDate?: string;
+  initialStartHour?: string;
+  initialAddress?: SavedAddress;
   onClose: () => void;
   onSubmit?: (payload: NewEventPayload) => void;
   availableHours?: string[];
@@ -87,6 +95,7 @@ type NewEventProps = {
   onRescheduleSuccess?: () => void;
   errorModal?: (title: string, description: string) => void;
   typeUser?: string[];
+  voiceAssisted?: boolean;
 };
 
 type TimePeriod = "MANHÃ" | "TARDE" | "NOITE";
@@ -112,6 +121,12 @@ function formatDate(date: string) {
   return Number.isNaN(parsed.getTime())
     ? date
     : parsed.toLocaleDateString("pt-BR");
+}
+
+function formatCep(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
 function getClassTypeBadge(type: string) {
@@ -160,9 +175,35 @@ function isDateAtLeastTomorrow(dateStr: string) {
   return target.getTime() > todayStart.getTime();
 }
 
+function isCompleteAddress(address: Address) {
+  const cepDigits = address.postalCode.replace(/\D/g, "");
+  return (
+    cepDigits.length === 8 &&
+    address.street.trim().length > 0 &&
+    address.number.trim().length > 0 &&
+    address.city.trim().length > 0 &&
+    address.state.trim().length === 2
+  );
+}
+
+function hasAddressDetails(address?: SavedAddress) {
+  if (!address) return false;
+  return [
+    address.postalCode,
+    address.street,
+    address.neighborhood,
+    address.city,
+    address.state,
+    address.number,
+    address.complement,
+  ].some((value) => value?.trim().length);
+}
+
 export default function NewEvent({
   visible,
   initialDate = "",
+  initialStartHour = "",
+  initialAddress,
   onClose,
   onSubmit,
   personals: propPersonals,
@@ -178,7 +219,10 @@ export default function NewEvent({
   onRescheduleSuccess,
   errorModal: propErrorModal,
   typeUser,
+  voiceAssisted = false,
 }: NewEventProps) {
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2>(1);
   const [date, setDate] = useState<string>(() => {
     if (appoitmentData?.dataInicio) {
@@ -211,21 +255,39 @@ export default function NewEvent({
         setDate(getTomorrowDateString());
       }
 
-      if (isReschedule && appoitmentData?.tipoAula) {
+      if (appoitmentData?.tipoAula) {
         setType(appoitmentData.tipoAula as NewEventPayload["type"]);
       }
 
-      if (isReschedule && appoitmentData?.personal?.id) {
+      if (appoitmentData?.personal?.id) {
         setSelectedPersonalId(appoitmentData.personal.id);
       }
 
-      setStep(1);
+      setStartHour(initialStartHour);
+      if (initialAddress) {
+        setAddress({
+          postalCode: initialAddress.postalCode,
+          street: initialAddress.street,
+          city: initialAddress.city,
+          state: initialAddress.state,
+          number: initialAddress.number,
+          complement: initialAddress.complement,
+          neighborhood: initialAddress.neighborhood || "",
+        });
+      }
+
+      setStep(voiceAssisted ? 2 : 1);
       setError("");
+      setRequestedPersonalNotFound(false);
+      setShowPersonalNotice(false);
+      setShowMissingAddressNotice(false);
+      setShowVoicePersonalPicker(false);
+      setVoiceAvailability(voiceAssisted ? "checking" : "available");
       setSuccessModalVisible(false);
       setErrorModal({ visible: false, title: "", content: "" });
       setSavedPayload(null);
     }
-  }, [visible, initialDate, isReschedule, appoitmentData]);
+  }, [visible, initialDate, initialStartHour, initialAddress, isReschedule, appoitmentData, voiceAssisted]);
 
   // Autenticação e perfil
   const { roles } = useAuth();
@@ -237,6 +299,16 @@ export default function NewEvent({
   );
   const [loadingPersonals, setLoadingPersonals] = useState(false);
   const [selectedPersonalId, setSelectedPersonalId] = useState<number | undefined>(undefined);
+  const [requestedPersonalNotFound, setRequestedPersonalNotFound] = useState(false);
+  const [showPersonalNotice, setShowPersonalNotice] = useState(false);
+  const [showMissingAddressNotice, setShowMissingAddressNotice] = useState(false);
+  const [showVoicePersonalPicker, setShowVoicePersonalPicker] = useState(false);
+  const [personalNotice, setPersonalNotice] = useState({
+    title: "Personal não encontrado",
+    content: "",
+    actionLabel: "Escolher personal",
+    canChoose: true,
+  });
   const [disabledWeekdays, setDisabledWeekdays] = useState<string[]>([]);
 
   // Tipo de aula e Horários
@@ -247,6 +319,9 @@ export default function NewEvent({
     propSchedules && propSchedules.length > 0 ? propSchedules : []
   );
   const [loadingHours, setLoadingHours] = useState(false);
+  const [voiceAvailability, setVoiceAvailability] = useState<
+    "checking" | "available" | "unavailable" | "error"
+  >(voiceAssisted ? "checking" : "available");
 
   // Endereço
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>(
@@ -255,15 +330,16 @@ export default function NewEvent({
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number>();
   const [address, setAddress] = useState<Address>({
-    postalCode: "",
-    street: "",
-    city: "",
-    state: "",
-    number: "",
-    complement: "",
-    neighborhood: "",
+    postalCode: initialAddress?.postalCode ?? "",
+    street: initialAddress?.street ?? "",
+    city: initialAddress?.city ?? "",
+    state: initialAddress?.state ?? "",
+    number: initialAddress?.number ?? "",
+    complement: initialAddress?.complement ?? "",
+    neighborhood: initialAddress?.neighborhood ?? "",
   });
   const [loadingCep, setLoadingCep] = useState(false);
+  const addressIsComplete = isCompleteAddress(address);
 
   // Estado de submissão e erro
   const [submitting, setSubmitting] = useState(false);
@@ -276,9 +352,18 @@ export default function NewEvent({
     let isMounted = true;
     async function fetchPersonals() {
       setLoadingPersonals(true);
+      const startedAt = Date.now();
       try {
         const response = await getPersonalList();
         const rawContent = response.data?.content || response.data;
+        if (__DEV__) {
+          console.info("[Agendamento] Personais carregados", {
+            endpoint: "/personais",
+            status: response.status,
+            durationMs: Date.now() - startedAt,
+            total: Array.isArray(rawContent) ? rawContent.length : null,
+          });
+        }
         if (isMounted && Array.isArray(rawContent) && rawContent.length > 0) {
           const mapped: Personal[] = rawContent.map((p: any) => ({
             id: p.id,
@@ -287,10 +372,87 @@ export default function NewEvent({
             caminhoFoto: p.caminhoFoto,
           }));
           setPersonalsList(mapped);
-          setSelectedPersonalId(mapped[0].id);
+          const requestedPersonalId = Number(appoitmentData?.personal?.id);
+          const requestedPersonalName = String(appoitmentData?.personal?.nome ?? "")
+            .trim()
+            .toLocaleLowerCase();
+          const normalizeName = (name: string) =>
+            name
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLocaleLowerCase();
+          const normalizedRequestedName = normalizeName(requestedPersonalName);
+          const preferredPersonal =
+            mapped.find((personal) => personal.id === requestedPersonalId) ??
+            mapped.find(
+              (personal) => {
+                const normalizedName = normalizeName(personal.nome.trim());
+                return (
+                  normalizedRequestedName.length > 0 &&
+                  (normalizedName === normalizedRequestedName ||
+                    normalizedName.includes(normalizedRequestedName) ||
+                    normalizedRequestedName.includes(normalizedName))
+                );
+              },
+            );
+          if (preferredPersonal) {
+            setSelectedPersonalId(preferredPersonal.id);
+            setRequestedPersonalNotFound(false);
+          } else if (voiceAssisted) {
+            setSelectedPersonalId(undefined);
+            setRequestedPersonalNotFound(true);
+            setVoiceAvailability("unavailable");
+            setPersonalNotice({
+              title: "Personal não encontrado",
+              content: `A IA identificou "${requestedPersonalName}", mas não encontramos esse profissional. Escolha abaixo qual personal deve receber o agendamento.`,
+              actionLabel: "Escolher personal",
+              canChoose: mapped.length > 0,
+            });
+            setShowPersonalNotice(true);
+            if (__DEV__) {
+              console.warn("[Agendamento IA] Personal reconhecido não encontrado na lista", {
+                personalSolicitado: appoitmentData?.personal?.nome,
+                personaisDisponiveis: mapped.map((personal) => ({
+                  id: personal.id,
+                  nome: personal.nome,
+                })),
+              });
+            }
+          } else {
+            setSelectedPersonalId(mapped[0].id);
+          }
+        } else if (isMounted && voiceAssisted) {
+          setSelectedPersonalId(undefined);
+          setRequestedPersonalNotFound(true);
+          setVoiceAvailability("unavailable");
+          setPersonalNotice({
+            title: "Nenhum personal disponível",
+            content: "Não foi possível carregar a lista de personais. Tente novamente mais tarde.",
+            actionLabel: "Fechar",
+            canChoose: false,
+          });
+          setShowPersonalNotice(true);
         }
-      } catch {
-        // Mantém fallback inicial
+      } catch (error) {
+        if (isMounted && voiceAssisted) {
+          setSelectedPersonalId(undefined);
+          setRequestedPersonalNotFound(true);
+          setVoiceAvailability("error");
+          setPersonalNotice({
+            title: "Não foi possível validar o personal",
+            content: "Ocorreu um erro ao consultar os personais disponíveis. Verifique sua conexão e tente novamente.",
+            actionLabel: "Fechar",
+            canChoose: false,
+          });
+          setShowPersonalNotice(true);
+        }
+        if (__DEV__) {
+          console.error("[Agendamento] Falha ao carregar personais", {
+            endpoint: "/personais",
+            durationMs: Date.now() - startedAt,
+            error,
+          });
+        }
       } finally {
         if (isMounted) setLoadingPersonals(false);
       }
@@ -300,7 +462,7 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, [visible, isPersonalOrAdmin]);
+  }, [visible, isPersonalOrAdmin, appoitmentData, voiceAssisted]);
 
   // 1b. Carregar dias desabilitados do personal selecionado (apenas quando visível)
   useEffect(() => {
@@ -349,9 +511,39 @@ export default function NewEvent({
             complement: addr.complemento || "",
           }));
           setSavedAddresses(mapped);
+          if (initialAddress && hasAddressDetails(initialAddress)) {
+            const matchingAddress = mapped.find(
+              (savedAddress) =>
+                savedAddress.postalCode.replace(/\D/g, "") ===
+                  initialAddress.postalCode.replace(/\D/g, "") &&
+                savedAddress.number === initialAddress.number,
+            );
+            setAddress({
+              postalCode: initialAddress.postalCode,
+              street: initialAddress.street,
+              city: initialAddress.city,
+              state: initialAddress.state,
+              number: initialAddress.number,
+              complement: initialAddress.complement,
+              neighborhood: initialAddress.neighborhood || "",
+            });
+            setSelectedAddressId(matchingAddress?.id);
+          }
+        } else if (
+          isMounted &&
+          voiceAssisted &&
+          !hasAddressDetails(initialAddress)
+        ) {
+          setSavedAddresses([]);
+          setShowMissingAddressNotice(true);
         }
-      } catch {
-        // Mantém fallback inicial
+      } catch (error) {
+        if (__DEV__) {
+          console.error("[Agendamento IA] Falha ao consultar endereços salvos", {
+            endpoint: "/enderecos",
+            error,
+          });
+        }
       } finally {
         if (isMounted) setLoadingAddresses(false);
       }
@@ -361,7 +553,7 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialAddress]);
 
   // 3. Carregar horários disponíveis do personal selecionado para a data e tipo
   useEffect(() => {
@@ -370,9 +562,20 @@ export default function NewEvent({
       if (!selectedPersonalId || !date) return;
       setLoadingHours(true);
       setStartHour("");
+      if (voiceAssisted) setVoiceAvailability("checking");
+      const startedAt = Date.now();
       try {
         const response = await getPersonalHours(selectedPersonalId, date, type);
         const data = response.data;
+        if (__DEV__) {
+          console.info("[Agendamento] Horários consultados", {
+            endpoint: `/personais/${selectedPersonalId}/horarios-disponiveis`,
+            params: { data: date, tipoAula: type },
+            status: response.status,
+            durationMs: Date.now() - startedAt,
+            data,
+          });
+        }
         if (isMounted) {
           if (Array.isArray(data) && data.length > 0) {
             const mappedSlots: TimeSlot[] = data.map((slot: any) => ({
@@ -380,6 +583,20 @@ export default function NewEvent({
               endHour: slot.fim || slot.horaFim,
             }));
             setDynamicSchedules(mappedSlots);
+            if (initialStartHour) {
+              const normalizedInitialHour = initialStartHour.slice(0, 5);
+              const matchingSlot = mappedSlots.find(
+                (slot) => slot.startHour.slice(0, 5) === normalizedInitialHour,
+              );
+              if (matchingSlot) {
+                setStartHour(matchingSlot.startHour);
+                if (voiceAssisted) setVoiceAvailability("available");
+              } else if (voiceAssisted) {
+                setVoiceAvailability("unavailable");
+              }
+            } else if (voiceAssisted) {
+              setVoiceAvailability("unavailable");
+            }
 
             // Ajusta o período ativo se o atual não tiver slots
             const periods = Array.from(
@@ -390,12 +607,22 @@ export default function NewEvent({
             }
           } else {
             setDynamicSchedules([]);
+            if (voiceAssisted) setVoiceAvailability("unavailable");
           }
         }
-      } catch {
+      } catch (error) {
         // Se a API de horários falhar, exibe mensagem de sem disponibilidade
         if (isMounted) {
-          setDynamicSchedules(propSchedules || []);
+          setDynamicSchedules(voiceAssisted ? [] : propSchedules || []);
+          if (voiceAssisted) setVoiceAvailability("error");
+        }
+        if (__DEV__) {
+          console.error("[Agendamento] Falha ao consultar horários", {
+            endpoint: `/personais/${selectedPersonalId}/horarios-disponiveis`,
+            params: { data: date, tipoAula: type },
+            durationMs: Date.now() - startedAt,
+            error,
+          });
         }
       } finally {
         if (isMounted) setLoadingHours(false);
@@ -406,15 +633,15 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, [selectedPersonalId, date, type, propSchedules]);
+  }, [selectedPersonalId, date, type, propSchedules, initialStartHour, voiceAssisted]);
 
   const selectedPersonal = useMemo(() => {
     return (
       personalsList.find((p) => p.id === selectedPersonalId) ??
-      personalsList[0] ??
+      (voiceAssisted ? undefined : personalsList[0]) ??
       undefined
     );
-  }, [personalsList, selectedPersonalId]);
+  }, [personalsList, selectedPersonalId, voiceAssisted]);
 
   const availablePeriods = useMemo(
     () =>
@@ -480,12 +707,31 @@ export default function NewEvent({
   }
 
   function updateAddress(field: keyof Address, value: string) {
+    const inputValue =
+      field === "postalCode"
+        ? formatCep(value)
+        : field === "number"
+          ? value.replace(/\D/g, "")
+          : value;
     setSelectedAddressId(undefined);
-    setAddress((previous) => ({ ...previous, [field]: value }));
+    setAddress((previous) => {
+      const cepChanged =
+        field === "postalCode" &&
+        previous.postalCode.replace(/\D/g, "") !==
+          inputValue.replace(/\D/g, "");
+
+      return {
+        ...previous,
+        [field]: inputValue,
+        ...(cepChanged
+          ? { street: "", city: "", state: "", neighborhood: "" }
+          : {}),
+      };
+    });
 
     // Se o campo for CEP, faz busca automática via ViaCEP com debounce
     if (field === "postalCode") {
-      const cleanDigits = value.replace(/\D/g, "");
+      const cleanDigits = inputValue.replace(/\D/g, "");
       if (cepDebounceTimer.current) clearTimeout(cepDebounceTimer.current);
 
       if (cleanDigits.length === 8) {
@@ -554,14 +800,19 @@ export default function NewEvent({
   }
 
   async function submit() {
-    if (
-      !address.postalCode ||
-      !address.street ||
-      !address.number ||
-      !address.city ||
-      !address.state
-    ) {
-      const msg = "Preencha todos os dados obrigatórios do endereço (CEP, logradouro, número, cidade e estado).";
+    if (!selectedPersonal) {
+      const msg = "Não foi possível identificar o personal para este agendamento.";
+      setError(msg);
+      setErrorModal({
+        visible: true,
+        title: "Personal não identificado",
+        content: msg,
+      });
+      return;
+    }
+
+    if (!addressIsComplete) {
+      const msg = "Informe um CEP válido com 8 dígitos e preencha logradouro, número, cidade e UF.";
       setError(msg);
       setErrorModal({
         visible: true,
@@ -594,15 +845,33 @@ export default function NewEvent({
           uf: address.state,
         },
       },
-      personalId: Number(selectedPersonal?.id ?? 0),
+      personalId: selectedPersonal.id,
       tipoAulaProdutoContratado: type,
     };
 
     setSubmitting(true);
     setError("");
+    const requestStartedAt = Date.now();
 
     try {
-      await insertAppointment(apiPayload);
+      if (__DEV__) {
+        console.info("[Agendamento] Enviando solicitação para personal", {
+          method: "POST",
+          endpoint: "/agendamentos",
+          payload: apiPayload,
+        });
+      }
+
+      const response = await insertAppointment(apiPayload);
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      if (__DEV__) {
+        console.info("[Agendamento] Solicitação aceita pelo backend", {
+          endpoint: "/agendamentos",
+          status: response.status,
+          durationMs: Date.now() - requestStartedAt,
+          data: response.data,
+        });
+      }
 
       const payload: NewEventPayload = {
         date,
@@ -610,7 +879,7 @@ export default function NewEvent({
         endHour,
         type,
         location: type,
-        personal: selectedPersonal!, // selectedPersonal existe pois validamos acima
+        personal: selectedPersonal,
         address,
       };
 
@@ -618,6 +887,15 @@ export default function NewEvent({
       setSuccessModalVisible(true);
     } catch (err: any) {
       const responseData = err?.response?.data;
+      if (__DEV__) {
+        console.error("[Agendamento] Falha ao solicitar aula", {
+          endpoint: "/agendamentos",
+          status: err?.response?.status ?? null,
+          durationMs: Date.now() - requestStartedAt,
+          response: responseData ?? null,
+          message: err?.message,
+        });
+      }
       const apiMessage =
         responseData?.Exception ||
         responseData?.message ||
@@ -726,14 +1004,31 @@ export default function NewEvent({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <ScrollView
-        contentContainerStyle={styles.container}
+        style={styles.formScroll}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: Math.max(insets.top, 20),
+            paddingBottom: Math.max(insets.bottom + 24, 40),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        showsVerticalScrollIndicator
+        overScrollMode="always"
+        contentInsetAdjustmentBehavior="never"
       >
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>{title || (isReschedule ? "Reagendar horário" : "Agendar aula")}</Text>
             {(!isReschedule || goToNextStep !== false) && (
-              <Text style={styles.stepIndicator}>Etapa {step} de 2</Text>
+              <Text style={styles.stepIndicator}>
+                {voiceAssisted
+                  ? step === 1
+                    ? "Escolha o horário"
+                    : "Confira o endereço"
+                  : `Etapa ${step} de 2`}
+              </Text>
             )}
           </View>
           <Pressable onPress={onClose} hitSlop={12}>
@@ -869,7 +1164,7 @@ export default function NewEvent({
               ) : null}
             </View>
 
-            {availablePeriods.length > 0 ? (
+            {requestedPersonalNotFound && voiceAssisted ? null : availablePeriods.length > 0 ? (
               <>
                 <View style={styles.options}>
                   {availablePeriods.map((availablePeriod) => (
@@ -932,9 +1227,9 @@ export default function NewEvent({
             )}
 
             <Pressable
-              style={[styles.submit, (!date || !startHour || submitting) && styles.submitDisabled]}
+              style={[styles.submit, (!date || !startHour || submitting || requestedPersonalNotFound) && styles.submitDisabled]}
               onPress={isReschedule && goToNextStep === false ? handleReschedule : goToAddress}
-              disabled={!date || !startHour || submitting}
+              disabled={!date || !startHour || submitting || requestedPersonalNotFound}
             >
               {submitting ? (
                 <ActivityIndicator size="small" color="#ffffff" />
@@ -942,7 +1237,7 @@ export default function NewEvent({
                 <Text style={styles.submitText}>
                   {isReschedule && goToNextStep === false
                     ? (buttonTitle || "Reagendar")
-                    : (buttonTitle || "Avançar para endereço")}
+                    : (buttonTitle || (voiceAssisted ? "Continuar para endereço" : "Avançar para endereço"))}
                 </Text>
               )}
             </Pressable>
@@ -1011,10 +1306,201 @@ export default function NewEvent({
                         {selectedPersonal?.especialidade || "Personal Trainer"}
                       </Text>
                     </View>
+                    {voiceAssisted && personalsList.length > 1 ? (
+                      <Pressable
+                        style={styles.changePersonalButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="Trocar personal"
+                        onPress={() => setShowVoicePersonalPicker(true)}
+                      >
+                        <Text style={styles.changePersonalText}>Trocar</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               );
             })()}
+
+            {voiceAssisted ? (
+              <View
+                style={[
+                  styles.voiceAvailabilityBox,
+                  voiceAvailability === "available" && styles.voiceAvailabilitySuccess,
+                  (voiceAvailability === "unavailable" || requestedPersonalNotFound) &&
+                    styles.voiceAvailabilityWarning,
+                  voiceAvailability === "error" && styles.voiceAvailabilityError,
+                ]}
+              >
+                <View style={styles.voiceAvailabilityIcon}>
+                  {voiceAvailability === "available" ? (
+                    <CheckCircle2 size={20} color="#15803D" strokeWidth={2.2} />
+                  ) : voiceAvailability === "checking" ? (
+                    <Clock3 size={20} color="#0F567F" strokeWidth={2.2} />
+                  ) : voiceAvailability === "error" ? (
+                    <Info size={20} color="#B42318" strokeWidth={2.2} />
+                  ) : (
+                    <Info size={20} color="#B45309" strokeWidth={2.2} />
+                  )}
+                </View>
+                <View style={styles.voiceAvailabilityContent}>
+                  <Text style={styles.voiceAvailabilityTitle}>
+                    {requestedPersonalNotFound
+                      ? "Escolha o profissional"
+                      : voiceAvailability === "checking"
+                        ? "Verificando disponibilidade"
+                        : voiceAvailability === "available"
+                          ? "Horário disponível"
+                          : voiceAvailability === "unavailable"
+                            ? "Horário indisponível"
+                            : "Não foi possível verificar"}
+                  </Text>
+                  <Text style={styles.voiceAvailabilityText}>
+                    {requestedPersonalNotFound
+                      ? "Escolha qual personal deve receber este agendamento."
+                      : voiceAvailability === "checking"
+                        ? "Confirmando se o horário informado está disponível..."
+                        : voiceAvailability === "available"
+                          ? `Horário confirmado: ${formatDate(date)} às ${startHour.slice(0, 5)} com ${selectedPersonal?.nome}.`
+                          : voiceAvailability === "unavailable"
+                            ? "O horário indicado pela IA não está disponível para esse personal."
+                            : "Não foi possível confirmar a disponibilidade do horário. Volte ao resumo e tente novamente."}
+                  </Text>
+
+                {voiceAvailability === "unavailable" &&
+                !requestedPersonalNotFound &&
+                dynamicSchedules.length > 0 ? (
+                  <View style={styles.voiceAlternatives}>
+                    <Text style={styles.voiceAlternativeTitle}>
+                      Escolha um horário disponível
+                    </Text>
+                    <View style={styles.voiceAlternativeOptions}>
+                      {dynamicSchedules.map((schedule) => {
+                        const selected = startHour === schedule.startHour;
+                        return (
+                          <Pressable
+                            key={schedule.startHour}
+                            style={[
+                              styles.voiceTimeOption,
+                              selected && styles.voiceTimeOptionSelected,
+                            ]}
+                            onPress={() => {
+                              setStartHour(schedule.startHour);
+                              setVoiceAvailability("available");
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.voiceTimeOptionText,
+                                selected && styles.voiceTimeOptionTextSelected,
+                              ]}
+                            >
+                              {schedule.startHour.slice(0, 5)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
+
+                {voiceAvailability === "unavailable" &&
+                !requestedPersonalNotFound &&
+                dynamicSchedules.length === 0 &&
+                !loadingHours ? (
+                  <View style={styles.voiceAlternatives}>
+                    <Text style={styles.voiceAlternativeTitle}>
+                      Não há horários livres nesta data. Escolha outro dia:
+                    </Text>
+                    <View style={styles.voiceAlternativeOptions}>
+                      {upcomingDays
+                        .filter((day) => !day.isDisabled)
+                        .map((day) => {
+                          const selected = date === day.fullDate;
+                          return (
+                            <Pressable
+                              key={day.fullDate}
+                              style={[
+                                styles.voiceDateOption,
+                                selected && styles.voiceTimeOptionSelected,
+                              ]}
+                              onPress={() => {
+                                setDate(day.fullDate);
+                                setStartHour("");
+                                setVoiceAvailability("checking");
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.voiceTimeOptionText,
+                                  selected && styles.voiceTimeOptionTextSelected,
+                                ]}
+                              >
+                                {day.weekDay} {day.dayNumber}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                    </View>
+                  </View>
+                ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {voiceAssisted && showVoicePersonalPicker ? (
+              <View style={styles.voicePersonalPicker}>
+                <Text style={styles.addressSectionTitle}>
+                  {requestedPersonalNotFound
+                    ? "Escolha o personal para este agendamento"
+                    : "Trocar personal"}
+                </Text>
+                {personalsList.map((personal) => {
+                  const isSelected = selectedPersonalId === personal.id;
+                  return (
+                    <Pressable
+                      key={personal.id}
+                      style={[
+                        styles.savedAddress,
+                        isSelected && styles.optionSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedPersonalId(personal.id);
+                        setRequestedPersonalNotFound(false);
+                        setVoiceAvailability("checking");
+                        setStartHour("");
+                        setShowVoicePersonalPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.savedAddressLabel,
+                          isSelected && styles.optionTextSelected,
+                        ]}
+                      >
+                        {personal.nome}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.savedAddressText,
+                          isSelected && styles.optionTextSelected,
+                        ]}
+                      >
+                        {personal.especialidade || "Personal Trainer"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+                {!requestedPersonalNotFound ? (
+                  <Pressable
+                    style={styles.cancelPersonalChange}
+                    accessibilityRole="button"
+                    onPress={() => setShowVoicePersonalPicker(false)}
+                  >
+                    <Text style={styles.cancelPersonalChangeText}>Manter personal atual</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Endereço do local</Text>
@@ -1077,6 +1563,7 @@ export default function NewEvent({
                 value={address.postalCode}
                 onChangeText={(value: string) => updateAddress("postalCode", value)}
                 placeholder="CEP * (somente números)"
+                placeholderTextColor="#678193"
                 keyboardType="numeric"
                 maxLength={9}
               />
@@ -1090,10 +1577,11 @@ export default function NewEvent({
             </View>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.disabledInput]}
               value={address.street}
-              onChangeText={(value: string) => updateAddress("street", value)}
               placeholder="Logradouro / Rua *"
+              placeholderTextColor="#678193"
+              editable={false}
             />
 
             <View style={styles.inputRow}>
@@ -1102,6 +1590,7 @@ export default function NewEvent({
                 value={address.number}
                 onChangeText={(value: string) => updateAddress("number", value)}
                 placeholder="Número *"
+                placeholderTextColor="#678193"
                 keyboardType="numeric"
               />
               <TextInput
@@ -1109,23 +1598,26 @@ export default function NewEvent({
                 value={address.complement}
                 onChangeText={(value: string) => updateAddress("complement", value)}
                 placeholder="Complemento"
+                placeholderTextColor="#678193"
               />
             </View>
 
             <View style={styles.inputRow}>
               <TextInput
-                style={[styles.input, styles.halfInput]}
+                style={[styles.input, styles.halfInput, styles.disabledInput]}
                 value={address.city}
-                onChangeText={(value: string) => updateAddress("city", value)}
                 placeholder="Cidade *"
+                placeholderTextColor="#678193"
+                editable={false}
               />
               <TextInput
-                style={[styles.input, styles.stateInput]}
+                style={[styles.input, styles.stateInput, styles.disabledInput]}
                 value={address.state}
-                onChangeText={(value: string) => updateAddress("state", value)}
                 placeholder="UF *"
+                placeholderTextColor="#678193"
                 maxLength={2}
                 autoCapitalize="characters"
+                editable={false}
               />
             </View>
 
@@ -1135,16 +1627,36 @@ export default function NewEvent({
                 disabled={submitting}
                 onPress={() => {
                   setError("");
-                  setStep(1);
+                  if (voiceAssisted) {
+                    onClose();
+                  } else {
+                    setStep(1);
+                  }
                 }}
               >
-                <Text style={styles.backText}>Voltar</Text>
+                <Text style={styles.backText}>
+                  {voiceAssisted ? "Voltar ao resumo" : "Voltar"}
+                </Text>
               </Pressable>
 
               <Pressable
-                style={[styles.submit, submitting && styles.submitDisabled]}
+                style={[
+                  styles.submit,
+                  (submitting ||
+                    loadingCep ||
+                    (!isReschedule && !addressIsComplete) ||
+                    (voiceAssisted &&
+                      (voiceAvailability !== "available" || requestedPersonalNotFound))) &&
+                    styles.submitDisabled,
+                ]}
                 onPress={isReschedule ? handleReschedule : submit}
-                disabled={submitting}
+                disabled={
+                  submitting ||
+                  loadingCep ||
+                  (!isReschedule && !addressIsComplete) ||
+                  (voiceAssisted &&
+                    (voiceAvailability !== "available" || requestedPersonalNotFound))
+                }
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color="#ffffff" />
@@ -1155,6 +1667,11 @@ export default function NewEvent({
                 )}
               </Pressable>
             </View>
+            {!isReschedule && !addressIsComplete ? (
+              <Text style={styles.addressValidationHint}>
+                Para confirmar, informe CEP válido (8 dígitos), logradouro, número, cidade e UF.
+              </Text>
+            ) : null}
           </>
         )}
 
@@ -1181,12 +1698,34 @@ export default function NewEvent({
           onClose={() => setErrorModal({ visible: false, title: "", content: "" })}
         />
       )}
+      <NoticeModal
+        visible={showPersonalNotice}
+        title={personalNotice.title}
+        content={personalNotice.content}
+        actionLabel={personalNotice.actionLabel}
+        onAction={() => {
+          setShowPersonalNotice(false);
+          setShowVoicePersonalPicker(personalNotice.canChoose);
+        }}
+      />
+      <NoticeModal
+        visible={showMissingAddressNotice && !showPersonalNotice}
+        title="Endereço não informado"
+        content="A IA não identificou um endereço no pedido e você ainda não tem endereços cadastrados. Preencha os dados do endereço abaixo para continuar com o agendamento."
+        actionLabel="Entendi"
+        onAction={() => setShowMissingAddressNotice(false)}
+      />
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  formScroll: {
+    flex: 1,
+    backgroundColor: "#f4f8fb",
+  },
   container: {
+    flexGrow: 1,
     padding: 20,
     paddingBottom: 40,
     backgroundColor: "#f4f8fb",
@@ -1206,6 +1745,122 @@ const styles = StyleSheet.create({
     color: "#678193",
     marginTop: 3,
     fontSize: 13,
+  },
+  voiceAvailabilityBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  voiceAvailabilitySuccess: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+  },
+  voiceAvailabilityWarning: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  voiceAvailabilityError: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  voiceAvailabilityIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  voiceAvailabilityContent: {
+    flex: 1,
+  },
+  voiceAvailabilityTitle: {
+    color: "#173A52",
+    fontSize: 14,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  voiceAvailabilityText: {
+    color: "#456176",
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 19,
+  },
+  voiceAlternatives: {
+    marginTop: 12,
+    gap: 8,
+  },
+  voiceAlternativeTitle: {
+    color: "#173a52",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  voiceAlternativeOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  voiceTimeOption: {
+    minWidth: 64,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#c8d9e5",
+    backgroundColor: "#FFFFFF",
+  },
+  voiceDateOption: {
+    minHeight: 38,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#c8d9e5",
+    backgroundColor: "#FFFFFF",
+  },
+  voiceTimeOptionSelected: {
+    borderColor: "#0f567f",
+    backgroundColor: "#0f567f",
+  },
+  voiceTimeOptionText: {
+    color: "#264d64",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  voiceTimeOptionTextSelected: {
+    color: "#FFFFFF",
+  },
+  voicePersonalPicker: {
+    gap: 8,
+    marginBottom: 8,
+  },
+  changePersonalButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  changePersonalText: {
+    color: "#0f567f",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  cancelPersonalChange: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  cancelPersonalChangeText: {
+    color: "#587386",
+    fontSize: 13,
+    fontWeight: "600",
   },
   close: {
     color: "#0f567f",
@@ -1440,6 +2095,9 @@ const styles = StyleSheet.create({
     color: "#173a52",
     fontSize: 14,
   },
+  disabledInput: {
+    backgroundColor: "#e9eff3",
+  },
   inputRow: {
     flexDirection: "row",
     gap: 10,
@@ -1601,6 +2259,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#f8b4b4",
+  },
+  addressValidationHint: {
+    color: "#678193",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+    textAlign: "center",
   },
   submit: {
     flex: 1,
