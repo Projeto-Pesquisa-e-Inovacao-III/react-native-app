@@ -123,6 +123,12 @@ function formatDate(date: string) {
     : parsed.toLocaleDateString("pt-BR");
 }
 
+function formatCep(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
 function getClassTypeBadge(type: string) {
   const upper = (type || "").toUpperCase();
   if (upper.includes("RESIDENCIAL")) {
@@ -702,15 +708,30 @@ export default function NewEvent({
 
   function updateAddress(field: keyof Address, value: string) {
     const inputValue =
-      field === "postalCode" || field === "number"
-        ? value.replace(/\D/g, "")
-        : value;
+      field === "postalCode"
+        ? formatCep(value)
+        : field === "number"
+          ? value.replace(/\D/g, "")
+          : value;
     setSelectedAddressId(undefined);
-    setAddress((previous) => ({ ...previous, [field]: inputValue }));
+    setAddress((previous) => {
+      const cepChanged =
+        field === "postalCode" &&
+        previous.postalCode.replace(/\D/g, "") !==
+          inputValue.replace(/\D/g, "");
+
+      return {
+        ...previous,
+        [field]: inputValue,
+        ...(cepChanged
+          ? { street: "", city: "", state: "", neighborhood: "" }
+          : {}),
+      };
+    });
 
     // Se o campo for CEP, faz busca automática via ViaCEP com debounce
     if (field === "postalCode") {
-      const cleanDigits = inputValue;
+      const cleanDigits = inputValue.replace(/\D/g, "");
       if (cepDebounceTimer.current) clearTimeout(cepDebounceTimer.current);
 
       if (cleanDigits.length === 8) {
@@ -1285,6 +1306,16 @@ export default function NewEvent({
                         {selectedPersonal?.especialidade || "Personal Trainer"}
                       </Text>
                     </View>
+                    {voiceAssisted && personalsList.length > 1 ? (
+                      <Pressable
+                        style={styles.changePersonalButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="Trocar personal"
+                        onPress={() => setShowVoicePersonalPicker(true)}
+                      >
+                        <Text style={styles.changePersonalText}>Trocar</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               );
@@ -1419,7 +1450,9 @@ export default function NewEvent({
             {voiceAssisted && showVoicePersonalPicker ? (
               <View style={styles.voicePersonalPicker}>
                 <Text style={styles.addressSectionTitle}>
-                  Escolha o personal para este agendamento
+                  {requestedPersonalNotFound
+                    ? "Escolha o personal para este agendamento"
+                    : "Trocar personal"}
                 </Text>
                 {personalsList.map((personal) => {
                   const isSelected = selectedPersonalId === personal.id;
@@ -1457,6 +1490,15 @@ export default function NewEvent({
                     </Pressable>
                   );
                 })}
+                {!requestedPersonalNotFound ? (
+                  <Pressable
+                    style={styles.cancelPersonalChange}
+                    accessibilityRole="button"
+                    onPress={() => setShowVoicePersonalPicker(false)}
+                  >
+                    <Text style={styles.cancelPersonalChangeText}>Manter personal atual</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
 
@@ -1523,7 +1565,7 @@ export default function NewEvent({
                 placeholder="CEP * (somente números)"
                 placeholderTextColor="#678193"
                 keyboardType="numeric"
-                maxLength={8}
+                maxLength={9}
               />
               {loadingCep ? (
                 <ActivityIndicator
@@ -1535,11 +1577,11 @@ export default function NewEvent({
             </View>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.disabledInput]}
               value={address.street}
-              onChangeText={(value: string) => updateAddress("street", value)}
               placeholder="Logradouro / Rua *"
               placeholderTextColor="#678193"
+              editable={false}
             />
 
             <View style={styles.inputRow}>
@@ -1562,20 +1604,20 @@ export default function NewEvent({
 
             <View style={styles.inputRow}>
               <TextInput
-                style={[styles.input, styles.halfInput]}
+                style={[styles.input, styles.halfInput, styles.disabledInput]}
                 value={address.city}
-                onChangeText={(value: string) => updateAddress("city", value)}
                 placeholder="Cidade *"
                 placeholderTextColor="#678193"
+                editable={false}
               />
               <TextInput
-                style={[styles.input, styles.stateInput]}
+                style={[styles.input, styles.stateInput, styles.disabledInput]}
                 value={address.state}
-                onChangeText={(value: string) => updateAddress("state", value)}
                 placeholder="UF *"
                 placeholderTextColor="#678193"
                 maxLength={2}
                 autoCapitalize="characters"
+                editable={false}
               />
             </View>
 
@@ -1800,6 +1842,25 @@ const styles = StyleSheet.create({
   voicePersonalPicker: {
     gap: 8,
     marginBottom: 8,
+  },
+  changePersonalButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  changePersonalText: {
+    color: "#0f567f",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  cancelPersonalChange: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  cancelPersonalChangeText: {
+    color: "#587386",
+    fontSize: 13,
+    fontWeight: "600",
   },
   close: {
     color: "#0f567f",
@@ -2033,6 +2094,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: "#173a52",
     fontSize: 14,
+  },
+  disabledInput: {
+    backgroundColor: "#e9eff3",
   },
   inputRow: {
     flexDirection: "row",
