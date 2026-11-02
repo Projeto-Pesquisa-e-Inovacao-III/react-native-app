@@ -39,10 +39,20 @@
         {
           "microphonePermission": "Permita o acesso ao microfone para gravar áudio e agendar aulas com IA.",
           "speechRecognitionPermission": "Permita o acesso ao reconhecimento de fala para transcrever sua voz.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "cmakeVersion": "3.31.6"
+          }
+        }
+      ]
     ]
   }
 }
