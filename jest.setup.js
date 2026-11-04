@@ -1,3 +1,19 @@
+// Silence "[API] ..." startup logs from src/services/api.ts during tests
+const originalConsoleLog = console.log;
+jest.spyOn(console, 'log').mockImplementation((...args) => {
+  if (typeof args[0] === 'string' && args[0].startsWith('[API]')) return;
+  originalConsoleLog(...args);
+});
+
+// Let in-flight React Query notifications settle inside act() before each test
+// ends, so late state updates don't trigger "not wrapped in act(...)" warnings.
+afterEach(async () => {
+  const React = require('react');
+  await React.act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+});
+
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')

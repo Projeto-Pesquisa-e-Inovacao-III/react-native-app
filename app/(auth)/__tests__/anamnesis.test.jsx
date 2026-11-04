@@ -16,7 +16,7 @@ jest.mock("../../../src/components/modals/ErrorModal", () => ({ visible, title, 
 const { useAuth } = require("../../../src/contexts/AuthContext");
 const router = { back: jest.fn(), replace: jest.fn() };
 async function renderScreen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   render(<QueryClientProvider client={client}><AnamnesisScreen /></QueryClientProvider>);
   await waitFor(() => expect(screen.getByText("Continuar para Etapa 2")).toBeOnTheScreen());
 }

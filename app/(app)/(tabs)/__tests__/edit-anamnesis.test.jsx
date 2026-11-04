@@ -35,7 +35,7 @@ describe("EditAnamnesisScreen", () => {
     await fireEvent.changeText(screen.getByDisplayValue("175"), "180");
     await fireEvent.press(screen.getByText("Atualizar Anamnese"));
     await waitFor(() => expect(updateAnamnesis).toHaveBeenCalledWith(expect.objectContaining({ altura: 180, peso: 72, rotina: "Corrida" })));
-    expect(Alert.alert).toHaveBeenCalledWith("Anamnese atualizada!", expect.any(String), expect.any(Array));
+    expect(await screen.findByText("Anamnese atualizada!")).toBeOnTheScreen();
   });
   it("bloqueia altura fora do intervalo permitido", async () => {
     await fireEvent.changeText(screen.getByDisplayValue("175"), "90");
@@ -46,6 +46,6 @@ describe("EditAnamnesisScreen", () => {
   it("exibe alerta quando a API falha", async () => {
     updateAnamnesis.mockRejectedValueOnce(new Error("network"));
     await fireEvent.press(screen.getByText("Atualizar Anamnese"));
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith("Erro ao atualizar anamnese", expect.any(String)));
+    expect(await screen.findByText("Erro ao atualizar anamnese")).toBeOnTheScreen();
   });
 });

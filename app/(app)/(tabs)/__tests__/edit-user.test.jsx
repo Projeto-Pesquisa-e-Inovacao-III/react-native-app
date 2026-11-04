@@ -50,7 +50,7 @@ const user = {
 };
 
 async function renderScreen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   await render(<QueryClientProvider client={client}><EditUserScreen /></QueryClientProvider>);
   expect(findUserData).toHaveBeenCalled();
 }

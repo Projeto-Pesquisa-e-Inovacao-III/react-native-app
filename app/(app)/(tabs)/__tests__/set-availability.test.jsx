@@ -103,7 +103,7 @@ const completeSchedule = [
 function renderScreen(schedule = completeSchedule) {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
+      queries: { retry: false, gcTime: 0 },
     },
   });
 
@@ -112,6 +112,11 @@ function renderScreen(schedule = completeSchedule) {
       <SetAvailabilityScreen />
     </QueryClientProvider>
   );
+}
+
+async function selectBuffer30() {
+  await fireEvent.press(screen.getByLabelText("Intervalo pós agendamentos: 15 min"));
+  await fireEvent.press(screen.getByText("30 min"));
 }
 
 describe("SetAvailabilityScreen", () => {
@@ -153,7 +158,7 @@ describe("SetAvailabilityScreen", () => {
   });
 
   it("deve salvar o novo intervalo e exibir confirmação no caminho feliz", async () => {
-    await fireEvent.press(screen.getByTestId("buffer-picker"));
+    await selectBuffer30();
     expect(screen.getByText("Alterações feitas! Não esqueça de salvar")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByText("Salvar Alterações"));
@@ -177,7 +182,7 @@ describe("SetAvailabilityScreen", () => {
   it("deve exibir o erro retornado quando a API falha ao salvar", async () => {
     updateBuffer.mockRejectedValueOnce(new Error("network failure"));
 
-    await fireEvent.press(screen.getByTestId("buffer-picker"));
+    await selectBuffer30();
     await fireEvent.press(screen.getByText("Salvar Alterações"));
 
     expect((await screen.findAllByText("Erro ao salvar")).length).toBeGreaterThan(0);
@@ -185,7 +190,7 @@ describe("SetAvailabilityScreen", () => {
   });
 
   it("deve voltar para a tela anterior ao cancelar alterações", async () => {
-    await fireEvent.press(screen.getByTestId("buffer-picker"));
+    await selectBuffer30();
     await fireEvent.press(screen.getByText("Cancelar"));
 
     expect(mockedRouter.back).toHaveBeenCalled();

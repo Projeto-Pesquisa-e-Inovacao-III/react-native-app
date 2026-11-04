@@ -47,7 +47,7 @@ jest.mock("../../../../src/components/modals/TimerModal", () => ({ title, conten
 });
 
 const address = { id: 1, tipo: "Casa", numero: "10", logradouro: "Rua A", bairro: "Centro", padrao: true, cep: { id: "12345678", cidade: { nome: "São Paulo", estado: { sigla: "SP" } } } };
-const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AddressesScreen /></QueryClientProvider>);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><AddressesScreen /></QueryClientProvider>);
 
 const fillAddress = async () => {
   await fireEvent.press(screen.getByTestId("tipo-select"));
