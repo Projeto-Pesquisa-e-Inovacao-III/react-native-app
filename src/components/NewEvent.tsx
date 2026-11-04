@@ -129,6 +129,18 @@ function formatCep(value: string) {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
+function getClassDurationMinutes(type: NewEventPayload["type"]) {
+  return type === "FUNCIONAL" ? 30 : 60;
+}
+
+function addMinutesToTime(time: string, minutesToAdd: number) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const totalMinutes = (hours * 60 + minutes + minutesToAdd) % (24 * 60);
+  const endHours = Math.floor(totalMinutes / 60);
+  const endMinutes = totalMinutes % 60;
+  return `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
+}
+
 function getClassTypeBadge(type: string) {
   const upper = (type || "").toUpperCase();
   if (upper.includes("RESIDENCIAL")) {
@@ -290,7 +302,7 @@ export default function NewEvent({
   }, [visible, initialDate, initialStartHour, initialAddress, isReschedule, appoitmentData, voiceAssisted]);
 
   // Autenticação e perfil
-  const { roles } = useAuth();
+  const { roles, user, isLoading: isAuthLoading } = useAuth();
   const isPersonalOrAdmin = roles ? (roles.includes("personal") || roles.includes("admin")) : false;
 
   // Personais
@@ -348,7 +360,37 @@ export default function NewEvent({
 
   // 1. Carregar lista de personais da API (apenas quando modal estiver visível e perfil for aluno)
   useEffect(() => {
-    if (!visible || isPersonalOrAdmin) return;
+    if (!visible || isAuthLoading) return;
+
+    if (roles?.includes("personal")) {
+      const personalId = Number(
+        appoitmentData?.personal?.id ?? appoitmentData?.personalId ?? user?.id,
+      );
+      if (!Number.isSafeInteger(personalId) || personalId <= 0) {
+        setPersonalsList([]);
+        setSelectedPersonalId(undefined);
+        if (__DEV__) {
+          console.error("[Agendamento] Não foi possível identificar o ID do personal autenticado", {
+            personalId: appoitmentData?.personal?.id ?? appoitmentData?.personalId ?? user?.id,
+          });
+        }
+        return;
+      }
+
+      setPersonalsList([
+        {
+          id: personalId,
+          nome: appoitmentData?.personal?.nome || user?.nome || "Personal",
+          especialidade:
+            appoitmentData?.personal?.especialidade || "Personal Trainer",
+        },
+      ]);
+      setSelectedPersonalId(personalId);
+      return;
+    }
+
+    if (isPersonalOrAdmin) return;
+
     let isMounted = true;
     async function fetchPersonals() {
       setLoadingPersonals(true);
@@ -462,7 +504,16 @@ export default function NewEvent({
     return () => {
       isMounted = false;
     };
-  }, [visible, isPersonalOrAdmin, appoitmentData, voiceAssisted]);
+  }, [
+    visible,
+    isAuthLoading,
+    isPersonalOrAdmin,
+    roles,
+    user?.id,
+    user?.nome,
+    appoitmentData,
+    voiceAssisted,
+  ]);
 
   // 1b. Carregar dias desabilitados do personal selecionado (apenas quando visível)
   useEffect(() => {
@@ -578,10 +629,14 @@ export default function NewEvent({
         }
         if (isMounted) {
           if (Array.isArray(data) && data.length > 0) {
-            const mappedSlots: TimeSlot[] = data.map((slot: any) => ({
-              startHour: slot.inicio || slot.horaInicio,
-              endHour: slot.fim || slot.horaFim,
-            }));
+            const durationMinutes = getClassDurationMinutes(type);
+            const mappedSlots: TimeSlot[] = data.map((slot: any) => {
+              const startHour = slot.inicio || slot.horaInicio;
+              return {
+                startHour,
+                endHour: addMinutesToTime(startHour, durationMinutes),
+              };
+            });
             setDynamicSchedules(mappedSlots);
             if (initialStartHour) {
               const normalizedInitialHour = initialStartHour.slice(0, 5);
@@ -1227,7 +1282,11 @@ export default function NewEvent({
             )}
 
             <Pressable
-              style={[styles.submit, (!date || !startHour || submitting || requestedPersonalNotFound) && styles.submitDisabled]}
+              style={[
+                styles.submit,
+                (!date || !startHour || submitting || requestedPersonalNotFound) &&
+                  styles.submitDisabled,
+              ]}
               onPress={isReschedule && goToNextStep === false ? handleReschedule : goToAddress}
               disabled={!date || !startHour || submitting || requestedPersonalNotFound}
             >
@@ -1725,7 +1784,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f8fb",
   },
   container: {
-    flexGrow: 1,
     padding: 20,
     paddingBottom: 40,
     backgroundColor: "#f4f8fb",
@@ -2271,9 +2329,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0f567f",
     borderRadius: 12,
-    padding: 14,
+    padding: 20,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 15,
   },
   submitDisabled: {
     opacity: 0.5,
