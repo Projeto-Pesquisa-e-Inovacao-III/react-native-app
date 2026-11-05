@@ -19,7 +19,7 @@ jest.mock("../../../../src/components/modals/AddPackagePlan", () => ({ title }) 
 jest.mock("../../../../src/components/modals/TimerModal", () => () => null);
 
 const product = { id: 1, titulo: "Plano mensal", subtitulo: "Plano", preco: 100, duracaoMes: 1, tipoAula: "PRESENCIAL", quantidadeAula: 4, status: "ATIVO", tipoProduto: "PACOTE", beneficios: [] };
-const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PlansScreen /></QueryClientProvider>);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><PlansScreen /></QueryClientProvider>);
 
 describe("PlansScreen", () => {
   beforeEach(async () => {

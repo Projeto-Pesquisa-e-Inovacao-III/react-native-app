@@ -573,35 +573,15 @@ export default function CheckScheduleScreen() {
   }, [loadingMore, hasMore, page, loadData]);
 
   async function handleAcceptConfirm() {
-    const item = appointments.find((r) => r.agendamentoId === selectedId);
     await acceptUserAppointment(selectedId);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Aceito', content: 'O agendamento foi aceito com sucesso.' });
-
-    // Dispara notificação de aprovação simultânea para Aluno e Personal
-    scheduleApprovalNotification({
-      studentName: item?.nome || 'Aluno',
-      personalName: 'Personal Trainer',
-      classType: item?.tipoAula || 'Aula',
-      date: item?.dataInicio ? formatDate(item.dataInicio) : '',
-      time: item?.dataInicio ? formatTime(item.dataInicio) : '',
-    });
   }
 
   async function handleDeclineConfirm() {
-    const item = appointments.find((r) => r.agendamentoId === selectedId);
     await refuseAppointment(selectedId);
     await onRefresh();
     setSuccessInfo({ title: 'Agendamento Recusado', content: 'O agendamento foi recusado.' });
-
-    // Notifica o Aluno que a aula foi cancelada
-    scheduleCancellationNotification({
-      studentName: item?.nome || 'Aluno',
-      personalName: 'Personal Trainer',
-      classType: item?.tipoAula || 'Aula',
-      date: item?.dataInicio ? formatDate(item.dataInicio) : '',
-      time: item?.dataInicio ? formatTime(item.dataInicio) : '',
-    });
   }
 
   async function handleConcludeSubmit(data: { resumo: string; grupoMuscular: string[] }) {

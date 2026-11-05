@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as userService from '../constants/user';
-import { setOnUnauthorized } from '../services/api';
+import { clearAuthToken, setAuthToken, setOnUnauthorized } from '../services/api';
 import type { AuthUserData, AuthResponseDTO } from '../models/user';
+import { clearStoredPushToken, getStoredPushToken, dismissAllNotificationsAsync } from '../services/notificationService';
 
 type AuthContextType = {
   user: AuthUserData | null;
@@ -52,7 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
 
     // 401 Interceptor: Desloga automaticamente se token/cookie expirar
-    setOnUnauthorized(() => {
+    setOnUnauthorized(async () => {
+      await clearStoredPushToken();
+      await clearAuthToken();
       setIsAuthenticated(false);
       setUser(null);
       setRoles(null);
@@ -66,6 +69,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, pass: string): Promise<boolean> => {
     const res = await userService.login(email, pass);
     if (res.status === 200) {
+      const token = typeof res.data?.token === 'string' ? res.data.token : null;
+      if (token) {
+        await setAuthToken(token);
+      }
       await checkAuth();
       return true;
     }
@@ -74,10 +81,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
+      const storedPushToken = await getStoredPushToken();
+      if (storedPushToken) {
+        await userService.removePushToken(storedPushToken);
+      }
       await userService.logout();
     } catch (err) {
       console.warn('Erro ao efetuar logout na API:', err);
     } finally {
+      await dismissAllNotificationsAsync();
+      await clearStoredPushToken();
+      await clearAuthToken();
       setIsAuthenticated(false);
       setUser(null);
       setRoles(null);
@@ -107,10 +121,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const defaultAuthContext: AuthContextType = {
+  user: null,
+  roles: [],
+  isAuthenticated: false,
+  isLoading: false,
+  login: async () => false,
+  logout: async () => {},
+  refreshAuth: async () => {},
+};
+
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth deve ser utilizado dentro de um AuthProvider');
-  }
-  return context;
+  return context || defaultAuthContext;
 }

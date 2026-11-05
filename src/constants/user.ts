@@ -41,7 +41,7 @@ export function register(userdata: UserDTO) {
 }
 
 export function login(email: string, password: string) {
-  return api.post<{ mensagem?: string; user?: any }>('/usuarios/login', {
+  return api.post<{ token?: string; mensagem?: string; user?: any }>('/usuarios/login', {
     email: email,
     senha: password,
   });
@@ -97,3 +97,8 @@ export function savePushToken(pushToken: string) {
   return api.post('/usuarios/me/push-token', { pushToken });
 }
 
+export function removePushToken(pushToken: string) {
+  return api.delete('/usuarios/me/push-token', {
+    data: { pushToken },
+  });
+}

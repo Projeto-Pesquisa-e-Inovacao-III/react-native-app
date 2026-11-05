@@ -1,6 +1,5 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 function resolveBackendHost() {
@@ -11,14 +10,8 @@ function resolveBackendHost() {
     return host;
   }
 
-  if (Constants.expoConfig?.hostUri) {
-    const host = Constants.expoConfig.hostUri.split(':')[0];
-    console.log('[API] Using hostUri-derived backend host:', host);
-    return host;
-  }
-
   if (Platform.OS === 'android') {
-    console.log('[API] Android without hostUri detected; using emulator fallback 10.0.2.2');
+    console.log('[API] EXPO_PUBLIC_API_HOST not set on Android; using emulator fallback 10.0.2.2');
     return '10.0.2.2';
   }
 

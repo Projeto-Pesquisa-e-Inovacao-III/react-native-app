@@ -35,7 +35,7 @@ const apiData = () => {
   getQuantityofActiveStudents.mockResolvedValue({ data: { quantidadeAlunos: 8 } });
   getQuantityofInactiveStudents.mockResolvedValue({ data: { quantidadeAlunos: 2, percentualAlunos: 20 } });
 };
-const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Dashboard /></QueryClientProvider>);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><Dashboard /></QueryClientProvider>);
 
 describe("Dashboard", () => {
   beforeEach(async () => {
