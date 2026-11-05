@@ -1,11 +1,21 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
+  registerForPushNotificationsAsync,
+  subscribeToNotifications,
+  storePushToken,
+  getStoredPushToken,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
   notifyAppointmentRescheduled,
+  type AppNotificationData,
   type AppNotificationItem,
+  type NotificationRecipient,
 } from '../services/notificationService';
+import { BASE_URL } from '../services/api';
+import { useWebSocket } from '../services/webSocketService';
+import { useAuth } from './AuthContext';
+import { savePushToken } from '../constants/user';
 
 type NotifParams = {
   studentName?: string;
@@ -36,7 +46,119 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
-  const [pushToken] = useState<string | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
+
+  const handleWebSocketMessage = useCallback((data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+
+    const payload = data as {
+      title?: unknown;
+      message?: unknown;
+      type?: unknown;
+      createdAt?: unknown;
+    };
+    const title = typeof payload.title === 'string' ? payload.title : 'Notificação';
+    const body = typeof payload.message === 'string' ? payload.message : '';
+    const type: AppNotificationData['type'] =
+      payload.type === 'APPOINTMENT_SCHEDULED' ||
+      payload.type === 'APPOINTMENT_APPROVED' ||
+      payload.type === 'APPOINTMENT_CANCELLED' ||
+      payload.type === 'APPOINTMENT_RESCHEDULED'
+        ? payload.type
+        : 'GENERAL';
+    const timestamp = payload.createdAt ? new Date(String(payload.createdAt)) : new Date();
+
+    setNotifications((prev) => [
+      {
+        id: `ws-${Date.now()}`,
+        title,
+        body,
+        recipient: 'ambos',
+        timestamp: timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        read: false,
+        data: { recipient: 'ambos', type },
+      },
+      ...prev,
+    ]);
+  }, []);
+
+  useWebSocket({
+    url: BASE_URL,
+    isAuthenticated,
+    onMessage: handleWebSocketMessage,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isAuthenticated) {
+      setPushToken(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    registerForPushNotificationsAsync()
+      .then(async (token) => {
+        if (!token || !active) {
+          return;
+        }
+
+        setPushToken(token);
+
+        const currentStoredToken = await getStoredPushToken();
+        if (currentStoredToken === token) {
+          return;
+        }
+
+        await savePushToken(token);
+        await storePushToken(token);
+      })
+      .catch((error) => {
+        console.warn('Erro ao registrar push token no backend:', error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    // Escuta notificações recebidas (locais e push remotas do backend)
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+
+    subscribeToNotifications((notificationEvent) => {
+      if (!active) return;
+
+      const { title, body, data } = notificationEvent.request.content;
+      const recipient = (data?.recipient as NotificationRecipient) || 'ambos';
+
+      const newItem: AppNotificationItem = {
+        id: notificationEvent.request.identifier || String(Date.now()),
+        title: title || 'Notificação',
+        body: body || '',
+        recipient,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        read: false,
+        data: data as any,
+      };
+
+      setNotifications((prev) => [newItem, ...prev]);
+    }).then((nextSubscription) => {
+      if (active) {
+        subscription = nextSubscription;
+      } else {
+        nextSubscription.remove();
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

@@ -1,3 +1,47 @@
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+type NotificationsModule = typeof import('expo-notifications');
+type NotificationListener = Parameters<NotificationsModule['addNotificationReceivedListener']>[0];
+type NotificationSubscription = ReturnType<NotificationsModule['addNotificationReceivedListener']>;
+
+const isExpoGo =
+  Platform.OS === 'web' ||
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === 'storeClient';
+
+let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+const PUSH_TOKEN_STORAGE_KEY = 'expo_push_token';
+
+async function getNotificationsModule(): Promise<NotificationsModule | null> {
+  if (isExpoGo) {
+    return null;
+  }
+
+  notificationsModulePromise ??= import('expo-notifications').then((module) => {
+    module.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    return module;
+  });
+
+  return notificationsModulePromise;
+}
+
+export async function subscribeToNotifications(
+  listener: NotificationListener,
+): Promise<NotificationSubscription> {
+  const notifications = await getNotificationsModule();
+  return notifications?.addNotificationReceivedListener(listener) ?? { remove: () => {} };
+}
+
 export type NotificationRecipient = 'aluno' | 'personal' | 'ambos';
 
 export type AppNotificationData = {
@@ -25,7 +69,61 @@ export type AppNotificationItem = {
  * Push notifications desativadas (removido expo-notifications).
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  return null;
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    return null;
+  }
+
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('agendamentos', {
+        name: 'Agendamentos e Aulas',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#19587A',
+        sound: 'default',
+      });
+    }
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      return null;
+    }
+
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ??
+      Constants?.easConfig?.projectId;
+
+    const pushTokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+
+    console.log('Expo Push Token:', pushTokenData.data);
+
+    return pushTokenData.data;
+  } catch (error) {
+    console.warn('Não foi possível obter Expo Push Token:', error);
+    return null;
+  }
+}
+
+export async function getStoredPushToken(): Promise<string | null> {
+  return AsyncStorage.getItem(PUSH_TOKEN_STORAGE_KEY);
+}
+
+export async function storePushToken(token: string): Promise<void> {
+  await AsyncStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token);
+}
+
+export async function clearStoredPushToken(): Promise<void> {
+  await AsyncStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
 }
 
 /**
@@ -41,13 +139,42 @@ export async function registerForNotificationsAsync(): Promise<boolean> {
 export async function sendLocalNotification({
   title,
   body,
+  data,
+  delaySeconds = 0,
 }: {
   title: string;
   body: string;
   data?: AppNotificationData;
   delaySeconds?: number;
 }): Promise<string | null> {
-  return null;
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    console.log(`[Web Notification] ${title}: ${body}`);
+    return 'web-notif-' + Date.now();
+  }
+
+  try {
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: 'default',
+        data: data || {},
+      },
+      trigger:
+        delaySeconds > 0
+          ? {
+              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+              seconds: delaySeconds,
+            }
+          : null,
+    });
+
+    return identifier;
+  } catch (error) {
+    console.warn('Erro ao disparar notificação local:', error);
+    return null;
+  }
 }
 
 /**
