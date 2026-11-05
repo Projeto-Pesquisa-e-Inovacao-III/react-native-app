@@ -14,7 +14,7 @@ jest.mock("../../../../src/components/RowWithHeaderTitle", () => ({ data, handle
 jest.mock("../../../../src/components/PaginatedList", () => ({ children }) => { const { View } = require("react-native"); return <View>{children}</View>; });
 jest.mock("../../../../src/components/modals/DateRangePickerModal", () => ({ visible, onApply }) => { const { Pressable, Text } = require("react-native"); return visible ? <Pressable onPress={() => onApply({ start: "2026-10-01", end: "2026-10-09" })}><Text>Aplicar período</Text></Pressable> : null; });
 jest.mock("../../../../src/components/BottomTabBar", () => () => null);
-const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PlansHistoryScreen /></QueryClientProvider>);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><PlansHistoryScreen /></QueryClientProvider>);
 const response = { content: [{ id: 7, dataCompra: "2026-10-09", produtoExibicao: { titulo: "Plano Premium", subtitulo: "Aulas", tipoAula: "PRESENCIAL" } }], page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } };
 describe("PlansHistoryScreen", () => {
   beforeEach(async () => { jest.clearAllMocks(); getUserPlansHistory.mockResolvedValue({ data: response }); await renderScreen(); await waitFor(() => expect(screen.getByText("Plano Premium")).toBeOnTheScreen()); });

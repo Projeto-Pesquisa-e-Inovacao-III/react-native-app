@@ -80,10 +80,8 @@ describe("LoginRoute", () => {
   test("deve exibir validação quando o usuário tenta entrar com campos vazios", async () => {
     await fireEvent.press(screen.getByText("Entrar"));
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Campos obrigatórios",
-      "Por favor, informe seu email e senha."
-    );
+    expect(await screen.findByText("Campos obrigatórios")).toBeOnTheScreen();
+    expect(screen.getByText("Por favor, informe seu email e senha.")).toBeOnTheScreen();
     expect(login).not.toHaveBeenCalled();
   });
 
@@ -109,13 +107,8 @@ describe("LoginRoute", () => {
     await fireEvent.changeText(screen.getByPlaceholderText("Sua senha"), "wrong");
     await fireEvent.press(screen.getByText("Entrar"));
 
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith(
-        "Falha no Login",
-        "Credenciais inválidas.",
-        [{ text: "OK" }]
-      );
-    });
+    expect(await screen.findByText("Falha no Login")).toBeOnTheScreen();
+    expect(screen.getByText("Credenciais inválidas.")).toBeOnTheScreen();
     expect(router.replace).not.toHaveBeenCalled();
   });
 

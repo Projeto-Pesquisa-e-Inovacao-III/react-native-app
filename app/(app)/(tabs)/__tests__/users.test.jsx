@@ -20,7 +20,7 @@ jest.mock("../../../../src/components/UsersTable", () => ({ users, isLoading }) 
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
 
 const response = { data: { content: [{ id: 1, nome: "Ana" }], page: { number: 0, totalPages: 1 } } };
-const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><UsersRoute /></QueryClientProvider>);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><UsersRoute /></QueryClientProvider>);
 
 describe("UsersRoute", () => {
   beforeEach(async () => {

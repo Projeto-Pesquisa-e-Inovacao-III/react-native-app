@@ -15,7 +15,7 @@ jest.mock("../../../../src/components/InputWithIcon", () => ({ label, value, onI
 jest.mock("../../../../src/components/modals/SuccessModal", () => ({ visible, title, content }) => { const { Text } = require("react-native"); return visible ? <Text>{title} {content}</Text> : null; });
 jest.mock("../../../../src/components/modals/ErrorModal", () => ({ title, content }) => { const { Text } = require("react-native"); return <Text>{title} {content}</Text>; });
 jest.mock("../../../../src/components/modals/TimerModal", () => ({ buttonTitle, callSuccessModal }) => { const { Pressable, Text } = require("react-native"); return <Pressable onPress={callSuccessModal}><Text>{buttonTitle}</Text></Pressable>; });
-const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SecurityScreen /></QueryClientProvider>);
+const renderScreen = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><SecurityScreen /></QueryClientProvider>);
 describe("SecurityScreen", () => {
   beforeEach(async () => { jest.clearAllMocks(); findUserData.mockResolvedValue({ data: { email: "user@example.com" } }); softDelete.mockResolvedValue({}); await renderScreen(); await waitFor(() => expect(screen.getByText("Segurança")).toBeOnTheScreen()); });
   it("exibe email e zona de perigo", () => { expect(screen.getByDisplayValue("user@example.com")).toBeOnTheScreen(); expect(screen.getByText("Zona de Perigo")).toBeOnTheScreen(); });

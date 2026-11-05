@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Modal,
   View,
@@ -8,9 +8,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, CheckCheck, Trash2, X, Send, User, Award, ShieldAlert, Key } from 'lucide-react-native';
+import { Bell, CheckCheck, Trash2, X, User, Award } from 'lucide-react-native';
 import { useNotifications } from '../../contexts/NotificationContext';
-import { useAuth } from '../../contexts/AuthContext';
 import type { NotificationRecipient } from '../../services/notificationService';
 
 type Props = {
@@ -21,39 +20,18 @@ type Props = {
 export default function NotificationCenterModal({ visible, onClose }: Props) {
   const {
     notifications,
-    pushToken,
     unreadCount,
     markAsRead,
     markAllAsRead,
     clearAll,
-    scheduleAppointmentNotification,
+    refreshNotifications,
   } = useNotifications();
-  const { roles } = useAuth();
 
-  const defaultFilter = roles?.includes('personal')
-    ? 'personal'
-    : roles?.includes('aluno')
-    ? 'aluno'
-    : 'all';
-
-  const [activeFilter, setActiveFilter] = useState<'all' | 'aluno' | 'personal'>(defaultFilter);
-
-  const filteredNotifications = notifications.filter((item) => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'aluno') return item.recipient === 'aluno' || item.recipient === 'ambos';
-    if (activeFilter === 'personal') return item.recipient === 'personal' || item.recipient === 'ambos';
-    return true;
-  });
-
-  const handleTestNotification = async () => {
-    await scheduleAppointmentNotification({
-      studentName: 'Gabriel (Aluno)',
-      personalName: 'Carlos Silva (Personal)',
-      classType: 'Funcional',
-      date: 'Hoje',
-      time: '19:00',
-    });
-  };
+  React.useEffect(() => {
+    if (visible) {
+      refreshNotifications?.();
+    }
+  }, [visible, refreshNotifications]);
 
   const getRecipientBadge = (recipient: NotificationRecipient) => {
     switch (recipient) {
@@ -101,74 +79,8 @@ export default function NotificationCenterModal({ visible, onClose }: Props) {
             </TouchableOpacity>
           </View>
 
-          {/* Subtítulo explicativo */}
-          <Text style={styles.subtitle}>
-            Acompanhe em tempo real as notificações geradas para o celular do Aluno e do Personal.
-          </Text>
-
-          {/* Filtros por perfil */}
-          <View style={styles.filterRow}>
-            <TouchableOpacity
-              style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
-              onPress={() => setActiveFilter('all')}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[styles.filterChipText, activeFilter === 'all' && styles.filterChipTextActive]}
-              >
-                Todas ({notifications.length})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterChip, activeFilter === 'aluno' && styles.filterChipActive]}
-              onPress={() => setActiveFilter('aluno')}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[styles.filterChipText, activeFilter === 'aluno' && styles.filterChipTextActive]}
-              >
-                Aluno
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterChip, activeFilter === 'personal' && styles.filterChipActive]}
-              onPress={() => setActiveFilter('personal')}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  activeFilter === 'personal' && styles.filterChipTextActive,
-                ]}
-              >
-                Personal
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Badge do Push Token do dispositivo */}
-          {pushToken ? (
-            <View style={styles.pushTokenContainer}>
-              <Key size={12} color="#0f567f" />
-              <Text style={styles.pushTokenText} numberOfLines={1} selectable>
-                Push Token: {pushToken}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Botão de teste e ações em lote */}
+          {/* Ações em lote */}
           <View style={styles.actionToolbar}>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={handleTestNotification}
-              activeOpacity={0.8}
-            >
-              <Send size={14} color="#FFFFFF" />
-              <Text style={styles.testButtonText}>Testar Notificação Dupla</Text>
-            </TouchableOpacity>
-
             <View style={styles.secondaryActions}>
               <TouchableOpacity
                 style={styles.iconAction}
@@ -193,17 +105,17 @@ export default function NotificationCenterModal({ visible, onClose }: Props) {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           >
-            {filteredNotifications.length === 0 ? (
+            {notifications.length === 0 ? (
               <View style={styles.emptyState}>
                 <Bell size={40} color="#CBD5E1" />
                 <Text style={styles.emptyTitle}>Nenhuma notificação</Text>
                 <Text style={styles.emptySubtitle}>
-                  Quando uma aula for agendada, as mensagens do aluno e do personal aparecerão aqui.
+                  Suas atualizações sobre agendamentos e aulas aparecerão aqui.
                 </Text>
               </View>
             ) : (
-              filteredNotifications.map((item) => {
-                const badge = getRecipientBadge(item.recipient);
+              notifications.map((item) => {
+                const badge = getRecipientBadge((item.recipientCategory || item.recipient) as NotificationRecipient);
                 return (
                   <TouchableOpacity
                     key={item.id}
@@ -259,7 +171,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 14,
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -288,56 +200,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
   },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  filterChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-  },
-  filterChipActive: {
-    backgroundColor: '#19587A',
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#475467',
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
-  },
   actionToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     marginBottom: 14,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#19587A',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    gap: 6,
-  },
-  testButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
   },
   secondaryActions: {
     flexDirection: 'row',
@@ -418,23 +288,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#475467',
     lineHeight: 18,
-  },
-  pushTokenContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 12,
-  },
-  pushTokenText: {
-    fontSize: 11,
-    color: '#0369A1',
-    fontWeight: '600',
-    flex: 1,
   },
 });
