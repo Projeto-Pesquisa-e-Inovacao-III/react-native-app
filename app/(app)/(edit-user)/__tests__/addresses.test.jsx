@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import AddressesScreen from "../addresses";
+import AddressesScreen from "../../(tabs)/addresses";
 import { getUserAddresses, createAddress, deleteUserAddress, lookupCep, updateUserAddress } from "../../../../src/constants/address";
 
 jest.mock("../../../../src/constants/address", () => ({

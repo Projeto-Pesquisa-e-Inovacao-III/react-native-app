@@ -54,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 401 Interceptor: Desloga automaticamente se token/cookie expirar
     setOnUnauthorized(async () => {
+      await clearStoredPushToken();
       await clearAuthToken();
       setIsAuthenticated(false);
       setUser(null);
@@ -119,10 +120,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const defaultAuthContext: AuthContextType = {
+  user: null,
+  roles: [],
+  isAuthenticated: false,
+  isLoading: false,
+  login: async () => false,
+  logout: async () => {},
+  refreshAuth: async () => {},
+};
+
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth deve ser utilizado dentro de um AuthProvider');
-  }
-  return context;
+  return context || defaultAuthContext;
 }

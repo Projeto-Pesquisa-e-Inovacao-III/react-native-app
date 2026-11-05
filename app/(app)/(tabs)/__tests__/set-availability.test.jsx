@@ -21,17 +21,7 @@ jest.mock("lucide-react-native", () => {
   const React = require("react");
   const { View } = require("react-native");
   const Icon = () => React.createElement(View);
-
-  return {
-    CopyCheck: Icon,
-    Info: Icon,
-    Settings: Icon,
-    TriangleAlert: Icon,
-    AlertTriangle: Icon,
-    ChevronLeft: Icon,
-    ChevronRight: Icon,
-    X: Icon,
-  };
+  return new Proxy({}, { get: () => Icon });
 });
 
 jest.mock("@react-native-picker/picker", () => {

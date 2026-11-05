@@ -44,7 +44,7 @@ function deliverMessage(message: IMessage, onMessage: ((data: unknown) => void) 
 
 export const useWebSocket = ({ url, isAuthenticated, onMessage }: UseWebSocketOptions) => {
   const clientRef = useRef<Client | null>(null);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const appState = useRef<AppStateStatus>((AppState.currentState as AppStateStatus | null) ?? 'active');
   const onMessageRef = useRef(onMessage);
   const deactivationRef = useRef<Promise<void> | null>(null);
 

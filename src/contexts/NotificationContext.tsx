@@ -1,9 +1,25 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import {
   registerForPushNotificationsAsync,
   subscribeToNotifications,
+  subscribeToNotificationResponses,
+  getLastNotificationResponseAsync,
+  getPresentedNotificationsAsync,
+  mapExpoNotificationToAppItem,
+  deduplicateNotifications,
   storePushToken,
-  getStoredPushToken,
+  getSavedNotifications,
+  saveNotificationLocally,
+  saveNotificationsLocally,
+  markNotificationAsReadLocally,
+  markAllNotificationsAsReadLocally,
+  clearSavedNotificationsLocally,
+  migrateGuestNotifications,
+  isBackendNumericId,
+  normalizeNotificationType,
+  mapBackendToAppNotificationItem,
+  formatNotificationTimestamp,
   notifyAppointmentScheduled,
   notifyAppointmentApproved,
   notifyAppointmentCancelled,
@@ -11,13 +27,14 @@ import {
   type AppNotificationData,
   type AppNotificationItem,
   type NotificationRecipient,
+  type BackendNotificacaoDTO,
 } from '../services/notificationService';
-import { BASE_URL } from '../services/api';
+import { api, BASE_URL } from '../services/api';
 import { useWebSocket } from '../services/webSocketService';
 import { useAuth } from './AuthContext';
 import { savePushToken } from '../constants/user';
 
-type NotifParams = {
+export type NotifParams = {
   studentName?: string;
   personalName?: string;
   classType?: string;
@@ -25,13 +42,15 @@ type NotifParams = {
   time?: string;
 };
 
-type NotificationContextType = {
+export type NotificationContextType = {
   notifications: AppNotificationItem[];
   pushToken: string | null;
   unreadCount: number;
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
-  clearAll: () => void;
+  isLoading: boolean;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  clearAll: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
   /** Aula agendada pelo aluno → notifica o Personal */
   scheduleAppointmentNotification: (params: NotifParams) => Promise<void>;
   /** Personal aprovou → notifica o Aluno */
@@ -47,41 +66,163 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
   const [pushToken, setPushToken] = useState<string | null>(null);
-  const { isAuthenticated } = useAuth();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const { isAuthenticated, user } = useAuth();
+  const userId = user?.id ?? null;
 
-  const handleWebSocketMessage = useCallback((data: unknown) => {
-    if (!data || typeof data !== 'object') return;
+  // 1. Initial Load from AsyncStorage whenever user changes or on mount
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
 
-    const payload = data as {
-      title?: unknown;
-      message?: unknown;
-      type?: unknown;
-      createdAt?: unknown;
+    const loadInitial = async () => {
+      try {
+        // If authenticated, migrate any pre-login notifications from guest storage first
+        if (isAuthenticated && userId) {
+          await migrateGuestNotifications(userId);
+        }
+        const saved = await getSavedNotifications(userId);
+        if (isMounted) {
+          setNotifications(saved);
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.warn('[NotificationContext] Error loading initial notifications:', error);
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     };
-    const title = typeof payload.title === 'string' ? payload.title : 'Notificação';
-    const body = typeof payload.message === 'string' ? payload.message : '';
-    const type: AppNotificationData['type'] =
-      payload.type === 'APPOINTMENT_SCHEDULED' ||
-      payload.type === 'APPOINTMENT_APPROVED' ||
-      payload.type === 'APPOINTMENT_CANCELLED' ||
-      payload.type === 'APPOINTMENT_RESCHEDULED'
-        ? payload.type
-        : 'GENERAL';
-    const timestamp = payload.createdAt ? new Date(String(payload.createdAt)) : new Date();
 
-    setNotifications((prev) => [
-      {
-        id: `ws-${Date.now()}`,
+    loadInitial();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, userId]);
+
+  // 2. Fetch historical notifications from Backend REST API & OS tray on authentication / foreground
+  const syncWithBackend = useCallback(async () => {
+    try {
+      if (isAuthenticated && userId) {
+        await migrateGuestNotifications(userId);
+      }
+
+      // Collect any notifications currently in the OS notification tray or tapped on cold start
+      const trayItems: AppNotificationItem[] = [];
+      const [presented, lastResponse] = await Promise.all([
+        getPresentedNotificationsAsync(),
+        getLastNotificationResponseAsync(),
+      ]);
+
+      if (Array.isArray(presented)) {
+        for (const notif of presented) {
+          if (notif?.request) {
+            trayItems.push(mapExpoNotificationToAppItem(notif, false));
+          }
+        }
+      }
+
+      if (lastResponse?.notification?.request) {
+        trayItems.push(mapExpoNotificationToAppItem(lastResponse.notification, false));
+      }
+
+      let remoteItems: AppNotificationItem[] = [];
+      if (isAuthenticated) {
+        const response = await api.get<BackendNotificacaoDTO[]>('/notificacoes');
+        if (Array.isArray(response.data)) {
+          remoteItems = response.data.map(mapBackendToAppNotificationItem);
+        }
+      }
+
+      const currentLocal = await getSavedNotifications(userId);
+
+      // Merge remote + OS tray + local (deduplicating by ID and content)
+      const merged = deduplicateNotifications([...remoteItems, ...trayItems, ...currentLocal]);
+
+      setNotifications(merged);
+      await saveNotificationsLocally(merged, userId);
+    } catch (error) {
+      console.warn('[NotificationContext] Failed to sync notifications with backend:', error);
+    }
+  }, [isAuthenticated, userId]);
+
+  useEffect(() => {
+    syncWithBackend();
+  }, [isAuthenticated, syncWithBackend]);
+
+  // 2b. Re-sync when app returns to active foreground
+  const appStateRef = useRef<AppStateStatus>((AppState.currentState as AppStateStatus | null) ?? 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      const wasBackground = appStateRef.current.match(/inactive|background/);
+      appStateRef.current = nextState;
+      if (wasBackground && nextState === 'active') {
+        syncWithBackend();
+      }
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [syncWithBackend]);
+
+  // 3. Live WebSocket STOMP listener
+  const handleWebSocketMessage = useCallback(
+    (data: unknown) => {
+      if (!data || typeof data !== 'object') return;
+
+      const payload = data as Record<string, unknown>;
+      const id = String(payload.id || `ws-${Date.now()}`);
+      const title = String(payload.titulo || payload.title || 'Notificação');
+      const body = String(payload.mensagem || payload.message || '');
+      const createdAt = String(payload.createdAt || payload.criadoEm || new Date().toISOString());
+
+      let rawData: Record<string, unknown> = {};
+      if (typeof payload.dadosAdicionais === 'string') {
+        try {
+          rawData = JSON.parse(payload.dadosAdicionais);
+        } catch {
+          rawData = {};
+        }
+      } else if (payload.dadosAdicionais && typeof payload.dadosAdicionais === 'object') {
+        rawData = payload.dadosAdicionais as Record<string, unknown>;
+      } else if (payload.dados || payload.data) {
+        rawData = (payload.dados || payload.data || {}) as Record<string, unknown>;
+      }
+
+      const recipient = (rawData.recipient as NotificationRecipient) || 'geral';
+      let recipientCategory: 'aluno' | 'personal' | 'geral' = 'geral';
+      if (recipient === 'aluno') {
+        recipientCategory = 'aluno';
+      } else if (recipient === 'personal') {
+        recipientCategory = 'personal';
+      } else {
+        recipientCategory = 'geral';
+      }
+
+      const normalizedType = normalizeNotificationType((payload.tipo || payload.type) as string);
+
+      const newItem: AppNotificationItem = {
+        id,
         title,
         body,
-        recipient: 'ambos',
-        timestamp: timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        recipient,
+        recipientCategory,
+        timestamp: formatNotificationTimestamp(createdAt),
+        createdAt,
         read: false,
-        data: { recipient: 'ambos', type },
-      },
-      ...prev,
-    ]);
-  }, []);
+        data: {
+          recipient,
+          type: normalizedType,
+          ...rawData,
+        },
+      };
+
+      setNotifications((prev) => [newItem, ...prev.filter((n) => n.id !== newItem.id)]);
+      saveNotificationLocally(newItem, userId);
+    },
+    [userId]
+  );
 
   useWebSocket({
     url: BASE_URL,
@@ -89,94 +230,118 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     onMessage: handleWebSocketMessage,
   });
 
+  // 4. Mark as read handler definition before listeners
+  const markAsRead = useCallback(
+    async (id: string) => {
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+      );
+      await markNotificationAsReadLocally(id, userId);
+
+      // Only invoke backend PATCH if user is authenticated and ID is a valid numeric backend entity ID [Finding 1]
+      if (isAuthenticated && isBackendNumericId(id)) {
+        try {
+          await api.patch(`/notificacoes/${id}/lida`);
+        } catch (error) {
+          console.warn(`[NotificationContext] Failed to sync read status for ${id} with server:`, error);
+        }
+      }
+    },
+    [isAuthenticated, userId]
+  );
+
+  const markAllAsRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+    await markAllNotificationsAsReadLocally(userId);
+
+    if (isAuthenticated) {
+      try {
+        await api.patch('/notificacoes/todas-lidas');
+      } catch (error) {
+        console.warn('[NotificationContext] Failed to sync mark-all-read with server:', error);
+      }
+    }
+  }, [isAuthenticated, userId]);
+
+  const clearAll = useCallback(async () => {
+    setNotifications([]);
+    await clearSavedNotificationsLocally(userId);
+  }, [userId]);
+
+  const refreshNotifications = useCallback(async () => {
+    await syncWithBackend();
+  }, [syncWithBackend]);
+
+  // 5. Remote Expo Notification Reception Listener
+  useEffect(() => {
+    const subscription = subscribeToNotifications((notificationEvent) => {
+      const newItem = mapExpoNotificationToAppItem(notificationEvent, false);
+      setNotifications((prev) => deduplicateNotifications([newItem, ...prev]));
+      saveNotificationLocally(newItem, userId);
+    });
+
+    const responseSubscription = subscribeToNotificationResponses(async (response) => {
+      if (response?.notification?.request) {
+        const tappedItem = mapExpoNotificationToAppItem(response.notification, true);
+        let resolvedId = tappedItem.id;
+        setNotifications((prev) => {
+          const merged = deduplicateNotifications([tappedItem, ...prev]);
+          const matched = merged.find(
+            (n) =>
+              n.id === tappedItem.id ||
+              (n.title.trim() === tappedItem.title.trim() &&
+                n.body.trim() === tappedItem.body.trim())
+          );
+          if (matched) {
+            resolvedId = matched.id;
+          }
+          return merged.map((n) => (n.id === resolvedId ? { ...n, read: true } : n));
+        });
+        await saveNotificationLocally({ ...tappedItem, id: resolvedId, read: true }, userId);
+        if (resolvedId) {
+          await markAsRead(resolvedId);
+        }
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+      responseSubscription?.remove();
+    };
+  }, [userId, markAsRead]);
+
+  // 6. Push Token Registration
   useEffect(() => {
     let active = true;
 
     if (!isAuthenticated) {
       setPushToken(null);
-      return () => {
-        active = false;
-      };
+      return;
     }
 
     registerForPushNotificationsAsync()
       .then(async (token) => {
-        if (!token || !active) {
-          return;
-        }
-
+        if (!token || !active) return;
         setPushToken(token);
-
-        const currentStoredToken = await getStoredPushToken();
-        if (currentStoredToken === token) {
-          return;
-        }
-
         await savePushToken(token);
         await storePushToken(token);
       })
-      .catch((error) => {
-        console.warn('Erro ao registrar push token no backend:', error);
+      .catch((err) => {
+        console.warn('[NotificationContext] Push registration error:', err);
       });
 
     return () => {
       active = false;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userId]);
 
-  useEffect(() => {
-    // Escuta notificações recebidas (locais e push remotas do backend)
-    let active = true;
-    let subscription: { remove: () => void } | null = null;
+  // Derived unread counter
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
-    subscribeToNotifications((notificationEvent) => {
-      if (!active) return;
-
-      const { title, body, data } = notificationEvent.request.content;
-      const recipient = (data?.recipient as NotificationRecipient) || 'ambos';
-
-      const newItem: AppNotificationItem = {
-        id: notificationEvent.request.identifier || String(Date.now()),
-        title: title || 'Notificação',
-        body: body || '',
-        recipient,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        read: false,
-        data: data as any,
-      };
-
-      setNotifications((prev) => [newItem, ...prev]);
-    }).then((nextSubscription) => {
-      if (active) {
-        subscription = nextSubscription;
-      } else {
-        nextSubscription.remove();
-      }
-    });
-
-    return () => {
-      active = false;
-      subscription?.remove();
-    };
-  }, []);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, read: true } : item))
-    );
-  }, []);
-
-  const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
-  }, []);
-
-  const clearAll = useCallback(() => {
-    setNotifications([]);
-  }, []);
-
-  /** Aula agendada pelo aluno → notifica o Personal */
+  // Local appointment scheduling helpers
   const scheduleAppointmentNotification = useCallback(
     async ({
       studentName = 'Aluno',
@@ -187,24 +352,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }: NotifParams) => {
       await notifyAppointmentScheduled({ studentName, classType, date, time });
 
-      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setNotifications((prev) => [
-        {
-          id: `personal-sched-${Date.now()}`,
-          title: '🏋️ Nova aula solicitada!',
-          body: `O aluno ${studentName} solicitou uma aula de ${classType} para ${date} às ${time}.`,
-          recipient: 'personal',
-          timestamp: now,
-          read: false,
-          data: { recipient: 'personal', type: 'APPOINTMENT_SCHEDULED', studentName, personalName, classType, date, time },
-        },
-        ...prev,
-      ]);
+      const createdAt = new Date().toISOString();
+      const now = formatNotificationTimestamp(createdAt);
+      const item: AppNotificationItem = {
+        id: `personal-sched-${Date.now()}`,
+        title: '🏋️ Nova aula solicitada!',
+        body: `O aluno ${studentName} solicitou uma aula de ${classType} para ${date} às ${time}.`,
+        recipient: 'personal',
+        recipientCategory: 'personal',
+        timestamp: now,
+        createdAt,
+        read: false,
+        data: { recipient: 'personal', type: 'APPOINTMENT_SCHEDULED', studentName, personalName, classType, date, time },
+      };
+      setNotifications((prev) => [item, ...prev]);
+      await saveNotificationLocally(item, userId);
     },
-    []
+    [userId]
   );
 
-  /** Personal aprovou → notifica o Aluno */
   const scheduleApprovalNotification = useCallback(
     async ({
       studentName = 'Aluno',
@@ -215,24 +381,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }: NotifParams) => {
       await notifyAppointmentApproved({ studentName, personalName, classType, date, time });
 
-      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setNotifications((prev) => [
-        {
-          id: `aluno-appr-${Date.now()}`,
-          title: '✅ Aula confirmada!',
-          body: `${personalName} confirmou sua aula de ${classType} para ${date} às ${time}.`,
-          recipient: 'aluno',
-          timestamp: now,
-          read: false,
-          data: { recipient: 'aluno', type: 'APPOINTMENT_APPROVED', studentName, personalName, classType, date, time },
-        },
-        ...prev,
-      ]);
+      const createdAt = new Date().toISOString();
+      const now = formatNotificationTimestamp(createdAt);
+      const item: AppNotificationItem = {
+        id: `aluno-appr-${Date.now()}`,
+        title: '✅ Aula confirmada!',
+        body: `${personalName} confirmou sua aula de ${classType} para ${date} às ${time}.`,
+        recipient: 'aluno',
+        recipientCategory: 'aluno',
+        timestamp: now,
+        createdAt,
+        read: false,
+        data: { recipient: 'aluno', type: 'APPOINTMENT_APPROVED', studentName, personalName, classType, date, time },
+      };
+      setNotifications((prev) => [item, ...prev]);
+      await saveNotificationLocally(item, userId);
     },
-    []
+    [userId]
   );
 
-  /** Personal cancelou → notifica o Aluno */
   const scheduleCancellationNotification = useCallback(
     async ({
       studentName = 'Aluno',
@@ -243,24 +410,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }: NotifParams) => {
       await notifyAppointmentCancelled({ studentName, personalName, classType, date, time });
 
-      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setNotifications((prev) => [
-        {
-          id: `aluno-cancel-${Date.now()}`,
-          title: '❌ Aula cancelada',
-          body: `${personalName} cancelou sua aula de ${classType} agendada para ${date} às ${time}.`,
-          recipient: 'aluno',
-          timestamp: now,
-          read: false,
-          data: { recipient: 'aluno', type: 'APPOINTMENT_CANCELLED', studentName, personalName, classType, date, time },
-        },
-        ...prev,
-      ]);
+      const createdAt = new Date().toISOString();
+      const now = formatNotificationTimestamp(createdAt);
+      const item: AppNotificationItem = {
+        id: `aluno-cancel-${Date.now()}`,
+        title: '❌ Aula cancelada',
+        body: `${personalName} cancelou sua aula de ${classType} que estava agendada para ${date} às ${time}.`,
+        recipient: 'aluno',
+        recipientCategory: 'aluno',
+        timestamp: now,
+        createdAt,
+        read: false,
+        data: { recipient: 'aluno', type: 'APPOINTMENT_CANCELLED', studentName, personalName, classType, date, time },
+      };
+      setNotifications((prev) => [item, ...prev]);
+      await saveNotificationLocally(item, userId);
     },
-    []
+    [userId]
   );
 
-  /** Personal reagendou → notifica o Aluno */
   const scheduleRescheduleNotification = useCallback(
     async ({
       studentName = 'Aluno',
@@ -271,21 +439,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }: NotifParams) => {
       await notifyAppointmentRescheduled({ studentName, personalName, classType, date, time });
 
-      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setNotifications((prev) => [
-        {
-          id: `aluno-resched-${Date.now()}`,
-          title: '🔄 Aula reagendada',
-          body: `${personalName} reagendou sua aula de ${classType} para ${date} às ${time}.`,
-          recipient: 'aluno',
-          timestamp: now,
-          read: false,
-          data: { recipient: 'aluno', type: 'APPOINTMENT_RESCHEDULED', studentName, personalName, classType, date, time },
-        },
-        ...prev,
-      ]);
+      const createdAt = new Date().toISOString();
+      const now = formatNotificationTimestamp(createdAt);
+      const item: AppNotificationItem = {
+        id: `aluno-resched-${Date.now()}`,
+        title: '🔄 Aula reagendada',
+        body: `${personalName} reagendou sua aula de ${classType} para ${date} às ${time}.`,
+        recipient: 'aluno',
+        recipientCategory: 'aluno',
+        timestamp: now,
+        createdAt,
+        read: false,
+        data: { recipient: 'aluno', type: 'APPOINTMENT_RESCHEDULED', studentName, personalName, classType, date, time },
+      };
+      setNotifications((prev) => [item, ...prev]);
+      await saveNotificationLocally(item, userId);
     },
-    []
+    [userId]
   );
 
   return (
@@ -294,9 +464,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         notifications,
         pushToken,
         unreadCount,
+        isLoading,
         markAsRead,
         markAllAsRead,
         clearAll,
+        refreshNotifications,
         scheduleAppointmentNotification,
         scheduleApprovalNotification,
         scheduleCancellationNotification,

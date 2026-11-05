@@ -2,12 +2,9 @@ import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Stack, Redirect } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { useWebSocket } from '../../src/services/webSocketService';
-import { BASE_URL } from '../../src/services/api';
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
-  useWebSocket({ url: BASE_URL });
 
   if (isLoading) {
     return (
