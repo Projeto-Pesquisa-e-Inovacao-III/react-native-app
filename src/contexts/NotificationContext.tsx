@@ -67,21 +67,48 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [notifications, setNotifications] = useState<AppNotificationItem[]>([]);
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, roles } = useAuth();
   const userId = user?.id ?? null;
+
+  const isNotificationForCurrentUser = useCallback(
+    (item: AppNotificationItem): boolean => {
+      if (!isAuthenticated) return false;
+      const targetEmail = item.data?.targetEmail as string | undefined;
+      if (targetEmail && user?.email && targetEmail.toLowerCase() !== user.email.toLowerCase()) {
+        return false;
+      }
+      if (!roles || roles.length === 0) return true;
+      const normalizedRoles = roles.map((r) => r.toLowerCase());
+      const hasAluno = normalizedRoles.includes('aluno');
+      const hasPersonal = normalizedRoles.includes('personal');
+      const hasAdmin = normalizedRoles.includes('admin');
+      if (hasAdmin || (hasAluno && hasPersonal)) return true;
+
+      const cat = item.recipientCategory || item.recipient;
+      if (cat === 'aluno' && !hasAluno) return false;
+      if (cat === 'personal' && !hasPersonal) return false;
+      return true;
+    },
+    [isAuthenticated, roles, user?.email]
+  );
 
   // 1. Initial Load from AsyncStorage whenever user changes or on mount
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
 
+    if (!isAuthenticated || !userId) {
+      setNotifications([]);
+      setIsLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadInitial = async () => {
       try {
-        // If authenticated, migrate any pre-login notifications from guest storage first
-        if (isAuthenticated && userId) {
-          await migrateGuestNotifications(userId);
-        }
-        const saved = await getSavedNotifications(userId);
+        await migrateGuestNotifications(userId);
+        const saved = (await getSavedNotifications(userId)).filter(isNotificationForCurrentUser);
         if (isMounted) {
           setNotifications(saved);
           setIsLoading(false);
@@ -99,14 +126,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, userId]);
+  }, [isAuthenticated, userId, isNotificationForCurrentUser]);
 
   // 2. Fetch historical notifications from Backend REST API & OS tray on authentication / foreground
   const syncWithBackend = useCallback(async () => {
+    if (!isAuthenticated || !userId) {
+      setNotifications([]);
+      return;
+    }
+
     try {
-      if (isAuthenticated && userId) {
-        await migrateGuestNotifications(userId);
-      }
+      await migrateGuestNotifications(userId);
 
       // Collect any notifications currently in the OS notification tray or tapped on cold start
       const trayItems: AppNotificationItem[] = [];
@@ -137,15 +167,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       const currentLocal = await getSavedNotifications(userId);
 
-      // Merge remote + OS tray + local (deduplicating by ID and content)
-      const merged = deduplicateNotifications([...remoteItems, ...trayItems, ...currentLocal]);
+      // Merge remote + OS tray + local (deduplicating by ID and content) and filter by user role
+      const merged = deduplicateNotifications([...remoteItems, ...trayItems, ...currentLocal]).filter(
+        isNotificationForCurrentUser
+      );
 
       setNotifications(merged);
       await saveNotificationsLocally(merged, userId);
     } catch (error) {
       console.warn('[NotificationContext] Failed to sync notifications with backend:', error);
     }
-  }, [isAuthenticated, userId]);
+  }, [isAuthenticated, userId, isNotificationForCurrentUser]);
 
   useEffect(() => {
     syncWithBackend();
@@ -218,10 +250,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         },
       };
 
+      if (!isNotificationForCurrentUser(newItem)) return;
       setNotifications((prev) => [newItem, ...prev.filter((n) => n.id !== newItem.id)]);
       saveNotificationLocally(newItem, userId);
     },
-    [userId]
+    [userId, isNotificationForCurrentUser]
   );
 
   useWebSocket({
@@ -276,6 +309,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const subscription = subscribeToNotifications((notificationEvent) => {
       const newItem = mapExpoNotificationToAppItem(notificationEvent, false);
+      if (!isNotificationForCurrentUser(newItem)) return;
       setNotifications((prev) => deduplicateNotifications([newItem, ...prev]));
       saveNotificationLocally(newItem, userId);
     });
@@ -283,6 +317,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const responseSubscription = subscribeToNotificationResponses(async (response) => {
       if (response?.notification?.request) {
         const tappedItem = mapExpoNotificationToAppItem(response.notification, true);
+        if (!isNotificationForCurrentUser(tappedItem)) return;
         let resolvedId = tappedItem.id;
         setNotifications((prev) => {
           const merged = deduplicateNotifications([tappedItem, ...prev]);
@@ -308,7 +343,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       subscription?.remove();
       responseSubscription?.remove();
     };
-  }, [userId, markAsRead]);
+  }, [userId, markAsRead, isNotificationForCurrentUser]);
 
   // 6. Push Token Registration
   useEffect(() => {

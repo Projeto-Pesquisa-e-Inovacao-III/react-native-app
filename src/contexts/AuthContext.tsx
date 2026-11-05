@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import * as userService from '../constants/user';
 import { clearAuthToken, setAuthToken, setOnUnauthorized } from '../services/api';
 import type { AuthUserData, AuthResponseDTO } from '../models/user';
-import { clearStoredPushToken, getStoredPushToken } from '../services/notificationService';
+import { clearStoredPushToken, getStoredPushToken, dismissAllNotificationsAsync } from '../services/notificationService';
 
 type AuthContextType = {
   user: AuthUserData | null;
@@ -89,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.warn('Erro ao efetuar logout na API:', err);
     } finally {
+      await dismissAllNotificationsAsync();
       await clearStoredPushToken();
       await clearAuthToken();
       setIsAuthenticated(false);

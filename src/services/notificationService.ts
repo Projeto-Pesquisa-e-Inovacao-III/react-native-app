@@ -386,6 +386,17 @@ export async function storePushToken(token: string): Promise<void> {
   await AsyncStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token);
 }
 
+export async function dismissAllNotificationsAsync(): Promise<void> {
+  if (Platform.OS === 'web') {
+    return;
+  }
+  try {
+    await Notifications.dismissAllNotificationsAsync?.();
+  } catch (error) {
+    console.warn('[NotificationService] Failed to dismiss tray notifications:', error);
+  }
+}
+
 export async function clearStoredPushToken(): Promise<void> {
   await AsyncStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
 }

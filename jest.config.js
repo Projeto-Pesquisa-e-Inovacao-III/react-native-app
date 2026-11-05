@@ -13,9 +13,6 @@ module.exports = {
     '^@constants/(.*)$': '<rootDir>/src/constants/$1',
     '^@utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@assets/(.*)$': '<rootDir>/src/assets/$1',
-    // Resolve nested expo-modules-core
-    '^expo-modules-core$': '<rootDir>/node_modules/expo/node_modules/expo-modules-core',
-    '^expo-modules-core/(.*)$': '<rootDir>/node_modules/expo/node_modules/expo-modules-core/$1',
   },
   testTimeout: 15000,
   forceExit: true,
