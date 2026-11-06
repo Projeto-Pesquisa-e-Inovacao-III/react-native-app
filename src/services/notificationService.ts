@@ -38,7 +38,8 @@ export async function setupAndroidNotificationChannel(): Promise<void> {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#19587A',
-      sound: 'default',
+      // Omit `sound` to use the system default notification sound.
+      // Passing a string (e.g. 'default') is treated as a custom sound file name.
       enableLights: true,
       enableVibrate: true,
       showBadge: true,
@@ -610,7 +611,7 @@ export async function sendLocalNotification({
       content: {
         title,
         body,
-        sound: 'default',
+        sound: true, // `true` = system default sound; strings are custom sound file names
         data: data || {},
       },
       trigger:
