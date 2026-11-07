@@ -139,18 +139,27 @@ describe("ScheduleDetailsScreen", () => {
     },
   );
 
-  it("mantém o botão de treino visível ao personal enquanto o agendamento aguarda aprovação", async () => {
+  it("mantém o botão de treino visível e desabilitado enquanto aguarda aprovação", async () => {
     findAppointmentById.mockResolvedValue({
       data: { ...appointment, status: "PENDENTE_PERSONAL_APROVACAO" },
     });
     appointmentAtCalendar.mockResolvedValue({ data: [] });
     await renderScreen();
 
-    await fireEvent.press(
-      await screen.findByText("Treino personalizado com IA"),
-    );
+    const aiButton = await screen.findByRole("button", {
+      name: /Treino personalizado com IA/,
+    });
+
+    expect(aiButton.props.accessibilityState).toEqual({ disabled: true });
+
+    await fireEvent.press(aiButton);
 
     expect(getOrCreateTrainingRecommendation).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(
+        "A recomendação personalizada poderá ser gerada depois que este agendamento for aprovado.",
+      ),
+    ).not.toBeOnTheScreen();
   });
 
   it("não exibe o QR Code para um aluno não autenticado", async () => {
