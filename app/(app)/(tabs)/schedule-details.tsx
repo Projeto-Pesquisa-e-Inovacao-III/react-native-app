@@ -624,18 +624,45 @@ export default function ScheduleDetailsScreen() {
 
             {(isPersonal || isAdmin) && appointmentData && (
               <TouchableOpacity
-                style={styles.aiBannerCard}
+                style={[
+                  styles.aiBannerCard,
+                  appointmentData.status !== "APROVADO" &&
+                    styles.aiBannerCardDisabled,
+                ]}
                 onPress={openAiPanel}
+                disabled={appointmentData.status !== "APROVADO"}
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: appointmentData.status !== "APROVADO",
+                }}
                 activeOpacity={0.85}
               >
-                <View style={styles.aiBannerIcon}>
+                <View
+                  style={[
+                    styles.aiBannerIcon,
+                    appointmentData.status !== "APROVADO" &&
+                      styles.aiBannerIconDisabled,
+                  ]}
+                >
                   <Sparkles size={20} color="#FFFFFF" />
                 </View>
                 <View style={styles.aiBannerTextCol}>
-                  <Text style={styles.aiBannerTitle}>
+                  <Text
+                    style={[
+                      styles.aiBannerTitle,
+                      appointmentData.status !== "APROVADO" &&
+                        styles.aiBannerTextDisabled,
+                    ]}
+                  >
                     Treino personalizado com IA
                   </Text>
-                  <Text style={styles.aiBannerSub}>
+                  <Text
+                    style={[
+                      styles.aiBannerSub,
+                      appointmentData.status !== "APROVADO" &&
+                        styles.aiBannerTextDisabled,
+                    ]}
+                  >
                     {appointmentData.status === "APROVADO"
                       ? "Gerar ou consultar recomendações para este aluno"
                       : "Disponível após aprovar este agendamento"}
@@ -1181,6 +1208,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 14,
   },
+  aiBannerCardDisabled: {
+    backgroundColor: "#F1F5F9",
+    borderColor: "#CBD5E1",
+  },
   aiBannerIcon: {
     width: 38,
     height: 38,
@@ -1188,6 +1219,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
     alignItems: "center",
     justifyContent: "center",
+  },
+  aiBannerIconDisabled: {
+    backgroundColor: "#94A3B8",
   },
   aiBannerTextCol: {
     flex: 1,
@@ -1201,6 +1235,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#3B82F6",
     marginTop: 2,
+  },
+  aiBannerTextDisabled: {
+    color: "#94A3B8",
   },
   mapCardHeader: {
     flexDirection: "row",
