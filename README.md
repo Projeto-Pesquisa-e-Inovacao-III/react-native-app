@@ -61,6 +61,62 @@ A aplicação consome a API no formato `http://<EXPO_PUBLIC_API_HOST>:8080/api`.
 2. `10.0.2.2` quando executado em emulador Android sem `hostUri`.
 3. `localhost` nos demais cenários.
 
+## Configuração do EAS (Expo Application Services)
+
+O projeto utiliza o **EAS** para geração de builds nativos e configuração de notificações push (`expo-notifications`). Os perfis de compilação estão definidos em `eas.json` e o vínculo do projeto em `app.json`.
+
+> **Nota:** Caso utilize `devenv` (`devenv.nix`), o binário `eas` já está disponível diretamente no ambiente (você pode substituir `npx eas-cli` por `eas`).
+
+### 1. Autenticar no EAS
+
+Autentique-se na sua conta Expo utilizando o `eas-cli` via `npx`:
+
+```bash
+npx eas-cli login
+```
+
+### 2. Vincular ou inicializar o projeto no EAS
+
+O arquivo `app.json` já possui um projeto vinculado (`extra.eas.projectId` e `owner`). Caso precise vincular o projeto a uma nova conta ou organização no Expo:
+
+1. Remova os campos `owner` e `extra.eas.projectId` do `app.json`.
+2. Inicialize e configure o projeto no EAS:
+   ```bash
+   npx eas-cli init
+   npx eas-cli build:configure
+   ```
+
+### 3. Configurar Firebase (FCM) e `google-services.json`
+
+Para o funcionamento de notificações remotas no Android (`expo-notifications`), o `app.json` referencia o arquivo `./google-services.json` (ignorado pelo Git):
+
+1. No console do Firebase, crie ou acesse o projeto correspondente ao pacote `com.csf.react` e baixe o arquivo `google-services.json`.
+2. Coloque o arquivo `google-services.json` na raiz do diretório `react-native-app`.
+3. Para envio de notificações push via FCM V1 e builds no EAS, configure as credenciais do projeto:
+   ```bash
+   npx eas-cli credentials
+   ```
+   *(Selecione **Android** -> perfil desejado -> **Google Service Account Key For Push Notifications (FCM V1)** para cadastrar a chave de serviço JSON do Firebase).*
+
+### 4. Executar builds com EAS
+
+Os perfis configurados em `eas.json` são:
+
+- **`development`**: gera um *Development Client* para depuração (distribuição interna):
+  ```bash
+  npx eas-cli build --profile development --platform android
+  ```
+- **`preview`**: gera um build de homologação/testes internos (distribuição interna):
+  ```bash
+  npx eas-cli build --profile preview --platform android
+  ```
+- **`production`**: gera o build final para publicação nas lojas com incremento automático de versão:
+  ```bash
+  npx eas-cli build --profile production --platform all
+  ```
+
+> **Dica:** Adicione a flag `--local` ao comando `npx eas-cli build` caso deseje executar a compilação localmente na sua máquina.
+
 ## Como Executar o Projeto
 
 ### Iniciar o servidor de desenvolvimento (Metro Bundler)
@@ -81,6 +137,38 @@ Compila e instala o aplicativo em um emulador ou dispositivo físico conectado:
 
 ```bash
 npm run android
+```
+
+Para selecionar especificamente um celular físico conectado via USB (ou depuração sem fio):
+
+```bash
+npm run android:device
+# ou diretamente:
+npx expo run:android --device
+```
+
+### Executar via Container Docker (Nix + devenv)
+
+Caso não possua o Nix/`devenv` ou o Android SDK instalados na máquina host, você pode utilizar o container Docker baseado em `nixos/nix`, que já configura o `devenv` (Node.js, JDK 17, Android SDK/NDK, `adb` e `nix-ld`) com passthrough de USB e rede:
+
+1. Conecte o celular físico via cabo USB com a **Depuração USB** ativada nas *Opções do desenvolvedor*.
+   *(Dica: caso o `adb` esteja rodando no host, pare-o antes com `adb kill-server` para liberar o dispositivo USB para o container, ou deixe-o ativo para compartilhar a porta `5037` via `network_mode: host`).*
+2. Suba e acesse o shell interativo do `devenv` dentro do container:
+   ```bash
+   docker compose run --rm devenv
+   ```
+3. Dentro do shell do container (`devenv`), instale as dependências, verifique o dispositivo conectado e execute o build no celular físico:
+   ```bash
+   npm install
+   adb devices
+   npx expo run:android --device
+   ```
+   *(Ao conectar pela primeira vez, aceite o prompt de autorização de Depuração USB na tela do celular).*
+
+Também é possível disparar o comando diretamente sem abrir o shell interativo antes:
+
+```bash
+docker compose run --rm devenv npx expo run:android --device
 ```
 
 ### Executar no iOS (Build Nativo - macOS)
