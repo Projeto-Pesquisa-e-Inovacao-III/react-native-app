@@ -41,8 +41,8 @@ export default function LoginRoute() {
 
   function handleAutoFill2() {
     setLoginInfo({
-      email: 'maria.oliveira@example.com',
-      password: '123456789aA!',
+      email: 'aluno.confirmacao@teste.com',
+      password: 'Senha@123',
     });
   }
 
@@ -136,7 +136,7 @@ export default function LoginRoute() {
                     onPress={handleAutoFill2}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.btnAutoFillText}>Aluno 2</Text>
+                    <Text style={styles.btnAutoFillText}>Usuário QRCode</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
