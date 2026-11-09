@@ -38,7 +38,6 @@ export async function setupAndroidNotificationChannel(): Promise<void> {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#19587A',
-      sound: 'default',
       enableLights: true,
       enableVibrate: true,
       showBadge: true,
@@ -610,7 +609,6 @@ export async function sendLocalNotification({
       content: {
         title,
         body,
-        sound: 'default',
         data: data || {},
       },
       trigger:
