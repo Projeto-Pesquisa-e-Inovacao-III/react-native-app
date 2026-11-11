@@ -5,10 +5,6 @@ function withAgp9Compatibility(config) {
     if (config.modResults.language === "groovy") {
       config.modResults.contents = config.modResults.contents
         .replace(
-          /^apply plugin: ["']org\.jetbrains\.kotlin\.android["']\r?\n/m,
-          ""
-        )
-        .replace(
           /getDefaultProguardFile\(["']proguard-android\.txt["']\)/g,
           'getDefaultProguardFile("proguard-android-optimize.txt")'
         );
