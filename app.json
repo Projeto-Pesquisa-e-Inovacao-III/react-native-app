@@ -22,7 +22,8 @@
       "package": "com.csf.react",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC"
       ]
     },
     "web": {
@@ -58,7 +59,14 @@
             "cmakeVersion": "3.31.6"
           }
         }
-      ]
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permita o uso de biometria para acessar sua conta com rapidez e segurança."
+        }
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "router": {},
