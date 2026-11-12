@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Client, IFrame, IMessage } from '@stomp/stompjs';
 import { BASE_URL, getAuthToken, triggerUnauthorized } from './api';
+import { getTelemetryMetadata } from './telemetryMetadata';
 
 interface UseWebSocketOptions {
   url: string;
@@ -91,7 +92,26 @@ export const useWebSocket = ({ url, isAuthenticated, onMessage }: UseWebSocketOp
         return;
       }
 
+      const telemetryHeaders = getTelemetryMetadata();
+      const wsBaseUrl = toWebSocketUrl(endpoint);
+
+      client.webSocketFactory = () => {
+        if (Platform.OS === 'web') {
+          const params = new URLSearchParams(telemetryHeaders as unknown as Record<string, string>);
+          const separator = wsBaseUrl.includes('?') ? '&' : '?';
+          return new WebSocket(`${wsBaseUrl}${separator}${params.toString()}`);
+        }
+
+        return new (WebSocket as any)(wsBaseUrl, null, {
+          headers: {
+            ...telemetryHeaders,
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      };
+
       client.connectHeaders = {
+        ...telemetryHeaders,
         Authorization: `Bearer ${token}`,
       };
       console.log('[WebSocket] Connecting to STOMP endpoint');

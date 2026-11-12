@@ -1,6 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getTelemetryMetadata } from './telemetryMetadata';
+import { logBufferService } from './logBufferService';
 
 function resolveBackendHost() {
   const envHost = typeof process !== 'undefined' ? process.env.EXPO_PUBLIC_API_HOST : undefined;
@@ -46,13 +48,30 @@ export async function clearAuthToken() {
   await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
+const initialTelemetryHeaders = getTelemetryMetadata();
+
 export const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
   timeout: 8000,
+  headers: {
+    ...initialTelemetryHeaders,
+  },
 });
 
+Object.assign(api.defaults.headers.common, initialTelemetryHeaders);
+
 api.interceptors.request.use(async (config) => {
+  (config as any)._requestStartTime = Date.now();
+  const telemetryHeaders = getTelemetryMetadata();
+
+  if (config.headers) {
+    config.headers['X-OS'] = telemetryHeaders['X-OS'];
+    config.headers['X-OS-Version'] = telemetryHeaders['X-OS-Version'];
+    config.headers['X-App-Version'] = telemetryHeaders['X-App-Version'];
+    config.headers['X-App-Build'] = telemetryHeaders['X-App-Build'];
+  }
+
   const token = await getAuthToken();
 
   if (token && config.headers) {
@@ -76,6 +95,11 @@ export function triggerUnauthorized() {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const status: number | undefined = error?.response?.status;
+    if (!status || status >= 400) {
+      void logBufferService.recordApiError(error);
+    }
+
     if (error.response && error.response.status === 401) {
       const url: string = error.response.config?.url ?? '';
       const isException = exceptions.some((path) => url.includes(path));
