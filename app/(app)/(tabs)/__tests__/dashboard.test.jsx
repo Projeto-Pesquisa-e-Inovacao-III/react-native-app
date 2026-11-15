@@ -61,4 +61,21 @@ describe("Dashboard", () => {
     expect(await screen.findByText("falha de rede")).toBeOnTheScreen();
     expect(screen.getByText("Tentar novamente")).toBeOnTheScreen();
   });
+  it("alterna entre visão geral e equipe e expande detalhes do personal", async () => {
+    await fireEvent.press(screen.getByRole("tab", { name: /Personais & Equipe/ }));
+
+    expect(screen.getByText("Métricas por Personal")).toBeOnTheScreen();
+    expect(screen.getByText("Taxa de Agendamentos por Personal")).toBeOnTheScreen();
+    expect(screen.getByText("Valores ilustrativos para demonstração; ainda não conectados ao backend.")).toBeOnTheScreen();
+    expect(screen.getAllByText("92%")).toHaveLength(2);
+
+    await fireEvent.press(screen.getByLabelText("Rodrigo S., recolher indicadores"));
+    expect(screen.getAllByText("92%")).toHaveLength(1);
+
+    await fireEvent.press(screen.getByLabelText("Lucas M., expandir indicadores"));
+    expect(screen.getAllByText("84%")).toHaveLength(2);
+
+    await fireEvent.press(screen.getByRole("tab", { name: "Visão Geral" }));
+    expect(screen.getByText("Consultorias por mês")).toBeOnTheScreen();
+  });
 });
