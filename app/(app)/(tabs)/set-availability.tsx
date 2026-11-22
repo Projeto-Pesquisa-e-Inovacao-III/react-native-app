@@ -425,9 +425,14 @@ export default function SetAvailabilityScreen() {
       await queryClient.invalidateQueries({ queryKey: ["personalCronogram"] });
       showSuccess();
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? error.response?.data?.Exception || "Ocorreu um erro ao salvar as alterações."
-        : "Ocorreu um erro ao salvar as alterações.";
+      const responseData = axios.isAxiosError(error) ? error.response?.data : null;
+      const responseMessage =
+        typeof responseData === "string"
+          ? responseData
+          : responseData && typeof responseData === "object"
+            ? responseData.Exception || responseData.message || responseData.detail || responseData.error 
+            : null;
+      const message = responseMessage || "Ocorreu um erro ao salvar as alterações.";
 
       setErrorTitle("Erro ao salvar");
       setErrorContent(message);

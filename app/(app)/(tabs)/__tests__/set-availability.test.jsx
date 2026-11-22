@@ -189,6 +189,22 @@ describe("SetAvailabilityScreen", () => {
     expect(screen.getByText("Ocorreu um erro ao salvar as alterações.")).toBeOnTheScreen();
   });
 
+  it("deve exibir a mensagem textual retornada pela API", async () => {
+    updateBuffer.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: "Restrição deve estar completamente dentro de um período de disponibilidade." },
+    });
+
+    await selectBuffer30();
+    await fireEvent.press(screen.getByText("Salvar Alterações"));
+
+    expect(
+      await screen.findByText(
+        "Restrição deve estar completamente dentro de um período de disponibilidade."
+      )
+    ).toBeOnTheScreen();
+  });
+
   it("deve voltar para a tela anterior ao cancelar alterações", async () => {
     await selectBuffer30();
     await fireEvent.press(screen.getByText("Cancelar"));
