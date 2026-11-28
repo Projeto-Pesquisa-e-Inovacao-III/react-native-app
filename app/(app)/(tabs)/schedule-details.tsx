@@ -251,6 +251,9 @@ export default function ScheduleDetailsScreen() {
       queryClient.invalidateQueries({
         queryKey: ["appointmentResumes", alunoId],
       }),
+      queryClient.invalidateQueries({
+        queryKey: ["studentTrainingMetrics", alunoId, 90],
+      }),
     ]);
   }, [refetchAppointment, queryClient, alunoId]);
 
@@ -372,6 +375,7 @@ export default function ScheduleDetailsScreen() {
         "O agendamento foi concluído com sucesso.",
       );
       await queryClient.invalidateQueries({ queryKey: ["appointmentResumes"] });
+      await queryClient.invalidateQueries({ queryKey: ["studentTrainingMetrics"] });
     } catch (error) {
       handleActionError(
         "Erro ao concluir o agendamento",
@@ -1024,6 +1028,7 @@ export default function ScheduleDetailsScreen() {
         onRetry={loadAiRecommendation}
         note={lastNote}
         studentName={displayName}
+        studentId={alunoId}
       />
       <QRCodeDisplayModal
         visible={!!selectedQrAppointment}

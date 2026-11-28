@@ -11,20 +11,7 @@ import {
   Platform,
 } from 'react-native';
 
-const MUSCLE_GROUPS = [
-  { value: 'PEITO', label: 'Peito' },
-  { value: 'COSTAS', label: 'Costas' },
-  { value: 'TRAPEZIO', label: 'Trapézio' },
-  { value: 'BICEPS', label: 'Bíceps' },
-  { value: 'TRICEPS', label: 'Tríceps' },
-  { value: 'ANTEBRACO', label: 'Antebraço' },
-  { value: 'OMBRO', label: 'Ombro' },
-  { value: 'ABDOMEN', label: 'Abdômen' },
-  { value: 'QUADRICEPS', label: 'Quadríceps' },
-  { value: 'POSTERIOR', label: 'Posterior' },
-  { value: 'GLUTEO', label: 'Glúteo' },
-  { value: 'PANTURRILHA', label: 'Panturrilha' },
-];
+import { MUSCLE_GROUPS } from '@constants/muscleGroups';
 
 type Props = {
   visible: boolean;

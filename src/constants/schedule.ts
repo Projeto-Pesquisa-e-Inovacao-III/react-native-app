@@ -7,6 +7,7 @@ import type {
   ScheduleReschedule,
   CheckSchedule,
 } from '../models/schedule';
+import type { StudentTrainingMetrics } from '../models/trainingMetrics';
 import { isAxiosError } from 'axios';
 
 const AI_REQUEST_TIMEOUT = 60_000;
@@ -91,6 +92,13 @@ export async function getOrCreateTrainingRecommendation(agendamentoId: number) {
   }
 
   return api.post<string>(path, undefined, { timeout: AI_REQUEST_TIMEOUT });
+}
+
+export function getStudentTrainingMetrics(alunoId: number, dias = 90) {
+  return api.get<StudentTrainingMetrics>(
+    `/agendamentos/${alunoId}/metricas-treino`,
+    { params: { dias } },
+  );
 }
 
 export function insertAppointment(data: Schedule) {

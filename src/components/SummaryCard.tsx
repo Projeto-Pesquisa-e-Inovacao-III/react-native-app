@@ -1,6 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { formatMuscleGroupLabel } from '../constants/muscleGroups';
+
 export interface SummaryCardProps {
   dateStr: string;
   muscles?: string[];
@@ -9,7 +11,7 @@ export interface SummaryCardProps {
 
 export default function SummaryCard({ dateStr, muscles = [], resumo }: SummaryCardProps) {
   const formattedMuscles = muscles
-    .map((m) => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())
+    .map(formatMuscleGroupLabel)
     .join(', ');
 
   return (

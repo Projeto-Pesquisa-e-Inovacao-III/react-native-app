@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Sparkles, X, Lightbulb } from 'lucide-react-native';
 import type { AnaliseIa } from '../../models/schedule';
+import StudentTrainingMetricsSection from '../training/StudentTrainingMetricsSection';
 
 type AiPanelModalProps = {
   visible: boolean;
@@ -22,6 +23,7 @@ type AiPanelModalProps = {
   onRetry?: () => void;
   note?: string;
   studentName?: string;
+  studentId?: number | null;
 };
 
 type RecommendationSection = {
@@ -107,6 +109,7 @@ export default function AiPanelModal({
   onRetry,
   note,
   studentName,
+  studentId,
 }: AiPanelModalProps) {
   return (
     <Modal
@@ -135,6 +138,18 @@ export default function AiPanelModal({
           </View>
 
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+            {studentId ? (
+              <View style={styles.metricsAccordion}>
+                <StudentTrainingMetricsSection
+                  alunoId={studentId}
+                  enabled={visible && !!studentId}
+                  collapsible
+                  defaultExpanded={false}
+                  compact
+                />
+              </View>
+            ) : null}
+
             {note ? (
               <View style={styles.quoteBox}>
                 <Text style={styles.quoteLabel}>Observações do último treino:</Text>
@@ -325,7 +340,8 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxHeight: '85%',
+    maxWidth: 680,
+    maxHeight: '88%',
     backgroundColor: '#ffffff',
     borderRadius: 20,
     overflow: 'hidden',
@@ -373,10 +389,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   body: {
-    maxHeight: 420,
+    flexShrink: 1,
   },
   bodyContent: {
     padding: 20,
+  },
+  metricsAccordion: {
+    marginBottom: 16,
   },
   quoteBox: {
     backgroundColor: '#f8fafc',

@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   AlertTriangle,
@@ -28,7 +28,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getById } from '../../../../src/constants/user';
 import { getAnamnesisById } from '../../../../src/constants/anamnesis';
 import { getAppointmentResumes } from '../../../../src/constants/schedule';
+import { formatMuscleGroupLabel } from '../../../../src/constants/muscleGroups';
 import { useAuth } from '../../../../src/contexts/AuthContext';
+import StudentTrainingMetricsSection from '../../../../src/components/training/StudentTrainingMetricsSection';
 import UserAvatar from '../../../../src/components/UserAvatar';
 import OverviewCardPackageStatus from '../../../../src/components/OverviewCardPackageStatus';
 import PaginatedList, { type PaginationInfo } from '../../../../src/components/PaginatedList';
@@ -143,6 +145,7 @@ export default function ViewUserDataScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
   const canSeeResumes = !!viewerRoles?.some((role) => role === 'admin' || role === 'personal');
+  const queryClient = useQueryClient();
   const userId = Array.isArray(id) ? id[0] : id;
 
   const userQuery = useQuery<UserData>({
@@ -203,7 +206,7 @@ export default function ViewUserDataScreen() {
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={{ paddingTop: Math.max(insets.top, 18), paddingBottom: Math.max(insets.bottom, 32) + 60 }}
-        refreshControl={<RefreshControl refreshing={userQuery.isFetching || anamnesisQuery.isFetching} onRefresh={() => { userQuery.refetch(); anamnesisQuery.refetch(); }} colors={['#093A5D']} />}
+        refreshControl={<RefreshControl refreshing={userQuery.isFetching || anamnesisQuery.isFetching} onRefresh={() => { userQuery.refetch(); anamnesisQuery.refetch(); queryClient.invalidateQueries({ queryKey: ['studentTrainingMetrics', Number(userId), 90] }); }} colors={['#093A5D']} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -250,6 +253,8 @@ export default function ViewUserDataScreen() {
                   </View>
                 </View>
 
+                {canSeeResumes ? <StudentTrainingMetricsSection alunoId={Number(userId)} enabled={!!userId && canSeeResumes} collapsible={false} /> : null}
+
                 {canSeeResumes ? <View style={styles.infoCard}><SectionTitle icon={<FileText size={15} color="#64748B" />} title="Resumos anteriores" />{resumesQuery.isLoading ? <ActivityIndicator color="#093A5D" /> : resumes.length ? <PaginatedList page={resumePage} pagination={resumesQuery.data?.page} onPageChange={setResumePage} alwaysShowPagination>{resumes.map((resume, index) => <ResumeCard key={resume.id ?? index} resume={resume} />)}</PaginatedList> : <View style={styles.emptyResume}><CalendarX size={24} color="#94A3B8" /><Text style={styles.noData}>Nenhum agendamento anterior encontrado.</Text></View>}</View> : null}
               </View>
             </View>
@@ -266,7 +271,7 @@ function ProfileField({ icon, label, value }: { icon: React.ReactNode; label: st
 
 function ResumeCard({ resume }: { resume: AppointmentResume }) {
   const muscles = resume.grupoMuscular ?? [];
-  return <View style={styles.resumeCard}><View style={styles.resumeHeader}><View style={styles.resumeTitleRow}><View style={styles.resumeDot} /><Text style={styles.resumeDate}>{formatDate(resume.agendamento?.data)}</Text></View>{muscles.length ? <Text style={styles.resumeBadge}>{muscles.map((muscle) => muscle.charAt(0) + muscle.slice(1).toLowerCase()).join(', ')}</Text> : null}</View><Text style={styles.resumeText}>{resume.resumo || 'Sem observações'}</Text></View>;
+  return <View style={styles.resumeCard}><View style={styles.resumeHeader}><View style={styles.resumeTitleRow}><View style={styles.resumeDot} /><Text style={styles.resumeDate}>{formatDate(resume.agendamento?.data)}</Text></View>{muscles.length ? <Text style={styles.resumeBadge}>{muscles.map(formatMuscleGroupLabel).join(', ')}</Text> : null}</View><Text style={styles.resumeText}>{resume.resumo || 'Sem observações'}</Text></View>;
 }
 
 function PlusIcon() {
